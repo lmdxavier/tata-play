@@ -27,7 +27,31 @@ const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', gras
 const loadImage = src => new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
 let MONLIB = null, MONLIB_ORIG = null; const SPINE = {}; let SPR = null, SPR2 = null;
 const PORTRAIT = {};       // 卡面头像（离屏画布）
-let READY = false, LOADMSG = '加载素材…';
+let READY = false, LOADMSG = '加载素材…', LOAD_N = null;
+// 55 版（2026-11-13，国内网络到海外服务器丢包，40MB 一次下不完）：开场只等营地要用的素材；
+// 战斗特效图、音效、音乐在进游戏后后台加载。没加载完就点进战斗 → 先显示进度，加载完自动开始（meta.js startBattle）。
+let BATTLE_READY = false, BATTLE_WAIT = false, BATTLE_WAIT_TAB = null, BATTLE_N = [0,0];
+function loadScript(src, tries, ok){   // 失败自动重试（隔 1/2/3… 秒），最多 tries 次；ok() 检查数据真的到了（防下载被截断）
+  return new Promise(res=>{ let n=0; const go=()=>{ const s=document.createElement('script'); s.src=src+(n?('?r='+n):'');
+    s.onload=()=>{ if(!ok || ok()) res(true); else s.onerror(); }; s.onerror=()=>{ s.remove(); if(++n<tries) setTimeout(go, 1000*n); else { console.warn('加载失败', src); res(false); } };
+    document.head.appendChild(s); }; go(); });
+}
+async function loadLater(){
+  const vfx=Object.keys(window.VFX_META||{}).map(n=>'vfx/'+n+'.png'); let vd=0, cd=0, ct=0;
+  const show=()=>{ BATTLE_N=[vd+cd, vfx.length+ct]; }; show();
+  // 先让营地界面自己按需加载的图（图标、按钮等，img() 懒加载）下完，再开始后台大下载，免得抢网速、界面图标迟迟不出来
+  for(let i=0;i<150;i++){ await new Promise(r=>setTimeout(r,200)); if(i>=3 && Object.values(IMG).every(im=>im.complete)) break; }
+  // 营地也有音效（投喂、收取、按钮），音效数据和战斗图一起下，不排在后面
+  const sfx = loadScript('assets/combos/audio.js', 8, ()=>!!window.COMBO_AUDIO).then(ok=>{ if(ok) COMBO.audioData(); });
+  await Promise.all([
+    Promise.all(vfx.map(async p=>{ if(!IMG[p]){ const i=await loadImage(ASSET+p); if(i) IMG[p]=i; } vd++; show(); })),
+    COMBO.preload((d,t)=>{ cd=d; ct=t; show(); }) ]);
+  BATTLE_READY = true;
+  // 等待期间换了页签 = 不想进了，不再自动拉进战斗
+  if(BATTLE_WAIT){ const go = typeof MT!=='undefined' && MT.tab===BATTLE_WAIT_TAB && !MT.inBattle; BATTLE_WAIT=false; if(go) startBattle(); }
+  await sfx;
+  await loadScript('assets/bgm/bgm.js', 8, ()=>!!window.TATA_BGM);   // music.js 每 100ms 检查，数据到了自动解码播放
+}
 // 质感开关（按 Q 切换，用来和原版对比）：ink = 彩色线 + 补线 + 明暗；orig = 素材原样
 let LOOK = 'ink';
 // 宠物图集分辨率（按 H 切换）：高清 = 放大 4 倍的图集，原版 = 素材包原样（整只约 100 像素高）
@@ -51,15 +75,16 @@ async function loadAll(){
     MONH = {};
     for(const n of used){ const m=MONLIB.create(n); m.play('Idle'); const b=m.bounds(false); MONB[n]={w:b.w,h:b.h,all:m.bounds(true)}; MONH[n]=b.h; }
     const list = [...PRELOAD];
-    for(const n of Object.keys(window.VFX_META)) list.push('vfx/'+n+'.png');
-    LOADMSG = '加载图片…';
-    await Promise.all(list.map(async p=>{ if(!IMG[p]) { const i = await loadImage(ASSET+p); if(i) IMG[p]=i; } }));
-    LOADMSG = '加载特效…'; await COMBO.preload();
-    await SCENE.load();
+    // 55 版：战斗特效图 vfx/*.png 移到 loadLater（只在战斗里用，画的时候 img()+ok() 会跳过还没到的）
+    LOAD_N=[0,list.length]; LOADMSG = '加载图片…';
+    await Promise.all(list.map(async p=>{ if(!IMG[p]) { const i = await loadImage(ASSET+p); if(i) IMG[p]=i; } LOAD_N[0]++; }));
+    LOAD_N=null; LOADMSG = '加载场景…';
+    await SCENE.load();   // 55 版：战斗特效（COMBO.preload，约 9MB）改到进游戏后后台加载，见 loadLater
     LOADMSG = '生成卡面…';
     await loadFont();
     makePortraits();
     READY = true;
+    loadLater();
   } catch(err){ LOADMSG = '素材加载失败：'+err.message; console.error(err); }
 }
 let MONH = {}, MONB = {};
@@ -1082,7 +1107,7 @@ let lastDraw = performance.now();
 function draw(){
   const now=performance.now(); let dt=Math.min(0.05,(now-lastDraw)/1000); lastDraw=now;
   const adt = !G.started ? dt : G.paused||G.over ? (G.over?dt:0) : HITSTOP>1e-6 ? 0 : dt*G.speed;
-  if(!READY){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#2b3a2a'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); text(LOADMSG,W/2,H/2,18,'#fff'); return; }
+  if(!READY){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#2b3a2a'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); text(LOADMSG+(LOAD_N?(' '+LOAD_N[0]+'/'+LOAD_N[1]):''),W/2,H/2,18,'#fff'); return; }
   audioPump();
   SCENE.ensure(G.cells);
   ENV_T += dt; FRAMENO++;

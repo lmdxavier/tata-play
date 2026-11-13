@@ -1067,7 +1067,8 @@ function exitDetail(){ MT.detail=false; MT.sv=0; emit('ui'); }
 function stepPet(d){ let list=filtered().filter(e=>e.owned); if(!list.some(e=>e.key===MT.sel)) list=roster().filter(e=>e.owned);   // 30 版：左右切换只在已获得的之间
   const i=list.findIndex(e=>e.key===MT.sel); MT.prevSel=MT.sel; MT.selT0=performance.now(); MT.stepDir=d; MT.sel=list[(i+d+list.length)%list.length].key; MT.swapT=0.3; MT.ds=0; emit('ui'); }
 function mtToggleBg(){ MT.bgMode = MT.bgMode==='grad'?'scene':'grad'; try{ localStorage.setItem('tata_petbg29', MT.bgMode); }catch(e){} emit('ui'); }
-function startBattle(){ MT.inBattle=true; newGame(); G.started=true; emit('start'); }
+function startBattle(){ if(!BATTLE_READY){ BATTLE_WAIT=true; BATTLE_WAIT_TAB=MT.tab; emit('ui'); return; }   // 55 版：战斗特效还在后台加载 → 先显示进度，加载完自动开始（render.js loadLater）
+  MT.inBattle=true; newGame(); G.started=true; emit('start'); }
 
 // ---------- 其他两个页面（下一步做；先放可进战斗的入口） ----------
 function drawBattleEntry(lay){
@@ -1213,7 +1214,10 @@ function drawMeta(){
 function backRect(){ const b=resultButton(); return {x:b.x, y:b.y+b.h+14, w:b.w, h:54}; }
 const _drawBattle = draw;
 draw = function(){
-  if(!MT.inBattle){ drawMeta(); return; }
+  if(!MT.inBattle){ drawMeta();
+    if(BATTLE_WAIT && MT.tab!==BATTLE_WAIT_TAB) BATTLE_WAIT=false;   // 换页签 = 取消等待
+    if(BATTLE_WAIT){ ctx.save(); ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H); text('加载战斗素材… '+BATTLE_N[0]+'/'+BATTLE_N[1],W/2,H/2,18,'#fff'); ctx.restore(); }
+    return; }
   _drawBattle();
   if(G.over && READY){ const b=backRect(); ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip(); bigButton('Blue', b.x, b.y, b.w, b.h, '返回'); ctx.restore(); }
 };

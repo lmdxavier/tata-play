@@ -29,10 +29,11 @@ const COMBO = (()=>{
   const url = p => 'assets/combos/img/' + p.split('/').map(encodeURIComponent).join('/');
   function im(p){ if(!IMGS[p]){ const i=new Image(); i.src=url(p); IMGS[p]=i; } return IMGS[p]; }
   const okI = i => i && i.complete && i.naturalWidth>0;
-  function preload(){
+  function preload(onStep){   // 55 版：onStep(已完成, 总数) 用来显示进度
     const list=[];
     for(const c of DATA['组合']) for(const l of c['特效层']) (l['类型']==='图集'?[l['素材']]:l['帧']).forEach(p=>list.push(p));
-    return Promise.all([...new Set(list)].map(p=>new Promise(res=>{ const i=im(p); if(okI(i)) return res(); i.onload=i.onerror=()=>res(); })));
+    const all=[...new Set(list)]; let done=0; const step=()=>{ done++; if(onStep) onStep(done, all.length); }; if(onStep) onStep(0, all.length);
+    return Promise.all(all.map(p=>new Promise(res=>{ const i=im(p); if(okI(i)){ step(); return res(); } i.onload=i.onerror=()=>{ step(); res(); }; })));
   }
   const nFrames = l => l['类型']==='图集' ? (l['帧范围'][1]-l['帧范围'][0]) : l['帧'].length;
   const isGround = l => /地面|压扁/.test(l['说明']||'');
@@ -95,8 +96,14 @@ const COMBO = (()=>{
     if(A.ac) return; A.ac=ac;
     A.bus=ac.createGain(); A.bus.gain.value=Math.pow(10,6/20);   // 组合库整体压低了 6dB，这里补回（之后进总线压缩器）
     A.bus.connect(out);
-    const src=window.COMBO_AUDIO||{};
-    for(const p of Object.keys(src)) ac.decodeAudioData(b64buf(src[p])).then(b=>{ A.bufs[p]=b; }).catch(e=>console.warn('音效解码失败', p, e));
+    audioData();
+  }
+  // 55 版：音效数据（COMBO_AUDIO）改为后台加载，可能比 audioInit 晚到；到了再调一次，只解码还没解码过的
+  const A_DONE = {};
+  function audioData(){
+    if(!A.ac) return; const src=window.COMBO_AUDIO||{};
+    for(const p of Object.keys(src)){ if(A_DONE[p]) continue; A_DONE[p]=1;
+      A.ac.decodeAudioData(b64buf(src[p])).then(b=>{ A.bufs[p]=b; }).catch(e=>console.warn('音效解码失败', p, e)); }
   }
   const priOf = (c, tier) => (c['类']==='界面' || tier==='T4') ? 3 : /出手|移动|放置|产出|掉落|收取|获得|卖出/.test(c['名']) ? 1 : 2;
   function playLayer(c, li, opt){
@@ -147,5 +154,5 @@ const COMBO = (()=>{
       if(T.shake) shakeDir(T.shake[0], T.shake[1], T.global?null:(at&&at.dir));
     }
   }
-  return { play, draw, drawLoop, later, preload, audioInit, has:n=>!!BY[n], _A:A, _LIVE:LIVE };
+  return { play, draw, drawLoop, later, preload, audioInit, audioData, has:n=>!!BY[n], _A:A, _LIVE:LIVE };
 })();

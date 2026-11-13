@@ -26,6 +26,7 @@ function musicStart(k, g, offset, fade){
 }
 function musicTick(){
   if(!SND.ac) return; musicDecode();
+  if(!MUSIC.out) return;   // 55 版：音乐数据后台加载，还没到时先不放
   const w=musicWant(), now=SND.ac.currentTime, c=MUSIC.cur;
   { const mv=SND.musicOff?0:MUSIC.vol; if(MUSIC._mv!==mv){ MUSIC._mv=mv; MUSIC.out.gain.setTargetAtTime(mv, now, 0.1); } }   // 44 版：只在静音状态变化时调度（原来每 100ms 加一条，事件一直累积）
   if(c && c.k===w.k){
