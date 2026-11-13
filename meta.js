@@ -697,11 +697,13 @@ function cmpPill(b, label){
 // 26 版（用户 2026-11-12）：启程配色竖屏下拉进详情时，面板真的往下滑，拉到底只在底部留两层弧形边和拖动条（箭头朝上）；
 //   不再是网格淡出、详情淡入。下拉距离 = 面板从中间停靠位滑到底部只剩一条边的距离，面板跟手。
 const slideMode = lay => isAFK() && lay && !lay.land;
-const SLIDE_KEEP = 2.7;  // 27 版（用户 2026-11-12）：拉到底时拖动条下面不留空，条底正好压在底部导航栏上沿（条底比面板顶低 2.7）
-const pullDist = lay => slideMode(lay) ? Math.max(60, lay.panel.bottom - SLIDE_KEEP - lay.snaps.mid) : PULL;
+// 59 版（用户 2026-11-13「拉到下方，太靠下了」+ 截图）：底栏按钮高出底栏后，条被按钮挡住；改成条底在未选中按钮上沿之上 10（条底比面板顶低 2.7）
+const slideKeep = () => 2.7 + Math.max(0, NAV_V.up) + 10;
+// 27 版（用户 2026-11-12）：拉到底时拖动条下面不留空，条底正好压在底部导航栏上沿（条底比面板顶低 2.7）
+const pullDist = lay => slideMode(lay) ? Math.max(60, lay.panel.bottom - slideKeep() - lay.snaps.mid) : PULL;
 function panelTop(lay){ return lay.land ? 0 : MT.panelY + (slideMode(lay) ? MT.dp*pullDist(lay) : 0); }
 // 面板后方的详情区：从中间停靠位的面板顶，到拉到底时拖动条上方
-function detailBehindRect(lay){ const top=lay.snaps.mid+8, bottom=lay.panel.bottom-SLIDE_KEEP-RIM_BAR_H-8; return {x:lay.panel.x, y:top, w:lay.panel.w, h:Math.max(0,bottom-top)}; }
+function detailBehindRect(lay){ const top=lay.snaps.mid+8, bottom=lay.panel.bottom-slideKeep()-RIM_BAR_H-8; return {x:lay.panel.x, y:top, w:lay.panel.w, h:Math.max(0,bottom-top)}; }
 function drawDetailBehind(lay){
   const r=detailBehindRect(lay), e=entry(MT.sel), live=MT.detail && MT.dp>0.99, p=lay.panel, py=lay.snaps.mid, ext=16;
   // 信息面板底：上沿弧线（和网格面板同一条），米白底 + 花纹 + 底部渐变，顶边浅色亮线
@@ -1121,7 +1123,7 @@ const NAV_ICON_H = 0.70, NAV_POP = 0.08;
 //   试看用：网址加 ?nav=0（46 版原样）/ 1 / 2 切换；不加参数 = 1。底栏本身高度不变，内容区不动。
 const NAV_VARS = { 0:{up:-12*NAV_K, pop:0.08}, 1:{up:8*NAV_K, pop:0.22}, 2:{up:16*NAV_K, pop:0.32} };   // 53 版：up 跟着 × NAV_K
 // 底栏按钮和图标高出底栏上沿多少（竖屏）：营地的投喂圆钮等贴着底栏的东西要让开这一段
-function navOver(){ return Math.max(0, NAV_V.up + (NAV_BAR_H-NAV_BOT+NAV_V.up)*NAV_V.pop); }
+function navOver(){ const up=NAV_V.up+6*NAV_K; return Math.max(0, up + (NAV_BAR_H-NAV_BOT+up)*NAV_V.pop); }   /* 59 版：按选中页签（再抬高 6×NAV_K）的图标高度算，地图页卡片不再贴着图标 */
 const NAV_V = NAV_VARS[(/[?&]nav=(\d)/.exec(location.search)||[])[1]] || NAV_VARS[1];
 function navDepth(lay, tabs){
   const n=lay.nav, deco=uiDeco();
@@ -1205,7 +1207,7 @@ function drawMeta(){
     // 惯性滚动
     if(md!=='scroll'){ const k=MT.detail?'ds':'gs', mx=MT.detail?MT.dmax:MT.gmax; MT[k]+=MT.sv*dt; MT.sv*=Math.pow(0.04,dt);
       if(MT[k]<0){ MT[k]*=Math.max(0,1-dt*14); MT.sv=0; } if(MT[k]>mx){ MT[k]=mx+(MT[k]-mx)*Math.max(0,1-dt*14); MT.sv=0; } }
-    if(lay.land || MT.panelY>lay.snaps.full+4) drawCharArea(lay, dt);
+    drawCharArea(lay, dt);   // 59 版（用户 2026-11-13）：面板拉满时刘海那一条也画原本的场景背景，不留黑底
     drawPanel(lay, dt);
   } else if(MT.tab==='battle') drawBattleEntry(lay); else { drawCamp(lay); drawResBar(lay); }
   if(MT.tab!=='camp' && CAMP.S.drag){ CAMP.cancel(); if(MT.drag && MT.drag.camp) MT.drag=null; }   // 32 版：离开营地时手里的食物放回去
@@ -1240,7 +1242,7 @@ function regionAt(x,y){
   if(slideMode(lay) && MT.dp>0.5){ const dr=detailBehindRect(lay);   // 面板拉到底：详情区上下拖 = 滚动，其余当角色区（上下拖收回、左右换宠物、点一下收回）
     if(y>=dr.y+AB && y<dr.y+dr.h) return 'body'; return y<lay.panel.bottom ? 'char' : 'other'; }   // 面板拉到底：整块都当角色区（上下拖收回、左右换宠物、点一下收回）
   if(y<panelTop(lay)) return 'char';
-  if(y<MT.panelY+(isAFK()&&!MT.detail?14:HH)) return 'header';
+  if(y<MT.panelY+(isAFK()&&!MT.detail?14:HH)+(MT.detail?0:FH)) return 'header';   // 59 版（用户 2026-11-13）：两排筛选按钮这一块也是拖面板（和拖动条一样），不滚动卡片；点按钮照常筛选
   if(y<lay.panel.bottom) return 'body';
   return 'other';
 }

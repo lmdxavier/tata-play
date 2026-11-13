@@ -45,7 +45,7 @@ const CHAPTER_MAP = (()=>{
     const u = Math.min(c.w/390, c.h/640), chU = c.h/u, k = `${c.w}|${c.h}|${P.ch}`;   // 按宽、高取小：横屏 / 矮屏不会把卡片和字放大到盖住地图
     if(S.geo && S.gkey===k) return S.geo;
     if(S.geo){ S.cam=null; S.petS=null; S.petTo=null; S.follow=null; }   // 尺寸变了（转屏、窗口缩放）：节点在路上的位置跟着变，宠物和镜头重新对准选中的关
-    const wallY = Math.round(chU*0.31), cardTop = chU - CARD_H - Math.max(10, (typeof navOver==='function'?navOver():0)/u + 6),   /* 52 版：底栏图标高出底栏后，关卡卡片跟着上移，不被图标压住 */ groundTop = wallY - 52;
+    const wallY = Math.round(chU*0.31), cardTop = chU - CARD_H - Math.max(10, (typeof navOver==='function'?navOver():0)/u + 12),   /* 52 版：底栏图标高出底栏后，关卡卡片跟着上移，不被图标压住 */ groundTop = wallY - 52;
     const yA = wallY + (cardTop-wallY)*0.30, yB = cardTop - (cardTop-wallY)*0.20;
     const L = levels(), nodes = L.map((l,i)=>({ l, i, x:104+i*NODE_DX, y:yA+(yB-yA)*ZIG[i%ZIG.length], big:!!l.boss }));
     const width = nodes[nodes.length-1].x + 190;
