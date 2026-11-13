@@ -483,6 +483,23 @@ const CAMP = (()=>{
   // ---------- 绘制 ----------
   // 地面：铺满整张地图的草地（离屏画布、整像素对齐，防竖线）；树林那一圈地面压暗，空地显得亮、树林显得深
   const GROUND = (()=>{ try{ const m=/[?&]cg=(\w+)/.exec(location.search); if(m) return m[1]; }catch(e){} return 'floor'; })();
+  // 60 版（用户 2026-11-13 夜「营地滑动屏幕不流畅，静止帧数没问题」）：两层径向罩色（地面压暗、树林外圈变暗）原来是整屏渐变 fillRect，
+  //   镜头一动渐变位置就变，每帧在 CPU 上重画接近整屏的渐变再上传（云端实测拖动 40 帧里重画 24 次）。
+  //   改成：渐变只画一次存成 512 的小图，按世界坐标贴上去（GPU 缩放、跟镜头平移），圈外用同色矩形补满屏幕。
+  const RSHADE = {};
+  function radialShade(g, r0, r1, stops, rgb){
+    const key=[r0,r1,rgb,stops.join(';')].join('|'), N=512; let c=RSHADE[key];
+    if(!c){ c=document.createElement('canvas'); c.width=c.height=N; const x=c.getContext('2d'), gr=x.createRadialGradient(N/2,N/2,N/2*r0/r1,N/2,N/2,N/2);
+      for(const [o,a] of stops) gr.addColorStop(o, `rgba(${rgb},${a})`); x.fillStyle=gr; x.fillRect(0,0,N,N); RSHADE[key]=c; }
+    const r=g.c, R=CLR.rx*g.u*r1, k=CLR.ry/CLR.rx, cx=SX(g,CLR.cx), cy=SY(g,CLR.cy);
+    const x0=Math.round(cx-R), x1=Math.round(cx+R), y0=Math.round(cy-R*k), y1=Math.round(cy+R*k), rx1=r.x+r.w, ry1=r.y+r.h;
+    ctx.drawImage(c, x0, y0, x1-x0, y1-y0);
+    ctx.fillStyle=`rgba(${rgb},${stops[stops.length-1][1]})`;
+    if(y0>r.y) ctx.fillRect(r.x, r.y, r.w, Math.min(y0,ry1)-r.y);
+    if(y1<ry1) ctx.fillRect(r.x, Math.max(y1,r.y), r.w, ry1-Math.max(y1,r.y));
+    const ya=Math.max(r.y,y0), yb=Math.min(ry1,y1);
+    if(yb>ya){ if(x0>r.x) ctx.fillRect(r.x, ya, Math.min(x0,rx1)-r.x, yb-ya); if(x1<rx1) ctx.fillRect(Math.max(x1,r.x), ya, rx1-Math.max(x1,r.x), yb-ya); }
+  }
   function drawGround(g, t){
     // 58 版：地面不会动，只在镜头位置 / 大小 / 图片加载变了时重画（以前每帧整屏重画再上传）
     const r=g.c, u=g.u, s=bgBegin('bg', r, ['camp', GROUND, r.x, r.y, r.w, r.h, g.ox, g.oy, u, IMG_STAMP, S.map&&S.map.id, S.map&&S.map.tufts.length, S.map&&S.map.flat.length].join(','));
@@ -501,11 +518,7 @@ const CAMP = (()=>{
             let xx=snapX(g.ox-3000*u+off); xx-=Math.ceil((xx-r.x)/w)*w; for(let x=xx;x<r.x+r.w;x+=w) ctx.drawImage(fl, x, y, w, y2-y); } }
       }
       // 树林下面的地面压暗（空地中心最亮）
-      ctx.save(); ctx.translate(SX(g,CLR.cx), SY(g,CLR.cy)); ctx.scale(1, CLR.ry/CLR.rx);
-      const R0=CLR.rx*u, gr=ctx.createRadialGradient(0,0,R0*0.55,0,0,R0*1.45);
-      const dk = GROUND==='field' ? '18,42,24' : '58,32,16';
-      gr.addColorStop(0,`rgba(${dk},0)`); gr.addColorStop(0.45,`rgba(${dk},.06)`); gr.addColorStop(0.62,`rgba(${dk},.30)`); gr.addColorStop(1,`rgba(${dk},.52)`);
-      ctx.fillStyle=gr; ctx.fillRect(-6000*u, -6000*u, 12000*u, 12000*u); ctx.restore();
+      radialShade(g, 0.55, 1.45, [[0,0],[0.45,.06],[0.62,.30],[1,.52]], GROUND==='field' ? '18,42,24' : '58,32,16');
       // 空地上的小草小花、碎石、小蘑菇：贴在地上，画在宠物下面（38 版规则：flat 的东西不参与前后排序）
       for(const q of S.map.tufts) drawFlat(q, g);
       for(const q of S.map.flat) drawFlat(q, g);
@@ -633,10 +646,7 @@ const CAMP = (()=>{
     for(const p of S.pets) items.push({y:yOf(g,p.d), f:()=>drawPet(p,g,dt)});
     items.sort((a,b)=>a.y-b.y).forEach(it=>it.f());
     // 树林越往外越暗一点（空地外一圈开始），看起来林子深、空地亮；宠物和建筑都在空地里，不受影响
-    { ctx.save(); ctx.translate(SX(g,CLR.cx), SY(g,CLR.cy)); ctx.scale(1, CLR.ry/CLR.rx);
-      const R0=CLR.rx*g.u, gr=ctx.createRadialGradient(0,0,R0*1.08,0,0,R0*2.3);
-      gr.addColorStop(0,'rgba(14,34,30,0)'); gr.addColorStop(0.5,'rgba(14,34,30,.14)'); gr.addColorStop(1,'rgba(14,34,30,.28)');
-      ctx.fillStyle=gr; ctx.fillRect(-6000*g.u, -6000*g.u, 12000*g.u, 12000*g.u); ctx.restore(); }
+    radialShade(g, 1.08, 2.3, [[0,0],[0.5,.14],[1,.28]], '14,34,30');
     COMBO.draw(dt, 'ground'); COMBO.draw(dt, 'world');
     drawAltarBubble(g, t);
     // 爱心：往上飘、左右轻摆、先弹出再淡出
