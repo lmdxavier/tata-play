@@ -164,6 +164,45 @@ function renderChar(v, s, flip, o){
   return { cv:C, px, py, bw, bh };
 }
 
+// =====================================================================
+// 58 版（用户 2026-11-13：换 WebGL 后仍卡、发烫）：活动角色在 GPU 上画
+//   57 版角色仍走 renderChar（CPU 上 Spine 逐三角形裁剪 + 离屏叠十几遍补线 / 暗部 / 亮边），画完再整块上传给 GPU；
+//   战斗里靠 44 版的 FC 帧缓存撑着，缓存满了就回到每帧现画 → 越打越卡、发烫。
+//   现在：宠物 = Spine 网格直接交给 GPU，怪物 = 零件精灵，质感（补线 / 暗部 / 亮边 / 闪白 / 着色 / 剪影）在一个着色器里算（pixi-ctx.js __charBegin/__charEnd），
+//   参数和 renderChar 完全一样，不用缓存，内存不再涨。卡面头像等一次性的图仍用 renderChar。
+//   GPU 没准备好（刚打开那一下）、?gl=0、?glc=0 时回到 renderChar。
+// =====================================================================
+const GLC_OFF = /[?&]glc=0\b/.test(location.search);
+// (x,y) = 脚底，坐标系 = 当前 ctx 变换；o 同 renderChar（S、cs、hpx、flash、tint、rimBoost）另加 alpha、sil（剪影颜色）
+function charGL(v, s, flip, o, x, y){
+  if(GLC_OFF || !ctx.__charBegin || !ctx.__charBegin()) return false;
+  let ok=false;
+  try{
+    const S=o.S||DPR, cs=o.cs||L.cs, hpx=o.hpx, m=ctx.getTransform(), a=m.a, b=m.b, c=m.c, d=m.d, e=m.e, f=m.f;
+    if(v.kind==='spine'){ v.sk.x=0; v.sk.y=0; v.sk.updateWorldTransform(spine.Physics.update);
+      const sx=flip?-s:s, sy=-s;   // 骨架坐标 → 当前坐标：平移到脚底、缩放（y 朝上）
+      ctx.__spine(v.sk, [a*sx, b*sx, c*sy, d*sy, a*x+c*y+e, b*x+d*y+f]); }
+    else v.m.draw(ctx, x, y, { scale:s, flipX:!!flip, shadow:false, skipFx:true });
+    const ink = LOOK!=='orig', native = v.kind==='spine' ? INK.petLine*cs : INK.monLinePx*s;
+    const rD = ink ? Math.max(0, INK.total*cs - native)*S : 0, r = rD>0.35 ? rD : 0, k=0.02*cs*S;
+    const sc = Math.sqrt(Math.abs(a*d-b*c))/S, top=y-hpx-cs*0.06;
+    ok = ctx.__charEnd({ pad:(r+Math.max(k,1))*sc, r, nd: rD>2?12:8, look:ink, alpha:o.alpha, L:[a/S, b/S, c/S, d/S],
+      shade:[b*x+d*top+f, b*x+d*y+f, INK.shade], rim:[k*0.75, k, INK.rim+(o.rimBoost||0)], flash:o.flash, tint:o.tint, sil:o.sil });
+  } finally { if(ctx.__charAbort) ctx.__charAbort(); }   // 出错时不让后面的绘制都画进看不见的格子（正常结束时这里什么都不做）
+  return ok;   // false = 角色太大放不进图集 → 调用方用 renderChar 画
+}
+// 画一个活动角色（营地、地图、宠物页）：GPU 能画就 GPU，否则照旧 renderChar 贴图
+function drawLive(v, s, flip, o, x, y){
+  if(charGL(v, s, flip, o, x, y)) return;
+  const r=renderChar(v, s, flip, o);
+  if(o.sil){ SILC2.width=r.bw; SILC2.height=r.bh; const g=SILC2.getContext('2d'); g.drawImage(r.cv,0,0,r.bw,r.bh,0,0,r.bw,r.bh);
+    g.globalCompositeOperation='source-in'; g.fillStyle=o.sil; g.fillRect(0,0,r.bw,r.bh); ctx.drawImage(SILC2, x-r.px/DPR, y-r.py/DPR, r.bw/DPR, r.bh/DPR); return; }
+  if(o.alpha!=null){ ctx.save(); ctx.globalAlpha*=o.alpha; }
+  ctx.drawImage(r.cv, 0,0,r.bw,r.bh, x-r.px/DPR, y-r.py/DPR, r.bw/DPR, r.bh/DPR);
+  if(o.alpha!=null) ctx.restore();
+}
+const SILC2 = document.createElement('canvas');
+
 // 卡面头像：待机姿势画进 128×128，用同一套质感处理
 let LASTSHARD = null;
 // 碎片图标：怪物头像 + 右下角一个小碎片角标
@@ -306,6 +345,7 @@ function fcDraw(f, x, y, o){
 let FRAMENO = 0;
 function drawV(v, x, y, o){
   o = o||{}; const [s,h]=charScale(v, o.mul);
+  if(charGL(v, s, !!o.flip, {hpx:h, flash:o.flash, tint:o.tint, alpha:o.alpha}, x, y)) return h;   // 58 版：GPU 画（不用 FC / 隔帧缓存）
   if(o.fc && FC.on && (o.mul==null || o.mul===1)){ const f=fcGet(v, s, h, !!o.flip); if(f){ fcDraw(f, x, y, o); return h; } }
   let r;
   if(o.cache && v.cache && !o.flash && !o.tint && v.cache.s===s && ((FRAMENO+(v.id||0))&1)){ r=v.cache; }

@@ -1,4 +1,4 @@
-// 57 版：Pixi WebGL 渲染层（用户 2026-11-13 定：tata 改用 PixiJS + WebGL）
+// 57 版起：Pixi WebGL 渲染层（58 版加角色 GPU 绘制、GPU 离屏层，见文件末尾）（用户 2026-11-13 定：tata 改用 PixiJS + WebGL）
 // ---------------------------------------------------------------------------------------------
 // 整个游戏只有一块 WebGL 画布，由 PixiJS 8 绘制。原来的界面 / 场景代码仍按 Canvas 2D 的写法调用 ctx，
 // 这里的 PixiCtx 接住这些调用，换成 Pixi 的显示对象，每帧末尾一次提交给 GPU：
@@ -208,6 +208,8 @@ class PixiCtx {
     if(!this.ready){ this.live = false; return; }
     const cv = this.canvas;
     if(this.r.width !== cv.width || this.r.height !== cv.height) this.r.resize(cv.width, cv.height, 1);
+    if(this._ch) this.__charAbort();   // 58 版兜底：上一帧有角色 / 离屏层没结束（出错）就丢掉，免得之后的绘制都画进看不见的地方
+    if(this._ly){ const o = this._ly; this._ly = null; this.target = o.target; this.S.alpha = o.alpha; this.S.comp = o.comp; [this.S.shc, this.S.shb, this.S.shx, this.S.shy, this.S.filter] = o.sh; o.L.key = undefined; }
     this.live = true; LIVE = this; this.first = true; QID++; this.frameNo++; this._snapGC();
     for(const k in this.fstat) this.fstat[k] = 0;
     this._reset();
@@ -216,10 +218,24 @@ class PixiCtx {
     this._flush(); this.live = false; LIVE = null; this.stats.frames++; for(const k in this.fstat) this.stats[k] += this.fstat[k]; this.last = Object.assign({}, this.fstat); }
   _reset(){
     this.stage.removeChildren(); this.spi = 0; this.cli = 0; this.target = this.stage;
-    for(const c of this.clips){ c.cont = this._pushClipCont(c.subs); }   // 提交后重建仍然生效的裁剪
+    // 58 版：角色格子 / 离屏层画到一半被提交（_flush）时：进入之前的外层裁剪重建在主画面上并更新它们的「外层目标」，
+    //   之后的裁剪重建在格子 / 层里面，继续画进格子 / 层；角色格子重新挂回图集，它用到的池子对象挪到池子最前面，不被后面复用
+    const B = this._ly || this._ch, cb = B ? B.cb : this.clips.length;
+    let kids = null;
+    if(this.atlas){
+      if(this._ch){ kids = this._ch.c.children.slice(); }
+      this.atlas.removeChildren(); this.atN = 0; this.atX = 2; this.atY = 2; this.atRow = 0; this.cci = 0; this.smi = 0; this.qi = 0;
+      if(this._ch){ const c = this._ch.c; this.cci = this._keepFront(this.cc, [c], o => o); this.smi = this._keepFront(this.sm, kids, o => o.m); this.spi = this._keepFront(this.sp, kids, o => o);
+        this.atlas.addChild(c); this.atN = 1; }
+    }
+    const enter = () => { B.target = this.target; this.target = B.L ? B.L.c : B.c; };
+    for(let i = 0; i < this.clips.length; i++){ if(B && i === cb) enter(); const c = this.clips[i]; c.cont = this._pushClipCont(c.subs); }   // 提交后重建仍然生效的裁剪
+    if(B && cb >= this.clips.length) enter();
   }
   _flush(){
     if(!this.live) return;
+    if(this.lyPend && this.lyPend.length){ for(const L of this.lyPend) this.r.render({ container:L.c, target:L.rt, clear:true, clearColor:[0, 0, 0, 0] }); this.fstat.layerPasses = (this.fstat.layerPasses|0) + this.lyPend.length; if(!this._ly) this.lyPend.length = 0; }
+    if(this.atN){ this._atRender(); }   // 58 版：本批的角色先画进角色图集，再画整屏（角色在整屏里只是一块带质感着色器的贴片）
     if(this.stage.children.length){
       this.r.render({ container:this.stage, clear:this.first });
       this.first = false; this.fstat.flushes++;
@@ -230,7 +246,8 @@ class PixiCtx {
   }
   // ----- 显示对象池 -----
   _sprite(tex){
-    let s = this.sp[this.spi++]; if(!s){ s = new P.Sprite(); this.sp.push(s); }
+    const o = this._ly ? this._ly.L : this;   // 58 版：画进 GPU 离屏层时用这一层自己的池子（层可能跨批保留）
+    let s = o.sp[o.spi++]; if(!s){ s = new P.Sprite(); o.sp.push(s); }
     s.texture = tex; this.target.addChild(s); this.fstat.sprites++; return s;
   }
   // 裁剪：容器 + 模板遮罩。遮罩图形按形状缓存、不改形状复用（池子里的图形清空后重画成别的形状，
@@ -343,7 +360,9 @@ class PixiCtx {
   save(){ const S = this.S; this.stack.push(Object.assign({}, S, { m:S.m.slice(), dash:S.dash.slice(), _clips:this.clips.length })); }
   restore(){ const o = this.stack.pop(); if(!o) return; const n = o._clips; delete o._clips; this.S = o;
     while(this.clips.length > n){ this.clips.pop(); }
-    this.target = this.clips.length ? this.clips[this.clips.length - 1].cont : this.stage; }
+    // 58 版：在 GPU 离屏层 / 角色格子里时，外面的裁剪不算，退回到层 / 格子本身
+    const B = this._ly || this._ch, cb = B ? B.cb : 0;
+    this.target = this.clips.length > cb ? this.clips[this.clips.length - 1].cont : B ? (B.L ? B.L.c : B.c) : this.stage; }
   reset(){ this.S = DEF(); this.stack = []; this.clips = []; this.target = this.stage; this.path = new Path(); }
   // 变换
   setTransform(a, b, c, d, e, f){ if(a === undefined){ this.S.m = [1,0,0,1,0,0]; return; } if(typeof a === 'object'){ const o = a; this.S.m = [o.a ?? o.m11 ?? 1, o.b ?? o.m12 ?? 0, o.c ?? o.m21 ?? 0, o.d ?? o.m22 ?? 1, o.e ?? o.m41 ?? 0, o.f ?? o.m42 ?? 0]; return; } this.S.m = [a, b, c, d, e, f]; }
@@ -434,8 +453,9 @@ class PixiCtx {
     if(!this.live) return;
     const m = this.S.m, cv = this.canvas, p = [[x, y], [x+w, y], [x, y+h], [x+w, y+h]].map(([u, v]) => [m[0]*u + m[2]*v + m[4], m[1]*u + m[3]*v + m[5]]);
     const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
-    if(Math.min(...xs) <= 0 && Math.min(...ys) <= 0 && Math.max(...xs) >= cv.width && Math.max(...ys) >= cv.height && !this.clips.length){
-      this.stage.removeChildren(); this.spi = 0; this.cli = 0; this.target = this.stage; this.first = true; return; }
+    if(Math.min(...xs) <= 0 && Math.min(...ys) <= 0 && Math.max(...xs) >= cv.width && Math.max(...ys) >= cv.height && !this.clips.length && !this._ly && !this._ch){
+      this.stage.removeChildren(); this.spi = 0; this.cli = 0; this.target = this.stage;
+      if(this.atlas){ this.atlas.removeChildren(); this.atN = 0; this.atX = 2; this.atY = 2; this.atRow = 0; this.cci = 0; this.smi = 0; this.qi = 0; } this.first = true; return; }
     const s = this._sprite(P.Texture.WHITE); this._place(s, mul(m, w, 0, 0, h, x, y)); s.alpha = 1; s.blendMode = 'erase'; s.tint = 0xffffff;
   }
   drawImage(S0, a, b, c, d, e, f, g, h){
@@ -513,6 +533,216 @@ PixiCtx._warned = {};
 const _MT = new P.Matrix();
 // 图片缩小显示时用多级纹理（mipmap）：实测默认不开时和 Canvas 2D 更接近；?mip=1 打开对比
 const MIP = /[?&]mip=1\b/.test(location.search), MIPC = /[?&]mipc=1\b/.test(location.search);
+
+// ---------- 58 版：角色在 GPU 上画（不再用 2D 画布逐三角形 + 离屏叠十几遍） ----------
+// 每批（一次提交）里：
+//   1) 每个角色原样画进一张共用的「角色图集」渲染贴图（2048²）的一格：宠物 = Spine 网格（skeleton 顶点直接进 GPU），怪物 = 零件精灵；
+//      格子里的像素和直接画在屏幕上完全对齐（只整像素平移），所以采样结果和画在屏幕上一样。
+//   2) 屏幕上在角色的位置放一块贴片，用一个着色器一次算完 57 版 renderChar 的全部质感：补线（同色外扩）→ 暗部渐变 → 左上亮边 → 受击闪白 / 着色 / 剪影 → 透明度。
+//   整批只多一次切换渲染目标（每个角色一个滤镜会每次都切，手机 GPU 上每切一次都要整屏读写，所以不用 Pixi 的滤镜）。
+// render.js 的 charGL() 调用；__charBegin 返回 false 时（WebGL 没准备好、角色过大）调用方回到 2D 画法。
+const AT = 2048;
+const CH_VS = `precision highp float;
+in vec2 aPosition; in vec2 aUV;
+out vec2 vUV; out vec2 vPos;
+uniform mat3 uProjectionMatrix; uniform mat3 uWorldTransformMatrix; uniform mat3 uTransformMatrix;
+void main(){ mat3 mvp = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
+  gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0); vUV = aUV; vPos = aPosition; }`;
+const CH_FS = `precision highp float;
+in vec2 vUV; in vec2 vPos;
+out vec4 finalColor;
+uniform sampler2D uTexture;
+uniform vec4 uCell;    // 本格在图集里的范围（uv），采样夹在格内
+uniform vec4 uL;       // 离屏设备像素偏移 → 屏幕像素（2×2，列优先 a b c d）
+uniform vec4 uP;       // 补线半径(设备像素, 0=不补) / 方向数 8|12 / 质感开(1) / 透明度
+uniform vec4 uShade;   // 暗部渐变：起点 y、终点 y（屏幕像素）、最深透明度、-
+uniform vec4 uRim;     // 亮边：错开量 x、y（设备像素）、透明度、-
+uniform vec4 uFlash;   // 闪白：rgb（0~1）、透明度
+uniform vec4 uTint;    // 着色：rgb、透明度
+uniform vec4 uSil;     // 剪影：rgb、透明度（<0 = 不用）
+vec4 S(vec2 o){ vec2 uv = vUV + vec2(uL.x * o.x + uL.z * o.y, uL.y * o.x + uL.w * o.y) / ${AT}.0; return texture(uTexture, clamp(uv, uCell.xy, uCell.zw)); }
+vec4 dil(vec2 b){
+  vec4 acc = vec4(0.0); float r = uP.x, nd = uP.y;
+  if(r > 0.0){
+    for(int k = 0; k < 12; k++){ if(float(k) >= nd) break; float t = float(k) / nd * 6.2831853; vec4 s = S(b - vec2(cos(t), sin(t)) * r); acc = s + acc * (1.0 - s.a); }
+    for(int k = 0; k < 12; k += 2){ if(float(k) >= nd) break; float t = (float(k) + 0.5) / nd * 6.2831853; vec4 s = S(b - vec2(cos(t), sin(t)) * r * 0.5); acc = s + acc * (1.0 - s.a); }
+  }
+  vec4 s = S(b); return s + acc * (1.0 - s.a);
+}
+void main(){
+  vec4 c = dil(vec2(0.0));
+  if(c.a <= 0.0){ finalColor = vec4(0.0); return; }
+  if(uP.z > 0.5){
+    float t = clamp((vPos.y - uShade.x) / (uShade.y - uShade.x), 0.0, 1.0), u = clamp((t - 0.55) / 0.45, 0.0, 1.0), ga = uShade.z * u;
+    vec3 gc = mix(vec3(40.0, 20.0, 60.0), vec3(40.0, 20.0, 70.0), u) / 255.0;
+    c.rgb = c.rgb * (1.0 - ga) + gc * ga * c.a;
+    float ra = uRim.z * clamp(c.a * (1.0 - dil(-uRim.xy).a), 0.0, 1.0);
+    c = vec4(vec3(1.0, 1.0, 240.0 / 255.0) * ra * c.a, ra * c.a) + c * (1.0 - ra);
+  }
+  if(uFlash.a > 0.0) c = vec4(uFlash.rgb * uFlash.a * c.a, uFlash.a * c.a) + c * (1.0 - uFlash.a);
+  if(uTint.a > 0.0) c = vec4(uTint.rgb * uTint.a * c.a, uTint.a * c.a) + c * (1.0 - uTint.a);
+  if(uSil.a >= 0.0) c = vec4(uSil.rgb * uSil.a * c.a, uSil.a * c.a);
+  finalColor = c * uP.w;
+}`;
+let CH_PROG = null, SR = null, SPV = null;
+const QUAD_IDX = new Uint32Array([0, 1, 2, 0, 2, 3]);
+const rgb3 = n => [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+Object.assign(PixiCtx.prototype, {
+  _atInit(){
+    this.rt = P.RenderTexture.create({ width:AT, height:AT, resolution:1, antialias:false });
+    this.atlas = new P.Container(); this.atN = 0; this.atX = 2; this.atY = 2; this.atRow = 0;
+    this.cc = []; this.cci = 0; this.sm = []; this.smi = 0; this.qd = []; this.qi = 0;
+    CH_PROG = P.GlProgram.from({ vertex:CH_VS, fragment:CH_FS, name:'tata-char' });
+  },
+  _atAlloc(w, h){
+    if(this.atX + w + 2 > AT){ this.atX = 2; this.atY += this.atRow + 2; this.atRow = 0; }
+    if(this.atY + h + 2 > AT) return null;
+    const c = { x:this.atX, y:this.atY }; this.atX += w + 2; if(h > this.atRow) this.atRow = h; return c;
+  },
+  _atRender(){
+    this.r.render({ container:this.atlas, target:this.rt, clear:true, clearColor:[0, 0, 0, 0] });
+    this.fstat.charPasses = (this.fstat.charPasses|0) + 1;
+  },
+  // 角色开始：之后的 drawImage / __spine 都画进图集里的一个容器（先按屏幕坐标放，结束时量范围再挪进格子）
+  __charBegin(){
+    if(!this.live || this._ch || this._ly || this.noChar) return false;
+    if(!this.atlas){ if(this.r.context && this.r.context.webGLVersion === 1){ this.noChar = true; return false; } this._atInit(); }
+    let c = this.cc[this.cci++]; if(!c){ c = new P.Container(); this.cc.push(c); }
+    c.removeChildren(); c.position.set(0, 0); this.atlas.addChild(c); this.atN++;
+    this._ch = { target:this.target, c, alpha:this.S.alpha, comp:this.S.comp, cb:this.clips.length };
+    this.target = c; this.S.alpha = 1; this.S.comp = 'source-over';
+    return true;
+  },
+  // 出错时放弃当前角色（render.js 的 charGL 在 finally 里调用）
+  __charAbort(){ const ch = this._ch; if(!ch) return; this._ch = null; this.target = ch.target; this.S.alpha = ch.alpha; this.S.comp = ch.comp; if(ch.c.parent) this.atlas.removeChild(ch.c); this.atN = this.atlas.children.length; },
+  _keepFront(pool, objs, get){ let n = 0; for(let i = 0; i < pool.length && n < objs.length; i++){ if(objs.includes(get(pool[i]))){ const t = pool[n]; pool[n] = pool[i]; pool[i] = t; n++; } } return n; },
+  // 本批图集满了：先把之前的角色和屏幕内容提交，当前这个角色（和它用到的池子对象）留到下一批
+  _atOverflow(c){
+    this.atlas.removeChild(c); this.atN--;
+    const kids = c.children.slice();
+    this._flush();
+    this.cci = this._keepFront(this.cc, [c], o => o);
+    this.smi = this._keepFront(this.sm, kids, o => o.m);
+    this.spi = this._keepFront(this.sp, kids, o => o);
+    c.removeChildren(); for(const k of kids) c.addChild(k);
+    this.atlas.addChild(c); this.atN = 1;
+  },
+  // 角色结束：量范围、放进格子，在屏幕上放贴片。p = {pad, r, nd, look, alpha, L:[a,b,c,d], shade:[y0,y1,a], rim:[x,y,a], flash, tint, sil}
+  __charEnd(p){
+    const ch = this._ch; if(!ch) return false; this._ch = null;
+    this.target = ch.target; this.S.alpha = ch.alpha; this.S.comp = ch.comp;
+    const c = ch.c; if(!c.children.length){ this.atlas.removeChild(c); this.atN--; return true; }
+    const B = c.getLocalBounds(), pad = Math.ceil((p.pad || 0) + 3);
+    if(!(B.width > 0 && B.height > 0) || !isFinite(B.minX + B.minY + B.maxX + B.maxY)){ this.atlas.removeChild(c); this.atN--; return true; }
+    // 格子按完整范围分配（不能夹到屏幕：容器里的东西会整只画进图集，超出格子会弄脏隔壁格子）
+    const X0 = Math.floor(B.minX) - pad, Y0 = Math.floor(B.minY) - pad, X1 = Math.ceil(B.maxX) + pad, Y1 = Math.ceil(B.maxY) + pad;
+    const w = X1 - X0, h = Y1 - Y0;
+    if(X1 <= 0 || Y1 <= 0 || X0 >= this.canvas.width || Y0 >= this.canvas.height){ this.atlas.removeChild(c); this.atN--; return true; }   // 整只在屏幕外
+    if(w > AT - 8 || h > AT - 8){ this.atlas.removeChild(c); this.atN--; return false; }   // 太大：调用方回到 2D 画法
+    let cell = this._atAlloc(w, h); if(!cell){ this._atOverflow(c); cell = this._atAlloc(w, h); }
+    c.position.set(cell.x - X0, cell.y - Y0);
+    const chs = { X0, Y0, w, h, cell, alpha:ch.alpha };
+    let q = this.qd[this.qi++];
+    if(!q){
+      const ug = new P.UniformGroup({ uCell:{ value:new Float32Array(4), type:'vec4<f32>' }, uL:{ value:new Float32Array(4), type:'vec4<f32>' },
+        uP:{ value:new Float32Array(4), type:'vec4<f32>' }, uShade:{ value:new Float32Array(4), type:'vec4<f32>' }, uRim:{ value:new Float32Array(4), type:'vec4<f32>' },
+        uFlash:{ value:new Float32Array(4), type:'vec4<f32>' }, uTint:{ value:new Float32Array(4), type:'vec4<f32>' }, uSil:{ value:new Float32Array(4), type:'vec4<f32>' } });
+      const geometry = new P.MeshGeometry({ positions:new Float32Array(8), uvs:new Float32Array(8), indices:QUAD_IDX });
+      const shader = new P.Shader({ glProgram:CH_PROG, resources:{ uTexture:this.rt.source, cu:ug } });
+      q = { m:new P.Mesh({ geometry, shader }), ug, pos:new Float32Array(8), uv:new Float32Array(8) };
+      this.qd.push(q);
+    }
+    const U = q.ug.uniforms, pos = q.pos, uv = q.uv;
+    pos[0] = X0; pos[1] = Y0; pos[2] = X0 + w; pos[3] = Y0; pos[4] = X0 + w; pos[5] = Y0 + h; pos[6] = X0; pos[7] = Y0 + h;
+    const u0 = cell.x / AT, v0 = cell.y / AT, u1 = (cell.x + w) / AT, v1 = (cell.y + h) / AT;
+    uv[0] = u0; uv[1] = v0; uv[2] = u1; uv[3] = v0; uv[4] = u1; uv[5] = v1; uv[6] = u0; uv[7] = v1;
+    const g = q.m.geometry; g.positions = pos; g.uvs = uv;
+    // 夹在格内：留半个像素，双线性采样不取到隔壁格
+    U.uCell[0] = (cell.x + 0.5) / AT; U.uCell[1] = (cell.y + 0.5) / AT; U.uCell[2] = (cell.x + w - 0.5) / AT; U.uCell[3] = (cell.y + h - 0.5) / AT;
+    U.uL.set(p.L); U.uP[0] = p.r || 0; U.uP[1] = p.nd || 8; U.uP[2] = p.look ? 1 : 0; U.uP[3] = chs.alpha * (p.alpha == null ? 1 : p.alpha);
+    if(p.shade){ U.uShade[0] = p.shade[0]; U.uShade[1] = p.shade[1]; U.uShade[2] = p.shade[2]; }
+    if(p.rim){ U.uRim[0] = p.rim[0]; U.uRim[1] = p.rim[1]; U.uRim[2] = p.rim[2]; }
+    U.uFlash[0] = U.uFlash[1] = U.uFlash[2] = 1; U.uFlash[3] = p.flash > 0 ? Math.min(0.85, p.flash) : 0;
+    const col = (s, out) => { if(!s){ out[3] = -1; return; } const c = parseColor(s), k = rgb3(c.rgb); out[0] = k[0]; out[1] = k[1]; out[2] = k[2]; out[3] = c.a; };
+    col(p.tint, U.uTint); if(U.uTint[3] < 0) U.uTint[3] = 0;
+    col(p.sil, U.uSil);
+    q.ug.update();
+    q.m.blendMode = BLEND[ch.comp] || 'normal'; q.m.alpha = 1;
+    this.target.addChild(q.m); this.fstat.chars = (this.fstat.chars|0) + 1; return true;
+  },
+  // Spine 骨架（spine-canvas 4.3 的数据）直接变成 GPU 网格。m = 骨架坐标 → 屏幕像素的矩阵。
+  // 和 spine-canvas 的 drawTriangles 一样：只用颜色的透明度（不着色、不管混合模式和裁剪附件）
+  __spine(sk, m){
+    if(!SR){ SR = new spine.SkeletonRenderer(PG); SPV = { pos:new Float32Array(4096), uv:new Float32Array(4096), idx:new Uint32Array(6144) }; }
+    const RA = spine.RegionAttachment, MA = spine.MeshAttachment, QT = spine.SkeletonRenderer.QUAD_TRIANGLES, sc = sk.color;
+    const order = sk.drawOrder.appliedPose || sk.drawOrder;
+    let curImg = null, curA = -1, nv = 0, ni = 0;
+    const emit = () => {
+      if(!ni) return;
+      let o = this.sm[this.smi++];
+      if(!o){ o = { m:new P.Mesh({ geometry:new P.MeshGeometry({ positions:new Float32Array(8), uvs:new Float32Array(8), indices:new Uint32Array(3) }), texture:P.Texture.WHITE }) }; this.sm.push(o); }
+      const g = o.m.geometry;
+      g.positions = SPV.pos.slice(0, nv * 2); g.uvs = SPV.uv.slice(0, nv * 2); g.indices = SPV.idx.slice(0, ni);
+      o.m.texture = this._tex(curImg, 0, 0, srcW(curImg), srcH(curImg));
+      const t = _MT; t.a = m[0]; t.b = m[1]; t.c = m[2]; t.d = m[3]; t.tx = m[4]; t.ty = m[5]; o.m.setFromMatrix(t);
+      o.m.alpha = curA; o.m.blendMode = 'normal'; o.m.tint = 0xffffff;
+      this.target.addChild(o.m); this.fstat.sprites++;
+      nv = 0; ni = 0;
+    };
+    for(let i = 0; i < order.length; i++){
+      const slot = order[i], pose = slot.appliedPose || slot, att = pose.attachment; if(!att) continue;
+      let vt, tris, img;
+      if(att instanceof RA){ const sq = att.sequence, k = sq.resolveIndex(pose), uvs = sq.getUVs(k), off = att.getOffsets(pose);
+        vt = SR.computeRegionVertices(slot, att, off, uvs, false); tris = QT; const rg = sq.regions[k]; img = rg && rg.texture && rg.texture.getImage(); }
+      else if(att instanceof MA){ const sq = att.sequence, k = sq.resolveIndex(pose), uvs = sq.getUVs(k);
+        vt = SR.computeMeshVertices(slot, att, uvs, false); tris = att.triangles; const rg = sq.regions[k]; img = rg && rg.texture && rg.texture.getImage(); }
+      else continue;
+      if(!img) continue;
+      const pc = pose.color, ac = att.color, a = sc.a * pc.a * ac.a; if(a <= 0) continue;
+      let n = 0; for(let j = 0; j < tris.length; j++) if(tris[j] + 1 > n) n = tris[j] + 1;
+      if(img !== curImg || a !== curA || (nv + n) * 2 > SPV.pos.length || ni + tris.length > SPV.idx.length){ emit(); curImg = img; curA = a; }
+      if(n * 2 > SPV.pos.length || tris.length > SPV.idx.length){   // 超大网格：扩容
+        const k2 = Math.max(n * 2, tris.length) * 2; SPV.pos = new Float32Array(k2); SPV.uv = new Float32Array(k2); SPV.idx = new Uint32Array(k2 * 2); }
+      for(let j = 0; j < n; j++){ const b = j * 8; SPV.pos[(nv + j) * 2] = vt[b]; SPV.pos[(nv + j) * 2 + 1] = vt[b + 1]; SPV.uv[(nv + j) * 2] = vt[b + 6]; SPV.uv[(nv + j) * 2 + 1] = vt[b + 7]; }
+      for(let j = 0; j < tris.length; j++) SPV.idx[ni + j] = nv + tris[j];
+      nv += n; ni += tris.length;
+    }
+    emit();
+  },
+});
+
+// ---------- 58 版：GPU 离屏层（代替每帧重画再整块上传的 2D 离屏画布：营地地面、宠物页远景 / 前景） ----------
+// __layerBegin(id, x0, y0, w, h, key)：之后的绘制画进这一层的渲染贴图（屏幕像素 x0,y0 起、w×h，和屏幕一一对应）；
+//   key 和上次一样 → 返回 {skip:true}，调用方不用再画，直接沿用上次的内容（营地地面只在镜头移动时重画）。
+// __layerEnd(h)：把这一层按当前透明度 / 混合模式贴到屏幕 (x0,y0)。
+Object.assign(PixiCtx.prototype, {
+  __layerBegin(id, x0, y0, w, h, key){
+    if(!this.live || this._ly || this._ch || !(w > 0 && h > 0)) return null;
+    if(!this.layers){ this.layers = new Map(); this.lyPend = [];
+      // iOS 切后台常会丢 WebGL 上下文，恢复后渲染贴图里的内容没了：所有层都要重画
+      this.canvas.addEventListener('webglcontextrestored', () => { for(const L of this.layers.values()) L.key = undefined; }); }
+    let L = this.layers.get(id);
+    if(!L){ L = { c:new P.Container(), rt:null, key:undefined, sp:[], spi:0, tex:null }; this.layers.set(id, L); }
+    // 渲染贴图只增不减（按 64 取整），用左上角 w×h：宠物页拖动面板时不用每帧重建
+    if(!L.rt || L.rt.width < w || L.rt.height < h){ if(L.rt) L.rt.destroy(true);
+      L.rt = P.RenderTexture.create({ width:Math.ceil(w / 64) * 64, height:Math.ceil(h / 64) * 64, resolution:1, antialias:false }); L.key = undefined; L.tex = null; }
+    if(!L.tex || L.tw !== w || L.th !== h){ if(L.tex) L.tex.destroy(false); L.tex = new P.Texture({ source:L.rt.source, frame:new P.Rectangle(0, 0, w, h) }); L.tw = w; L.th = h; L.key = undefined; }
+    L.x0 = x0; L.y0 = y0;
+    if(key != null && key === L.key) return { L, skip:true };
+    L.key = key; L.c.removeChildren(); L.spi = 0; L.c.position.set(-x0, -y0);
+    const S0 = this.S;
+    this._ly = { L, target:this.target, alpha:S0.alpha, comp:S0.comp, cb:this.clips.length, sh:[S0.shc, S0.shb, S0.shx, S0.shy, S0.filter] };
+    this.target = L.c; S0.alpha = 1; S0.comp = 'source-over'; S0.shc = 'rgba(0,0,0,0)'; S0.shb = 0; S0.shx = 0; S0.shy = 0; S0.filter = 'none';   // 和独立的 2D 离屏一样：不继承阴影 / 滤镜
+    if(!this.lyPend.includes(L)) this.lyPend.push(L);
+    return { L, skip:false };
+  },
+  __layerEnd(h){
+    if(!h) return; const L = h.L;
+    if(!h.skip && this._ly && this._ly.L === L){ const o = this._ly; this._ly = null; this.target = o.target; const S0 = this.S; S0.alpha = o.alpha; S0.comp = o.comp; [S0.shc, S0.shb, S0.shx, S0.shy, S0.filter] = o.sh; }
+    const s = this._sprite(L.tex); const t = _MT; t.a = 1; t.b = 0; t.c = 0; t.d = 1; t.tx = L.x0; t.ty = L.y0; s.setFromMatrix(t);
+    s.alpha = this.S.alpha; s.blendMode = BLEND[this.S.comp] || 'normal'; s.tint = 0xffffff;
+  },
+});
 
 window.PIXICTX = {
   create(cv){ cv.__pxctx = true; const c = new PixiCtx(cv); window.PIXICTX.main = c; return c; },

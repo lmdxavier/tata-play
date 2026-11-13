@@ -14,7 +14,7 @@
    （和战斗、营地同一套，读游戏已有的 assets/env1/）；底座、宝箱 = Fantasy Hero（界面主素材）。
    画法：地面 + 路 + 贴地小草小花先画进离屏画布（按设备像素对齐，防竖线），树和灌木每帧按脚的位置排前后、从脚部轻摆。
    依赖游戏的全局函数（render.js / meta.js / game.js）：img ok drawImg drawImgC text rr heroButton heroT mtNine4 btnShadow
-     toast sfx addHit inR newSpine newMon renderChar groundShadow shardIcon coinIcon icon silOf drawResBar seeded ease clamp01
+     toast sfx addHit inR newSpine newMon renderChar drawLive groundShadow shardIcon coinIcon icon silOf drawResBar seeded ease clamp01
    ===================================================================== */
 const CHAPTER_MAP = (()=>{
   const D = window.MAP_DATA;
@@ -173,9 +173,8 @@ const CHAPTER_MAP = (()=>{
     const v=ensurePet(), key=S.petKey; if(v.kind==='spine'){ v.st.update(dt); v.st.apply(v.sk); } else v.m.update(dt);
     const dm = v.kind==='spine' ? {h:v.sd.h, w:v.sd.w} : MONB[v.name]; if(!dm) return;
     const h=(PET_SIZE[key]||0.65)*108*u, s=h/dm.h, faceR=S.petFace>0, flip = v.kind==='mon' ? faceR : !faceR;
-    const r=renderChar(v, s, flip, {hpx:h, cs:h/(PET_SIZE[key]||0.65)});
     groundShadow(x, y, h*0.8, 0.8);
-    ctx.drawImage(r.cv, 0,0,r.bw,r.bh, x-r.px/DPR, y-r.py/DPR, r.bw/DPR, r.bh/DPR);
+    drawLive(v, s, flip, {hpx:h, cs:h/(PET_SIZE[key]||0.65)}, x, y);
   }
 
   // ---------- 气泡（Fantasy Hero BubbleFrame_01，和营地同一套）----------

@@ -336,12 +336,8 @@ function drawBigChar(e, cx, fy, maxH, maxW, dt){
   if(bb){ const sp=Math.min(300/dm.h, 336/dm.w), vh=(bb[3]-bb[1])/sp, Hv=Math.min(BIG_PET_H*maxH, maxW/cardAspectMax());
     s=Hv/vh; foot=(bb[3]-384*0.875)/sp*s; }
   const h=dm.h*s;
-  const r=renderChar(v, s, v.kind==='mon', {hpx:h, cs:h/0.84});
   groundShadow(cx, fy, h*0.95, 0.9);
-  const dx=cx-r.px/DPR, dy=fy-foot-r.py/DPR, dw=r.bw/DPR, dh=r.bh/DPR;
-  if(e.owned) ctx.drawImage(r.cv, 0,0,r.bw,r.bh, dx,dy,dw,dh);
-  else { SILC.width=r.bw; SILC.height=r.bh; const g=SILC.getContext('2d'); g.drawImage(r.cv,0,0,r.bw,r.bh,0,0,r.bw,r.bh);
-    g.globalCompositeOperation='source-in'; g.fillStyle=MT_PAL[e.rar].sil; g.fillRect(0,0,r.bw,r.bh); ctx.drawImage(SILC, dx,dy,dw,dh); }
+  drawLive(v, s, v.kind==='mon', {hpx:h, cs:h/0.84, sil: e.owned ? null : MT_PAL[e.rar].sil}, cx, fy-foot);   // 58 版：GPU 画；未拥有 = 剪影
   return h;
 }
 
@@ -434,15 +430,23 @@ function bgBand(B, cx, fy, u, cam, r, t){
 function bgPaged(p, D, q, u, fn){ const span=p*D, o=-(((q*span)%span)+span)%span; fn(o*u); fn((o+span)*u); }
 // 离屏画布：和屏幕物理像素一一对应
 const BGC = {bg:document.createElement('canvas'), fg:document.createElement('canvas')};
-function bgBegin(which, r){
+// 58 版：WebGL 时画进 GPU 离屏层（pixi-ctx __layerBegin），不再每帧在 2D 画布上合成再整块上传；
+//   key 不为空且和上次相同 → 返回 s.skip = true，调用方不用重画（营地地面只在镜头移动 / 图片到了时重画），2D 画法同样沿用上一次的画布。
+function bgBegin(which, r, key){
   const m=ctx.getTransform(), S=m.a, x0=Math.floor(r.x*S+m.e), y0=Math.floor(r.y*S+m.f),
         w=Math.ceil((r.x+r.w)*S+m.e)-x0, h=Math.ceil((r.y+r.h)*S+m.f)-y0, c=BGC[which];
+  const k = key==null ? null : key+'|'+x0+','+y0+','+w+','+h+'|'+S+','+(m.e-x0)+','+(m.f-y0);
+  const ly = ctx.__layerBegin && ctx.__layerBegin(which, x0, y0, w, h, k);
+  if(ly){ BGV.S=S; BGV.ox=m.e; BGV.oy=m.f; return {ly, skip:ly.skip}; }   // 层的内容和屏幕像素一一对应：对齐方式同 2D 离屏
+  if(k!=null && c.__key===k) return {main:ctx, c, x0, y0, skip:true, keep:true};
   if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
+  c.__key=k;
   const g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,w,h); g.setTransform(S,0,0,S,m.e-x0,m.f-y0);
   BGV.S=S; BGV.ox=m.e-x0; BGV.oy=m.f-y0;
   const main=ctx; ctx=g; return {main, c, x0, y0};
 }
-function bgEnd(s){ ctx=s.main; ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(s.c, s.x0, s.y0); ctx.restore(); }
+function bgEnd(s){ if(s.ly){ ctx.__layerEnd(s.ly); return; }
+  if(!s.keep) ctx=s.main; ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(s.c, s.x0, s.y0); ctx.restore(); }
 function camUpdate(r, u, t){
   // 镜头位置按“步”计：每换一只宠物走一步（stepPet 给方向；点网格按名单先后定方向），指数趋近
   if(MT.camSel!==MT.sel){

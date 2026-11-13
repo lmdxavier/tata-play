@@ -484,9 +484,10 @@ const CAMP = (()=>{
   // 地面：铺满整张地图的草地（离屏画布、整像素对齐，防竖线）；树林那一圈地面压暗，空地显得亮、树林显得深
   const GROUND = (()=>{ try{ const m=/[?&]cg=(\w+)/.exec(location.search); if(m) return m[1]; }catch(e){} return 'floor'; })();
   function drawGround(g, t){
-    const r=g.c, u=g.u, s=bgBegin('bg', r);
+    // 58 版：地面不会动，只在镜头位置 / 大小 / 图片加载变了时重画（以前每帧整屏重画再上传）
+    const r=g.c, u=g.u, s=bgBegin('bg', r, ['camp', GROUND, r.x, r.y, r.w, r.h, g.ox, g.oy, u, IMG_STAMP, S.map&&S.map.id, S.map&&S.map.tufts.length, S.map&&S.map.flat.length].join(','));
     const snapY = y => (Math.round(y*BGV.S+BGV.oy)-BGV.oy)/BGV.S;
-    try{
+    if(!s.skip) try{
       if(GROUND==='field'){
         const im=envImg('Field_Forest'); ctx.fillStyle='#618650'; ctx.fillRect(r.x, r.y, r.w, r.h);
         if(ok(im)){ const w=snapW(96*u); let x0=snapX(g.ox-4000*u); x0-=Math.ceil((x0-r.x)/w)*w; let y0=snapY(g.oy-4000*u); y0-=Math.ceil((y0-r.y)/w)*w;
@@ -509,6 +510,7 @@ const CAMP = (()=>{
       for(const q of S.map.tufts) drawFlat(q, g);
       for(const q of S.map.flat) drawFlat(q, g);
     } finally { bgEnd(s); }
+    else bgEnd(s);   // 沿用上次的地面
   }
   function drawFlat(q, g){ const im=envImg(q.n); if(!ok(im)) return; const u=g.u, h=q.h*u, w=q.w*u, x=SX(g,q.x), y=SY(g,q.y);
     if(x+w<g.c.x || x-w>g.c.x+g.c.w || y<g.c.y-10 || y-h>g.c.y+g.c.h) return; drawImg(im, x-w/2, y-h*(q.foot||1), w, h, q.flip); }
@@ -578,15 +580,13 @@ const CAMP = (()=>{
     if(v.kind==='spine'){ v.st.update(dt*ts); v.st.apply(v.sk); } else v.m.update(dt*ts);
     const dm = v.kind==='spine' ? {h:v.sd.h, w:v.sd.w} : MONB[v.name];
     const s=h/dm.h, faceR = p.face>0, flip = v.kind==='mon' ? faceR : !faceR;
-    const r=renderChar(v, s, flip, {hpx:h, cs:110*g.u});   // 描边粗细按同一个格子大小算：大宠物不会线更粗
     const hopY = p.hop ? Math.max(0, Math.sin(Math.min(1,p.hopT/0.38)*Math.PI))*p.hop*g.u*k : 0;
     if(p.hop && p.hopT>0.38) p.hop=0;
     groundShadow(fx, fy, Math.max(petR(p)*2.1, petVis(p)*0.7)*g.u*(1-hopY/(60*g.u)), 0.85);
     const rest = p.st==='rest' && !p.want ? 1 : 0; p.squash += (rest-p.squash)*Math.min(1,dt*3);
     const sy=1-0.05*p.squash+0.012*p.squash*Math.sin(performance.now()/900), sx=1+0.03*p.squash;   // 休息：身体放低一点、慢慢呼吸
-    const dw=r.bw/DPR, dh=r.bh/DPR;
     ctx.save(); ctx.translate(fx, fy-hopY); ctx.scale(sx, sy);
-    ctx.drawImage(r.cv, 0,0,r.bw,r.bh, -r.px/DPR, -r.py/DPR, dw, dh); ctx.restore();
+    drawLive(v, s, flip, {hpx:h, cs:110*g.u}, 0, 0); ctx.restore();   // 描边粗细按同一个格子大小算：大宠物不会线更粗
     p._scr={x:fx, y:fy, h:hv, k};
   }
   function drawFoodBox(g){
