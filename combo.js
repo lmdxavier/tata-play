@@ -27,13 +27,17 @@ const COMBO = (()=>{
   // ---------- 图片 ----------
   const IMGS = {};
   const url = p => 'assets/combos/img/' + p.split('/').map(encodeURIComponent).join('/');
-  function im(p){ if(!IMGS[p]){ const i=new Image(); i.src=url(p); IMGS[p]=i; } return IMGS[p]; }
+  function im(p){ let i=IMGS[p];   // 56 版：全部重试失败后，隔 5 秒以上再被用到时重新请求
+    if(i && i.complete && !i.naturalWidth && performance.now()-(i.__t||0)>5000) i=null;
+    if(!i){ i=new Image(); i.__t=performance.now(); i.src=url(p); IMGS[p]=i; } return i; }
   const okI = i => i && i.complete && i.naturalWidth>0;
-  function preload(onStep){   // 55 版：onStep(已完成, 总数) 用来显示进度
+  function preload(onStep, conc){   // 55 版：onStep(已完成, 总数) 用来显示进度；56 版：conc = 同时下载几张（不填 = 全部一起）
     const list=[];
     for(const c of DATA['组合']) for(const l of c['特效层']) (l['类型']==='图集'?[l['素材']]:l['帧']).forEach(p=>list.push(p));
     const all=[...new Set(list)]; let done=0; const step=()=>{ done++; if(onStep) onStep(done, all.length); }; if(onStep) onStep(0, all.length);
-    return Promise.all(all.map(p=>new Promise(res=>{ const i=im(p); if(okI(i)){ step(); return res(); } i.onload=i.onerror=()=>{ step(); res(); }; })));
+    const one = p=>new Promise(res=>{ const i=im(p); if(okI(i)){ step(); return res(); } i.onload=i.onerror=()=>{ step(); res(); }; });
+    if(!conc) return Promise.all(all.map(one));
+    let k=0; return Promise.all(Array.from({length:Math.min(conc,all.length)}, async()=>{ while(k<all.length) await one(all[k++]); }));
   }
   const nFrames = l => l['类型']==='图集' ? (l['帧范围'][1]-l['帧范围'][0]) : l['帧'].length;
   const isGround = l => /地面|压扁/.test(l['说明']||'');

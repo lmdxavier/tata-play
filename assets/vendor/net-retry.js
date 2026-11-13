@@ -7,7 +7,7 @@
   var srcD = Object.getOwnPropertyDescriptor(P, 'src');
   var errD = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'onerror');
   if(!srcD || !errD) return;
-  var MAX = 5;
+  var MAX = 8;   // 56 版：5 → 8 次，间隔逐次加长（0.6～4.8 秒，共约 22 秒）
   Object.defineProperty(P, 'onerror', { configurable:true,
     get: function(){ return this.__userErr || null; },
     set: function(f){ this.__userErr = f;
@@ -22,7 +22,7 @@
           var b = this.__base || '';
           if(this.__try < MAX && !/^(data|blob):/.test(b)){
             var n = ++this.__try, im = this;
-            setTimeout(function(){ if(im.__base === b) srcD.set.call(im, b + (b.indexOf('?') < 0 ? '?' : '&') + 'r=' + n); }, 500 * n);
+            setTimeout(function(){ if(im.__base === b) srcD.set.call(im, b + (b.indexOf('?') < 0 ? '?' : '&') + 'r=' + n); }, 600 * n);
             return;
           }
           this.__failed = true;

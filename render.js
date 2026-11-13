@@ -11,7 +11,10 @@ const ease = { outBack:(k,s=1.7)=>1+(s+1)*Math.pow(k-1,3)+s*Math.pow(k-1,2), out
 const clamp01 = v=>Math.max(0,Math.min(1,v));
 const IMG = {}; window.__IMG = IMG;
 let IMG_STAMP=0;   // 35 版：每加载完一张图 +1，卡片缓存用它判断「当时缺图、现在到了」要重画
-function img(path){ if(!IMG[path]){ const i=new Image(); i.onload=()=>{ IMG_STAMP++; }; i.src=ASSET+path; IMG[path]=i; } return IMG[path]; }
+// 56 版（国内朋友反馈地图宝箱缺失）：懒加载的图重试全部失败后不再永久空着 —— 隔 5 秒以上再被画到时重新请求
+function img(path){ let i=IMG[path];
+  if(i && i.complete && !i.naturalWidth && performance.now()-(i.__t||0)>5000) i=null;
+  if(!i){ i=new Image(); i.__t=performance.now(); i.onload=()=>{ IMG_STAMP++; }; i.src=ASSET+path; IMG[path]=i; } return i; }
 const ok = i => i && i.complete && i.naturalWidth>0;
 const icon = n => img('icons/'+n+'.png');
 // village 素材（黑描边、浮雕）画风不符，15 版已删，不要再加回来
@@ -24,7 +27,11 @@ const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5
 const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', grass:'Misc_Leaf_01_Green' };
 
 // ---------- 加载 ----------
-const loadImage = src => new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
+// 56 版：一张图（每张自带 8 次重试）失败后再整轮重来，最多 3 轮；开场的宠物骨骼图集缺一张就会整局报错
+const loadImage1 = src => new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
+const loadImage = async src => { for(let k=0;k<3;k++){ const i=await loadImage1(k?src+(src.includes('?')?'&':'?')+'k='+k:src); if(i) return i; } return null; };
+// 56 版：后台下载限制同时 4 个，免得在差网络上一下子挤满，界面按需要的图（比如地图宝箱）抢不到
+async function pool(list, n, fn){ let i=0; await Promise.all(Array.from({length:Math.min(n,list.length)}, async()=>{ while(i<list.length){ const k=i++; await fn(list[k]); } })); }
 let MONLIB = null, MONLIB_ORIG = null; const SPINE = {}; let SPR = null, SPR2 = null;
 const PORTRAIT = {};       // 卡面头像（离屏画布）
 let READY = false, LOADMSG = '加载素材…', LOAD_N = null;
@@ -44,8 +51,8 @@ async function loadLater(){
   // 营地也有音效（投喂、收取、按钮），音效数据和战斗图一起下，不排在后面
   const sfx = loadScript('assets/combos/audio.js', 8, ()=>!!window.COMBO_AUDIO).then(ok=>{ if(ok) COMBO.audioData(); });
   await Promise.all([
-    Promise.all(vfx.map(async p=>{ if(!IMG[p]){ const i=await loadImage(ASSET+p); if(i) IMG[p]=i; } vd++; show(); })),
-    COMBO.preload((d,t)=>{ cd=d; ct=t; show(); }) ]);
+    pool(vfx, 2, async p=>{ if(!IMG[p]){ const i=await loadImage(ASSET+p); if(i) IMG[p]=i; } vd++; show(); }),
+    COMBO.preload((d,t)=>{ cd=d; ct=t; show(); }, 3) ]);
   BATTLE_READY = true;
   // 等待期间换了页签 = 不想进了，不再自动拉进战斗
   if(BATTLE_WAIT){ const go = typeof MT!=='undefined' && MT.tab===BATTLE_WAIT_TAB && !MT.inBattle; BATTLE_WAIT=false; if(go) startBattle(); }

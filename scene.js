@@ -17,7 +17,7 @@ const SCENE = (()=>{
   let PROPS=[], DECALS=[], PARTS=[], STATIC=null, KEY='', BAKED=new Map();
 
   async function load(){
-    await Promise.all(Object.keys(E).map(n=>new Promise(r=>{ const i=new Image(); i.onload=()=>{ IM[n]=i; r(); }; i.onerror=r; i.src='assets/env1/'+n+'.png'; })));
+    await Promise.all(Object.keys(E).map(async n=>{ const i=await loadImage('assets/env1/'+n+'.png'); if(i) IM[n]=i; }));   // 56 版：用 render.js 的 loadImage（多轮重试），原来失败一次这棵树 / 石头就永远不画
   }
   const SET = {
     big:   ['Tree_Yellow_Green_02','Tree_Yellow_Green_03','Tree_Yellow_Green_04','Tree_Yellow_Green_06','Tree_Yellow_Green_07','Tree_Yellow_Green_08','Tree_Yellow_Green_10','Tree_Yellow_Green_14','Tree_Yellow_Green_15','Tree_Yellow_Green_16'],
