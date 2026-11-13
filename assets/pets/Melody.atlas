@@ -1,0 +1,27 @@
+Melody.png
+size:256,256
+filter:Linear,Linear
+pma:false
+Buddy_Melody/Body
+bounds:177,191,71,62
+Buddy_Melody/Body line
+bounds:95,156,75,67
+Buddy_Melody/Eye1
+bounds:2,236,17,21
+offsets:1,1,19,23
+rotate:90
+Buddy_Melody/Eye2
+bounds:25,235,18,20
+offsets:1,1,20,22
+rotate:90
+Buddy_Melody/Hair
+bounds:172,115,81,74
+Buddy_Melody/Mouth
+bounds:47,230,27,23
+offsets:1,1,29,25
+Buddy_Melody/Red
+bounds:2,188,91,35
+offsets:1,1,93,37
+Shadow
+bounds:76,225,99,28
+offsets:1,1,101,30

@@ -1,0 +1,54 @@
+Blackhole.png
+size:256,256
+filter:Linear,Linear
+pma:false
+Buddy_Black Hole/Body
+bounds:180,153,56,58
+offsets:1,1,58,60
+rotate:90
+Buddy_Black Hole/Body Line
+bounds:2,132,59,60
+offsets:0,1,60,61
+rotate:90
+Buddy_Black Hole/Circle
+bounds:65,223,15,16
+offsets:48,1,64,89
+rotate:90
+Buddy_Black Hole/Circle_
+bounds:83,223,15,16
+offsets:1,72,64,89
+rotate:90
+Buddy_Black Hole/Eye
+bounds:42,226,21,12
+offsets:1,1,23,14
+Buddy_Black Hole/Hair
+bounds:189,211,39,27
+Buddy_Black Hole/Hand1
+bounds:101,215,23,38
+rotate:90
+Buddy_Black Hole/Hand2
+bounds:141,212,26,46
+rotate:90
+Buddy_Black Hole/Layer 1
+bounds:12,230,8,8
+offsets:1,1,10,10
+Buddy_Black Hole/Layer 2
+bounds:22,230,8,8
+offsets:1,1,10,10
+Buddy_Black Hole/Layer 3
+bounds:2,235,3,3
+offsets:1,1,5,5
+Buddy_Black Hole/Layer 4
+bounds:7,235,3,3
+offsets:1,1,5,5
+Buddy_Black Hole/Layer 5
+bounds:32,230,8,8
+offsets:1,1,10,10
+Buddy_Black Hole/Mouth
+bounds:2,200,31,28
+offsets:1,1,33,30
+Buddy_Black Hole/Tail
+bounds:35,193,42,28
+Shadow
+bounds:79,182,99,28
+offsets:1,1,101,30

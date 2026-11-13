@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- 36 版：添加到主屏幕后全屏打开（iPhone：Safari 分享 → 添加到主屏幕；安卓：Chrome 菜单 → 添加到主屏幕 / 安装应用） -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="塔塔">
+<meta name="theme-color" content="#14111f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>塔塔 · M2 素材版 52（刘海 / 底部安全区：详情页顶部信息下移、各页顶部一行对齐；底栏 ?nav=0/1/2 试看）</title>
+<style>
+  html,body{margin:0;height:100%;background:#2b3a2a;overflow:hidden;touch-action:none;overscroll-behavior:none;position:fixed;inset:0;   /* 35 版：页面整体固定，拖动时 iOS 不会把页面推走 */
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none}
+  canvas{position:fixed;left:0;top:0;touch-action:none;display:block;width:100vw;height:100vh}   /* 34 版：实际尺寸由 resize() 按 innerWidth/innerHeight 写成像素（iOS Safari 的 100vh 比可见区域高，底栏会被工具栏挡住） */
+  /* 45 版（用户 2026-11-13 iPhone 主屏幕截图：44 版把画布加高到整屏后，底部 47 像素仍然不显示，底栏按钮被裁掉一截）：
+     根本原因是 WebKit 的已知问题（bugs.webkit.org 237961）：主屏幕全屏 + viewport-fit=cover 时，html 一旦 position:fixed，
+     页面就被限制在少报了状态栏高度的那块区域里，超出的部分一律不画 —— 画布再高也会被裁。
+     所以 iPhone 主屏幕模式下不用 position:fixed / overflow:hidden（页面滚动、拖动已由 game.js 的 touchmove 拦截负责），
+     页面高度用 100vh 并补上状态栏高度，画布改成普通的绝对定位。Safari 网页、安卓、电脑不走这一段，和 44 版完全一样。 */
+  html.ios-sa, html.ios-sa body{position:static;inset:auto;overflow:visible;height:100vh;min-height:calc(100% + env(safe-area-inset-top))}
+  html.ios-sa canvas{position:absolute}
+</style>
+<script>if(navigator.standalone===true) document.documentElement.classList.add('ios-sa');</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<!-- 素材数据（全部用 script 加载，双击 file:// 打开也能用） -->
+<script src="assets/vendor/spine-canvas.min.js"></script>
+<script src="assets/vendor/spine-seamfix.js"></script>
+<script src="assets/pets/pets.js"></script>
+<script src="assets/pets_hd/pets_hd.js"></script>
+<script src="assets/monsters/monsters.js"></script>
+<script src="assets/monsters/enemy-monsters.js"></script>
+<script src="assets/vfx/vfx.js"></script>
+<script src="assets/fonts/fonts.js"></script>
+<script src="assets/sfx/core.js"></script>
+<script src="assets/sfx/air.js"></script>
+<script src="assets/sfx/impact.js"></script>
+<script src="assets/sfx/magic.js"></script>
+<script src="assets/sfx/motion.js"></script>
+<script src="assets/sfx/ui.js"></script>
+<script src="assets/sfx/events.js"></script>
+<script>window.SFX2V2 = window.SFX2;   // rhythm 项目的扩展音效类型注册在 SFX2V2 上</script>
+<script src="assets/sfx/sfx2_ext.js"></script>
+<!-- 效果组合（tools/build_combos.py 从 素材库\效果组合 打包）-->
+<script src="assets/combos/combos.js"></script>
+<script src="assets/combos/audio.js"></script>
+<!-- 逻辑层（同灰盒 1）+ 画面层 -->
+<script src="game.js"></script>
+<script src="assets/env1/env1.js"></script>
+<script src="scene.js"></script>
+<script src="combo.js"></script>
+<script src="render.js"></script>
+<!-- 局外界面：底部切换 战斗 / 宠物 / 营地（11 版） -->
+<script src="map_data.js"></script>
+<script src="map.js"></script>
+<script src="card_bbox.js"></script>
+<script src="meta.js"></script>
+<!-- 32 版：营地（宠物自由活动 + 投喂） -->
+<script src="camp.js"></script>
+<!-- 29 版：背景音乐（局外 main / 战斗 battle）-->
+<script src="assets/bgm/bgm.js"></script>
+<script src="music.js"></script>
+</body>
+</html>
