@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<title>塔塔 · M2 素材版 56</title>
+<title>塔塔 · M2 素材版 57（改用 PixiJS + WebGL 绘制）</title>
 <style>
   html,body{margin:0;height:100%;background:#2b3a2a;overflow:hidden;touch-action:none;overscroll-behavior:none;position:fixed;inset:0;   /* 35 版：页面整体固定，拖动时 iOS 不会把页面推走 */
     font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none}
@@ -31,6 +31,11 @@
 <canvas id="c"></canvas>
 <!-- 素材数据（全部用 script 加载，双击 file:// 打开也能用） -->
 <script src="assets/vendor/net-retry.js"></script>   <!-- 54 版：图片失败自动重试 -->
+<script src="assets/vendor/filepack.js"></script>   <!-- 57 版：双击打开（file://）时图片走数据包，WebGL 才能用 -->
+<!-- 57 版：PixiJS 8（WebGL）绘制整个游戏；pixi-ctx.js 把原来的 Canvas 2D 绘制调用转成 Pixi 显示对象。网址加 ?gl=0 回到 Canvas 2D 对比，?perf=1 性能面板 -->
+<script src="assets/vendor/pixi.min.js"></script>
+<script src="assets/vendor/pixi-ctx.js"></script>
+<script src="assets/vendor/perf-hud.js"></script>
 <script src="assets/vendor/spine-canvas.min.js"></script>
 <script src="assets/vendor/spine-seamfix.js"></script>
 <script src="assets/pets/pets.js"></script>

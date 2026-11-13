@@ -565,7 +565,7 @@ const PRELOAD = [
 const FONT = '"Sen", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
 async function loadFont(){
   try { const bin = atob(window.FONT_SEN||''); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
-        const f = new FontFace('Sen', u8.buffer); await f.load(); document.fonts.add(f); } catch(e){ console.warn('字体', e.message); }
+        const f = new FontFace('Sen', u8.buffer); await f.load(); document.fonts.add(f); if(window.PIXICTX && PIXICTX.fontsChanged) PIXICTX.fontsChanged(); } catch(e){ console.warn('字体', e.message); }
 }
 
 // ---------- 画图小工具 ----------
@@ -1197,7 +1197,9 @@ function frame(now){
   LAST_DRAW=now;
   acc += Math.min(0.1,(now-lastT)/1000); lastT=now;
   if(READY && G.started) while(acc>=STEP){ if(HITSTOP>1e-6){ HITSTOP-=STEP; acc-=STEP; continue; } if(!G.paused) for(let i=0;i<G.speed;i++) update(STEP); acc-=STEP; } else acc=0;
-  draw(); requestAnimationFrame(frame);
+  const PT0=performance.now(); if(ctx.__begin) ctx.__begin(); draw(); if(ctx.__end) ctx.__end();   // 57 版：一帧的绘制结束后统一交给 WebGL
+  if(window.PERF_HUD) PERF_HUD.frame(performance.now()-PT0);
+  requestAnimationFrame(frame);
 }
 resize(); newGame(); loadAll(); requestAnimationFrame(frame);
 window.TATA = {msg:()=>LOADMSG, G:()=>G, DATA, newGame, placePet, movePet, update, ready:()=>READY, setOrient:(m)=>{orientMode=m;resize();}, SND};

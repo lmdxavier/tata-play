@@ -86,7 +86,7 @@ const CELL_INFO = {
 };
 
 // ---------- 画布与布局 ----------
-const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
+const cv = document.getElementById('c'); let ctx = window.PIXICTX ? PIXICTX.create(cv) : cv.getContext('2d');   // 57 版：WebGL（Pixi）主画布；?gl=0 用 Canvas 2D
 let W=0,H=0,DPR=1;
 let orientMode = 'portrait';
 let X0 = 0, SW = 0, SC = 1, X0PX = 0, Y0PX = 0;
