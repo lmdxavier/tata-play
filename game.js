@@ -68,7 +68,7 @@ const levelCleared = id => { try{ return !!(window.CHAPTER_MAP && CHAPTER_MAP.pr
 function setLevel(id){
   const lv = (window.LEVELS||{})[id]; if(!lv) return false;
   const owned = PET_ORDER.filter(k=>PROFILE.owned[k]);
-  DATA.level = { id, title:lv.title, lanes:lv.lanes.slice(), loadout:owned.slice(0,6), startEnergy:lv.startEnergy, skyDrop:lv.skyDrop, cells:lv.cells||[], duration:lv.duration,
+  DATA.level = { id, scene:lv.scene||'day', title:lv.title, lanes:lv.lanes.slice(), loadout:owned.slice(0,6), startEnergy:lv.startEnergy, skyDrop:lv.skyDrop, cells:lv.cells||[], duration:lv.duration,
     spawns:lv.spawns, reward:lv.reward||null, tut:lv.tut||null, boxShard:lv.boxShard||null, first:!levelCleared(id) };
   DATA.level.demo = (lv.demo && DATA.level.first && !PROFILE.demo) ? lv.demo : null;   // 66 版：带浮窗的演示，只放一次；演示完重新开始，玩家自己打
   EVENTS = lv.events||[]; WAVE_MARKS = lv.marks||[];
@@ -245,7 +245,7 @@ function newGame(){
     cells: DATA.level.cells.map(c=>{ const h=c.type==='crate'?(c.hp||PROPS[c.kind].hp):c.hp; return {...c, hp:h, hpNow:h}; }),
     cooldown: Object.fromEntries(DATA.level.loadout.map(k=>[k,0])),
     spawns: buildSpawns(), spawnIdx:0,
-    nextSky: DATA.level.skyDrop.firstAt,
+    nextSky: DATA.level.skyDrop ? DATA.level.skyDrop.firstAt : 1e9,   // 72 版：夜里的关 skyDrop:null，天上不掉能量（用户 2026-11-14，参照 PvZ 夜晚）
     bells: Array.from({length:LANES}, (_,l)=>laneOn(l)),
     bellsUsed: 0, bossWarn: null,
     swaps: swapMax(), swapCap: swapMax(), swapRegen: 0,   // swapCap：这一局的换位上限（进关时定；通关当场解锁的下一局才生效）

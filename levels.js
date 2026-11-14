@@ -12,7 +12,7 @@
   const L = {};
 
   // 1-1 森林入口：1 路。教放置、收能量、放聚能花；之后绿莱姆一只一只来
-  L['1-1'] = { title:'森林入口', lanes:[2], startEnergy:100, skyDrop:{every:10, value:25, firstAt:12}, duration:58, marks:[3,36],
+  L['1-1'] = { scene:'day', title:'森林入口', lanes:[2], startEnergy:100, skyDrop:{every:10, value:25, firstAt:12}, duration:58, marks:[3,36],
     spawns: seq('slime', [[3,2],[16,2],[27,2],[36,2],[43,2],[48,2]]),
     reward:{shard:['pug',10]},
     // 66 版（用户 2026-11-14：只有拖到哪的指示、没有说明 → 加浮窗说原因）：第一次进来先放一段带浮窗的演示，演示完重新开始，玩家自己打一局（只有拖动提示）
@@ -33,20 +33,20 @@
           {kind:'place', key:'flower', lane:2, col:0} ] };
 
   // 1-2 史莱姆小径：1 路。多了火牙犬；绿莱姆两只连着来
-  L['1-2'] = { title:'史莱姆小径', lanes:[2], startEnergy:150, skyDrop:{every:10, value:25, firstAt:8}, duration:74, marks:[5,28,52],
+  L['1-2'] = { scene:'dawn', title:'史莱姆小径', lanes:[2], startEnergy:150, skyDrop:{every:10, value:25, firstAt:8}, duration:74, marks:[5,28,52],
     spawns: seq('slime', [[5,2],[15,2],[16.6,2],[28,2],[29.6,2],[40,2],[41.6,2],[52,2],[53.6,2],[58,2],[62,2],[63.6,2]]),
     reward:{shard:['pumpkin',10]},
     tut:[ {at:8, kind:'place', key:'pug', lane:2, col:'front', min:3, tip:'火牙犬只咬面前 1 格，但生命和攻击更高，适合放在前排。'} ] };
 
   // 1-3 三岔路口：3 路。多了硬壳南瓜；赤甲虫出场
-  L['1-3'] = { title:'三岔路口', lanes:[1,2,3], startEnergy:175, skyDrop:{every:10, value:25, firstAt:6}, duration:112, marks:[8,48,88],
+  L['1-3'] = { scene:'noon', title:'三岔路口', lanes:[1,2,3], startEnergy:175, skyDrop:{every:10, value:25, firstAt:6}, duration:112, marks:[8,48,88],
     spawns: [ ...seq('slime', [[8,2],[17,1],[26,3],[34,2],[52,1],[64,2],[74,3],[88,1],[90,3],[100,1],[100.8,3]]),
               ...seq('beetle', [[48,2],[60,3],[72,1],[89,2],[96,2],[104,2]]) ],
     reward:{unlock:'swap'},
     tut:[ {at:11, kind:'place', key:'pumpkin', lane:2, col:'front', min:4, tip:'硬壳南瓜生命 2000，不攻击。放在最前面挡住敌人，后排继续输出。'} ] };
 
   // 1-4 甲虫林：3 路。换位、预告主攻路、水克火；棘背蜥出场
-  L['1-4'] = { title:'甲虫林', lanes:[1,2,3], startEnergy:175, skyDrop:{every:10, value:25, firstAt:6}, duration:126, marks:[8,56,86],
+  L['1-4'] = { scene:'shade', title:'甲虫林', lanes:[1,2,3], startEnergy:175, skyDrop:{every:10, value:25, firstAt:6}, duration:126, marks:[8,56,86],
     spawns: [ ...seq('slime', [[8,2],[15,3],[31,1],[38,3],[63,2],[71,3],[87,2],[97,1],[109,2]]),
               ...seq('hornliz', [[23,2],[84,3],[101,1],[117,2]]),
               ...seq('beetle', [[56,1],[60,1],[66,1],[73,1],[93,2],[105,3],[113,2]]) ],
@@ -55,7 +55,7 @@
     tut:[ {at:43, kind:'move', key:'goldfish', toLane:1, tip:'红色标记的一路要来赤甲虫。水克火，伤害 +50%：把泡泡鱼拖过去。'} ] };
 
   // 1-5 花田保卫战：5 路。多了波姆；能量桶；尖角虫成群
-  L['1-5'] = { title:'花田保卫战', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:200, marks:[16,70,112,172],
+  L['1-5'] = { scene:'bloom', title:'花田保卫战', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:200, marks:[16,70,112,172],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:4,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[16,2],[23,1],[30,3],[37,2],[44,0],[51,4],[71.5,4],[80.5,0],[89,0],[98.5,4],[126,1],[134,3],[142,0],[150,4],[174,2],[178,0],[182,4],[188,1],[192,3]]),
               ...seq('beetle', [[70,0],[79,4],[90.5,4],[97,0],[128,3],[138,1],[146,2],[154,2],[176,1],[180,3],[186,2],[194,2]]),
@@ -67,7 +67,7 @@
     tut:[ {at:112, when:'hornbug', whenP:9.2, kind:'place', key:'bomb', lane:2, col:5, ahead:'hornbug', tip:'尖角虫成群来。把波姆放在它们前面：3 秒后就绪，炸周围 3×3 格，600 伤害。'} ] };
 
   // 1-6 林中空地：5 路。敌方喷火蜥（隔 1 格停下喷 2 格，火牙犬够不着）；宝石桶
-  L['1-6'] = { title:'林中空地', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:200, marks:[12,70,104,160],
+  L['1-6'] = { scene:'after', title:'林中空地', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:200, marks:[12,70,104,160],
     cells:[ {lane:2,col:2,type:'flower'}, {lane:3,col:6,type:'crate',kind:'box'}, {lane:0,col:5,type:'crate',kind:'barrel'} ], boxShard:'lizard',
     spawns: [ ...seq('slime', [[12,2],[20,1],[28,3],[40,0],[48,4],[75,1],[83,3],[110,2],[118,0],[126,4],[160,1],[164,3],[172,2],[178,0],[182,4]]),
               ...seq('lizard', [[34,2],[70,0],[78,4],[104,1],[112,3],[150,2],[166,0],[170,4]]),
@@ -78,7 +78,7 @@
     reward:{shard:['lizard',15]} };
 
   // 1-7 山坡小路：5 路。迅火狐（移动 0.5 格 / 秒，生命 170，走防守少的路）；通关给泡泡鱼升 2 星的碎片
-  L['1-7'] = { title:'山坡小路', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:205, marks:[10,50,110,160],
+  L['1-7'] = { scene:'dusk', title:'山坡小路', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:205, marks:[10,50,110,160],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:2,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[18,1],[26,3],[34,0],[42,4],[90,2],[98,1],[106,3],[140,0],[148,4],[176,2],[180,1],[184,3]]),
               ...seq('fox', [[50,1],[52,3],[76,0],[77.5,4],[80,0],[110,2],[112,2],[130,1],[131,3],[133,1],[160,0],[161,4],[168,2],[170,1],[171,3],[186,0],[188,4]]),
@@ -91,7 +91,7 @@
     reward:{shard:['goldfish',10]} };
 
   // 1-10 森林之王：5 路。Boss 格鲁姆（重击带上下两路、换路、吼叫召绿莱姆、半血狂暴）。通关给章节宝箱（金币 500、星星 10）
-  L['1-10'] = { title:'森林之王', lanes:[0,1,2,3,4], startEnergy:250, skyDrop:{every:10, value:25, firstAt:5}, duration:290, marks:[10,60,140,200],
+  L['1-10'] = { scene:'B', title:'森林之王', lanes:[0,1,2,3,4], startEnergy:350, skyDrop:null,   // 夜里不掉天降能量 duration:290, marks:[10,60,140,200],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:0,col:6,type:'crate',kind:'barrel'}, {lane:4,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[16,1],[22,3],[28,0],[34,4],[40,2],[46,1],[52,3],[150,0],[158,4],[172,1],[180,3],[205,0],[210,4],[222,1],[230,3]]),
               ...seq('beetle', [[44,0],[50,4],[66,2],[90,1],[96,3],[165,0],[190,4],[215,2],[226,0]]),

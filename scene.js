@@ -37,7 +37,7 @@ const SCENE = (()=>{
   /* ---------- 摆放 ---------- */
   function layout(){
     const cs=L.cs, ox=L.ox, oy=L.oy, bw=LANES*cs, bh=COLS*cs, by=oy+bh, xmin=0, xmax=W, K=cs/170;   // 只铺手机画面这么宽
-    const R=rng(20261110);
+    const R=rng(20261110 + [...String(DATA.level.id||'')].reduce((h,ch)=>h*31+ch.charCodeAt(0),0) % 9973 * (DATA.level.id==='1-1'?0:1));   // 72 版：每关一个种子，树、石头、花的摆法各不一样（规则不变）
     PROPS=[]; DECALS=[];
     const USED=new Map(); let last='';
     const pick=k=>{ const a=SET[k].filter(v=>v!==last); let best=null, bu=1e9;
@@ -116,7 +116,7 @@ const SCENE = (()=>{
     // 石像、木桶、蘑菇：完整露出，摆在两棵树之间的前面
     const side1=(n,side,c,f)=>addSide(n,side,oy+c*cs,{lim:0.1,s:fit(n,(m+0.1*cs)*f,1.0),flip:side>0});
     side1('Mushroom_Wihte_03',-1,2.75,0.7); side1('Mushroom_Pink_02',1,5.1,0.7);
-    { const N=night(); if(N && N.shroom){ side1('Mushroom_Pink_01',-1,4.6,0.6); side1('Mushroom_Yellow_02',1,3.5,0.6); side1('Mushroom_Wihte_01',-1,6.9,0.6); side1('Mushroom_Yellow_03',1,7.3,0.6); } }   // 71 版夜景 C：两边多几丛会发光的蘑菇
+    { const N=mood(); if(N.shroom){ side1('Mushroom_Pink_01',-1,4.6,0.6); side1('Mushroom_Yellow_02',1,3.5,0.6); side1('Mushroom_Wihte_01',-1,6.9,0.6); side1('Mushroom_Yellow_03',1,7.3,0.6); } }   // 71 版夜景 C：两边多几丛会发光的蘑菇
     // 右上那段空地：一根叠石石柱，脚下一块小石头
     side1('Stone_Gray1_11',1,2.2,1.0); side1('Stone_Gray1_06',1,2.38,0.55);
     // 底部两角（家门口两边，最靠前，不会被树挡住）：左边石像 + 蘑菇，右边木桶 + 石蛙
@@ -127,10 +127,10 @@ const SCENE = (()=>{
     for(let l=0;l<=LANES;l++){ const x=ox+l*cs; flowerPatch(x, by+0.62*cs, 3); }
     // 6) 地面点缀（画进静态底图）：小花一丛一丛，草丛零星；不进棋盘
     const area=(xmax-xmin)*H/(cs*cs);
-    for(let i=0;i<area*0.07;i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.3*cs)) continue; flowerPatch(x,y,3+Math.floor(R()*4)); }
+    for(let i=0;i<area*0.07*(mood().flowers||1);i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.3*cs)) continue; flowerPatch(x,y,3+Math.floor(R()*4)); }
     for(let i=0;i<area*0.1;i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.2*cs)) continue; decal('Forest_Grass',x,y,0.9+R()*0.4); }
     BAKED.clear(); STATIC=null;
-    const P=rng(7); PARTS=[]; for(let i=0;i<14*1;i++) PARTS.push({x:xmin+P()*(xmax-xmin),y:P()*H,a:P()*6.28,s:P(),v:P()});
+    const P=rng(7); PARTS=[]; for(let i=0;i<20;i++) PARTS.push({x:xmin+P()*(xmax-xmin),y:P()*H,a:P()*6.28,s:P(),v:P()});
   }
 
   /* ---------- 静态底图：地面、树林深处、棋盘、草边、地面点缀 ---------- */
@@ -175,23 +175,34 @@ const SCENE = (()=>{
       // 四个角补一块草色圆角，盖住草边交接
       g.fillStyle=rgb(GROUND); for(const [x,y] of [[ox,oy],[ox+bw,oy],[ox,by],[ox+bw,by]]){ g.beginPath(); g.arc(x,y,fh*0.55,0,7); g.fill(); }
     }
-    { const N=night(); if(N) nightPaint(g, c.width, c.height, N, null); }
+    { const N=mood(); if(N.env) moodPaint(g, c.width, c.height, N, null); }
     STATIC=c;
   }
 
-  /* ---------- 71 版：夜景（预览中，用户选定后定稿） ----------
-     做法参照 PvZ1 夜晚：整片场景压暗偏蓝紫；地面和道具在烘焙时一次乘好（每帧不多花），角色和特效、能量、界面不在这一步。
-     env = 场景最终的乘色，chr = 角色、落叶等每帧再乘的一层（全屏一次）。烘焙时用 env / chr，叠上每帧那层后场景正好是 env。 */
-  const NIGHTS = {
-    A:{name:'A 冷色夜', env:[118,130,190], chr:[214,220,245]},
-    B:{name:'B 月光夜', env:[78,92,160],  chr:[176,186,228], moon:true, fire:true},
-    C:{name:'C 蘑菇夜', env:[96,108,172], chr:[196,202,238], fire:true, shroom:true},
+  /* ---------- 72 版：每关的场景氛围（明暗、滤镜、环境动态、摆放）；场景与美术.md「72 版」 ----------
+     env = 场景最终乘色（地面和道具烘焙时一次乘好，每帧不多花）；chr = 角色、落叶每帧再乘的一层（全屏一次），烘焙时用 env / chr。
+     light = 左上来的光（颜色、强度），clouds = 云影，leaves = 落叶数量倍数，flowers = 战场外小花密度倍数，
+     mist = 两侧晨雾，flecks = 树荫下的光斑，fire = 萤火虫，moon = 月光，shroom = 两边加几丛发光蘑菇。
+     原则（用户 2026-11-14）：场景动态和亮点不能比宠物、敌人更抢眼；两侧不挡视线的地方可以强，战场中间的一律减弱。 */
+  const MOODS = {
+    day:  {name:'白天'},
+    dawn: {name:'清晨', env:[224,236,255], chr:[246,249,255], light:{c:[225,238,255], a:0.10}, clouds:false, leaves:0.5, mist:true},
+    noon: {name:'正午', light:{c:[255,240,190], a:0.17}, leaves:0.8},
+    shade:{name:'林荫', env:[200,222,198], chr:[238,246,236], light:{c:[255,245,200], a:0.06}, leaves:1.2, flecks:true},
+    bloom:{name:'花田', env:[255,250,236], light:{c:[255,236,200], a:0.14}, leaves:0.6, flowers:3},
+    after:{name:'午后', env:[255,236,206], chr:[255,248,234], light:{c:[255,214,140], a:0.18}, leaves:1},
+    dusk: {name:'黄昏', env:[255,190,160], chr:[255,226,208], light:{c:[255,150,90], a:0.24}, clouds:false, leaves:0.6},
+    A:    {name:'夜 A', env:[118,130,190], chr:[214,220,245], light:null, clouds:false, leaves:0.4},
+    C:    {name:'夜 C', env:[96,108,172],  chr:[196,202,238], light:null, clouds:false, leaves:0.3, fire:true, shroom:true},
+    B:    {name:'夜 B', env:[78,92,160],   chr:[176,186,228], light:null, clouds:false, leaves:0.3, moon:true, fire:true},
   };
-  let NIGHT_FORCE = (/[?&]night=([ABC])\b/.exec(location.search)||[])[1] || null;
-  const nightKey = () => NIGHT_FORCE!==null ? NIGHT_FORCE : (DATA.level.night||'');
-  const night = () => NIGHTS[nightKey()] || null;
-  const bakeMul = N => N.env.map((v,i)=>Math.min(255, Math.round(v/N.chr[i]*255)));
-  function nightPaint(g, w, h, N, mask){   // 乘色；mask 有值 = 只乘不透明的部分（道具）
+  const DEF_LIGHT={c:[255,240,190], a:0.12};
+  let MOOD_FORCE = (/[?&]scene=(\w+)\b/.exec(location.search)||[])[1] || null;
+  const moodKey = () => MOOD_FORCE!==null ? MOOD_FORCE : (DATA.level.scene||'day');
+  const mood = () => MOODS[moodKey()] || MOODS.day;
+  const tinted = M => !!M.env;
+  const bakeMul = N => N.env.map((v,i)=>Math.min(255, Math.round(v/(N.chr||[255,255,255])[i]*255)));
+  function moodPaint(g, w, h, N, mask){   // 乘色；mask 有值 = 只乘不透明的部分（道具）
     g.save(); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation='multiply'; g.fillStyle=rgb(bakeMul(N)); g.fillRect(0,0,w,h);
     if(mask){ g.globalCompositeOperation='destination-in'; g.drawImage(mask,0,0); } g.restore(); }
 
@@ -204,7 +215,7 @@ const SCENE = (()=>{
     const a=document.createElement('canvas'); a.width=w+pad*2; a.height=h+pad*2; const g=a.getContext('2d'); g.imageSmoothingQuality='high';
     g.save(); if(p.flip){ g.translate(a.width,0); g.scale(-1,1); } if(p.bri!==1) g.filter=`brightness(${p.bri})`; g.drawImage(src,pad,pad,w,h); g.restore(); g.filter='none';
     if(p.tone<0.999){ g.globalCompositeOperation='source-atop'; g.fillStyle=rgb(DEEP.map(v=>v*0.55),(1-p.tone)*1.7); g.fillRect(0,0,a.width,a.height); g.globalCompositeOperation='source-over'; }
-    { const N=night(); if(N){ const m=document.createElement('canvas'); m.width=a.width; m.height=a.height; m.getContext('2d').drawImage(a,0,0); nightPaint(g, a.width, a.height, N, m); m.width=0; m.height=0; } }
+    { const N=mood(); if(N.env){ const m=document.createElement('canvas'); m.width=a.width; m.height=a.height; m.getContext('2d').drawImage(a,0,0); moodPaint(g, a.width, a.height, N, m); m.width=0; m.height=0; } }
     const res={img:a,pad,S}; BAKED.set(p,res); return res;
   }
   function drawProp(ctx,p,t){
@@ -221,19 +232,20 @@ const SCENE = (()=>{
   function drawFx(ctx,t,dt,leaf){
     const xmin=0, span=W, cs=L.cs;
     // 云影：大块很淡的暗斑缓慢飘过
-    const NT=night();
+    const MD=mood();
     ctx.save(); ctx.globalCompositeOperation='multiply';
-    if(!FX_OFF && !NT) for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
+    if(!FX_OFF && MD.clouds!==false) for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
       g.addColorStop(0,'rgba(110,130,150,.16)'); g.addColorStop(1,'rgba(110,130,150,0)'); ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2); }
     ctx.restore();
     // 落叶：叶子贴图，边落边翻
-    for(const p of PARTS){ p.y+=dt*(14+p.v*10); p.x+=Math.sin(t*1.5+p.a)*dt*14+dt*6; if(p.y>H+10){p.y=-10;p.x=xmin+Math.random()*span;}
+    const nLeaf=Math.min(PARTS.length, Math.round(14*(MD.leaves??1))), bx0=L.ox+Math.min(...DATA.level.lanes)*cs, bx1=L.ox+(Math.max(...DATA.level.lanes)+1)*cs, by0=L.oy, by1=L.oy+COLS*cs;
+    for(let li=0; li<nLeaf; li++){ const p=PARTS[li]; p.y+=dt*(14+p.v*10); p.x+=Math.sin(t*1.5+p.a)*dt*14+dt*6; if(p.y>H+10){p.y=-10;p.x=xmin+Math.random()*span;}
       const sz=cs*(0.11+p.s*0.06);
-      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(t*1.2+p.a); ctx.scale(Math.cos(t*3+p.a*2),1); ctx.globalAlpha=0.8;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(t*1.2+p.a); ctx.scale(Math.cos(t*3+p.a*2),1); ctx.globalAlpha=(p.x>bx0&&p.x<bx1&&p.y>by0&&p.y<by1) ? 0.45 : 0.8;   // 72 版：飘过战场中间时淡一些
       if(leaf&&leaf.complete&&leaf.naturalWidth) ctx.drawImage(leaf,-sz/2,-sz/2,sz,sz); ctx.restore(); }
-    if(NT) return;   // 71 版：夜里没有左上的暖光
-    // 左上来的暖光
-    const g=ctx.createLinearGradient(xmin,0,xmin+span*0.7,H); g.addColorStop(0,'rgba(255,240,190,.12)'); g.addColorStop(0.55,'rgba(255,240,190,0)'); ctx.fillStyle=g;
+    const LT = MD.light===undefined ? DEF_LIGHT : MD.light; if(!LT) return;   // 夜里没有左上的光
+    // 左上来的光（颜色、强度按每关氛围）
+    const g=ctx.createLinearGradient(xmin,0,xmin+span*0.7,H); g.addColorStop(0,rgb(LT.c,LT.a)); g.addColorStop(0.55,rgb(LT.c,0)); ctx.fillStyle=g;
     if(FX_OFF) return;
     // 61 版：渐变过了 0.55 就全透明，只填有颜色的那一块（左上到斜线），不再整屏画一遍；画面不变
     { const dx=span*0.7, dy=H, q=0.55*(dx*dx+dy*dy), yL=Math.min(H, q/dy+2), yR=Math.min(H, Math.max(0,(q-dx*span)/dy+2));
@@ -242,8 +254,8 @@ const SCENE = (()=>{
 
   return {
     load, THEMES:['forest'], get theme(){ return 'forest'; }, setTheme(){},
-    NIGHTS, night, nightKey, setNight(k){ NIGHT_FORCE=k; },
-    ensure(cells){ const key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join(''),nightKey()].join('|'); if(key!==KEY){ KEY=key; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
+    MOODS, mood, moodKey, setMood(k){ MOOD_FORCE=k; },
+    ensure(cells){ const key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join(''),moodKey()].join('|'); if(key!==KEY){ KEY=key; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
     drawGround(ctx){ ctx.drawImage(STATIC,0,0,W,H); },
     props(){ return PROPS; }, drawProp, drawFx,
   };

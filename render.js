@@ -791,49 +791,70 @@ function drawEnemy(e, dt){
   if(e.slow>0) drawImgC(icon('Misc_Snowflake_01'), f.x+cs*0.24, f.y-v.dh*0.5, cs*0.22);
 }
 
-// ---------- 71 版：夜景的每帧部分（预览中）：角色那层乘色、月光、萤火虫、蘑菇发光 ----------
-const FIREFLY = [];
+// ---------- 72 版：每关场景氛围的每帧部分：角色那层乘色、月光、蘑菇发光、萤火虫、晨雾、光斑 ----------
+// 原则（用户 2026-11-14）：场景的动态和亮点不能比宠物、敌人更抢眼。两侧不挡视线的地方可以强；战场中间的一律减弱
+const FIREFLY = [], MIST = [], FLECK = [];
+function boardBox(){ const cs=L.cs, ln=DATA.level.lanes; return {x0:L.ox+Math.min(...ln)*cs, x1:L.ox+(Math.max(...ln)+1)*cs, y0:L.oy, y1:L.oy+COLS*cs}; }
+const inBox = (b,x,y,pad) => x>b.x0-pad && x<b.x1+pad && y>b.y0-pad && y<b.y1+pad;
 function drawNight(dt){
-  const N=SCENE.night(); if(!N) return; const cs=L.cs;
-  ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.fillStyle=`rgb(${N.chr.join(',')})`; ctx.fillRect(-20,-20,W+40,H+40); ctx.restore();
+  const N=SCENE.mood(); const cs=L.cs, bb=boardBox();
+  if(N.chr){ ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.fillStyle=`rgb(${N.chr.join(',')})`; ctx.fillRect(-20,-20,W+40,H+40); ctx.restore(); }
   if(N.moon){   // 月光：棋盘中上部一大片淡蓝白的亮，四角更暗
     const cx=W*0.5, cy=L.oy+L.cs*3, r=Math.max(W,H)*0.75;
     ctx.save(); ctx.globalCompositeOperation='screen'; let g=ctx.createRadialGradient(cx,cy,0,cx,cy,r*0.6); g.addColorStop(0,'rgba(150,175,255,.22)'); g.addColorStop(1,'rgba(150,175,255,0)'); ctx.fillStyle=g; ctx.fillRect(cx-r*0.6,cy-r*0.6,r*1.2,r*1.2); ctx.restore();
     ctx.save(); ctx.globalCompositeOperation='multiply'; g=ctx.createRadialGradient(cx,cy,r*0.35,cx,cy,r); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(1,'rgba(120,120,170,1)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.restore();
   }
-  if(N.shroom){ const glow=tinted('gui/Glow_Circle01.png','#ffd9a8');   // 蘑菇发光：场景里每个蘑菇一团暖色光晕，慢慢呼吸
-    if(glow) for(const p of SCENE.props()) if(/Mushroom/.test(p.n)){ const col=/Pink/.test(p.n)?'#ff9fd2':/Yellow/.test(p.n)?'#ffe08a':'#bfe8ff', im=tinted('gui/Glow_Circle01.png',col)||glow;
+  if(N.mist){ const im=tinted('gui/Glow_Circle01.png','#eef4ff'); if(im){   // 晨雾：只在两侧，大团淡白慢慢飘
+    if(!MIST.length) for(let i=0;i<8;i++) MIST.push({side:i%2?1:-1, y:L.oy+(i/8)*COLS*cs+Math.random()*cs, ph:Math.random()*6.28, s:1.8+Math.random()*1.2});
+    ctx.save(); ctx.globalCompositeOperation='screen';
+    for(const m of MIST){ m.y-=dt*cs*0.05; if(m.y<L.oy-cs*1.5) m.y=L.oy+COLS*cs+cs; const x=(m.side<0?bb.x0-cs*0.35:bb.x1+cs*0.35)+Math.sin(ENV_T*0.3+m.ph)*cs*0.3, s=cs*m.s;
+      ctx.globalAlpha=0.42+0.1*Math.sin(ENV_T*0.5+m.ph); ctx.drawImage(im, x-s/2, m.y-s/2, s, s*0.7); }
+    ctx.restore(); } }
+  if(N.flecks){ const im=tinted('gui/Glow_Circle02.png','#fff2b8'); if(im){   // 林荫光斑：树叶缝里漏下来的光点，慢慢亮起又暗下；战场里很淡
+    if(!FLECK.length) for(let i=0;i<14;i++) FLECK.push({x:Math.random()*W, y:L.oy-cs+Math.random()*(COLS+1.5)*cs, ph:Math.random()*6.28, v:0.25+Math.random()*0.3, s:0.5+Math.random()*0.5});
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(const f of FLECK){ const b=Math.max(0,Math.sin(ENV_T*f.v+f.ph)); if(b<0.02){ if(Math.sin(ENV_T*f.v+f.ph)<-0.95){ f.x=Math.random()*W; f.y=L.oy-cs+Math.random()*(COLS+1.5)*cs; } continue; }
+      const inb=inBox(bb,f.x,f.y,0), s=cs*f.s*(inb?0.8:1.2); ctx.globalAlpha=b*(inb?0.07:0.3); ctx.drawImage(im, f.x-s/2, f.y-s*0.3, s, s*0.6); }
+    ctx.restore(); } }
+  if(N.shroom){   // 蘑菇发光：场景里每个蘑菇一团暖色光晕，慢慢呼吸（都在两侧，可以亮一些）
+    for(const p of SCENE.props()) if(/Mushroom/.test(p.n)){ const col=/Pink/.test(p.n)?'#ff9fd2':/Yellow/.test(p.n)?'#ffe08a':'#bfe8ff', im=tinted('gui/Glow_Circle01.png',col); if(!im) continue;
       const a=0.75+0.25*Math.sin(ENV_T*1.6+p.ph), s=Math.max(p.w,p.h)*2.8;
       ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=a*0.85; ctx.drawImage(im, p.x-s/2, p.y-p.h*0.45-s/2, s, s); ctx.restore(); } }
-  if(N.fire){ const im=tinted('gui/Glow_Circle02.png','#e2ff8a'); if(!im) return;   // 萤火虫：二十来个小光点慢慢飘，一明一暗
-    if(!FIREFLY.length) for(let i=0;i<22;i++) FIREFLY.push({x:Math.random()*W, y:L.oy+Math.random()*(COLS*cs), a:Math.random()*6.28, v:0.4+Math.random()*0.6, ph:Math.random()*6.28});
+  if(N.fire){ const im=tinted('gui/Glow_Circle02.png','#d9f58a'); if(!im) return;   // 萤火虫：小、暗；飘进战场时更淡更小，两边可以亮一点
+    if(!FIREFLY.length) for(let i=0;i<18;i++) FIREFLY.push({x:Math.random()*W, y:L.oy+Math.random()*(COLS*cs), a:Math.random()*6.28, v:0.4+Math.random()*0.6, ph:Math.random()*6.28});
     ctx.save(); ctx.globalCompositeOperation='lighter';
     for(const f of FIREFLY){ f.a+=(Math.random()-0.5)*dt*2; f.x+=Math.cos(f.a)*f.v*cs*0.25*dt; f.y+=Math.sin(f.a)*f.v*cs*0.18*dt-cs*0.02*dt;
       if(f.x<-20) f.x=W+10; if(f.x>W+20) f.x=-10; if(f.y<L.oy-cs) f.y=L.oy+COLS*cs; if(f.y>L.oy+COLS*cs+cs) f.y=L.oy-cs*0.5;
-      const b=Math.max(0, Math.sin(ENV_T*2.2*f.v+f.ph)); if(b<0.05) continue; const s=cs*(0.28+0.12*b);
-      ctx.globalAlpha=0.9*b; ctx.drawImage(im, f.x-s/2, f.y-s/2, s, s); ctx.globalAlpha=b; ctx.drawImage(im, f.x-s*0.15, f.y-s*0.15, s*0.3, s*0.3); }
+      const b=Math.max(0, Math.sin(ENV_T*2.2*f.v+f.ph)); if(b<0.05) continue; const inb=inBox(bb,f.x,f.y,-0.1*cs), k=inb?0.35:0.75, s=cs*(0.14+0.05*b)*(inb?0.8:1);
+      ctx.globalAlpha=0.55*b*k; ctx.drawImage(im, f.x-s/2, f.y-s/2, s, s); ctx.globalAlpha=0.8*b*k; ctx.drawImage(im, f.x-s*0.12, f.y-s*0.12, s*0.24, s*0.24); }
     ctx.restore(); }
 }
-// 71 版：夜景预览的切换按钮（只在 ?nightdemo=1 时出现）。进局后先摆好一排宠物，方便对比
-const ND_RECTS = [];
+// 72 版：场景预览（网址加 ?scenedemo=1）：按钮切到每一关的场景（真实的路数、摆放、氛围），进局后先摆好一排宠物方便对比
+//   1-8、1-9 还没做，先用 1-6 的关卡数据 + 它们的场景（夜 A、夜 C）
+const ND_RECTS = []; let ND_SEL = '1-8';
+const ND_PROXY = {'1-8':['1-6','A'], '1-9':['1-6','C']};
+function sceneDemoGo(id){
+  ND_SEL=id; const px=ND_PROXY[id]; MT.inBattle=false;
+  SCENE.setMood(px ? px[1] : null); startBattle(px ? px[0] : id); FIREFLY.length=0; MIST.length=0; FLECK.length=0;
+}
 function nightDemoSetup(){
-  if(!window.NIGHT_DEMO || !G.started || G._nd || DATA.level.id!=='1-6') return; G._nd=true; G.energy=99999;
-  if(!SCENE.nightKey()) SCENE.setNight('A');
-  const F=[[0,'flower',0],[0,'goldfish',1],[0,'pug',3],[1,'flower',0],[1,'goldfish',1],[1,'lizard',2],[1,'pumpkin',4],[2,'goldfish',1],[2,'goldfish',2],[2,'pug',3],[2,'pumpkin',4],[3,'flower',0],[3,'goldfish',1],[3,'lizard',2],[4,'goldfish',1],[4,'bomb',5],[4,'pug',3]];
-  for(const [l,k,c] of F){ if(G.cooldown[k]!=null) G.cooldown[k]=0; placePet(k,l,c); }
+  if(!window.NIGHT_DEMO || !G.started || G._nd) return; G._nd=true; G.energy=99999;
+  const ln=DATA.level.lanes, F=[['flower',0],['goldfish',1],['lizard',2],['pug',3],['pumpkin',4]];
+  ln.forEach((l,i)=>{ for(const [k,c] of F){ if((i+c)%3===2 && k!=='goldfish') continue; for(const q in G.cooldown) G.cooldown[q]=0; placePet(k,l,c); } });
   for(const k in G.cooldown) G.cooldown[k]=0;
-  G.spawns.forEach(s=>s.t=s.t*0.6);   // 怪早点出来
+  G.spawns.forEach(s=>s.t=s.t*0.5);   // 怪早点出来
 }
 function drawNightDemo(){
   if(!window.NIGHT_DEMO || !G.started) return; nightDemoSetup();
-  const opts=[['','白天'],['A','A'],['B','B'],['C','C'],['R','重来']], bw=54, bh=34, gap=6, x0=W/2-(opts.length*(bw+gap)-gap)/2, y=L.hud.h+58;
-  ND_RECTS.length=0; const cur=SCENE.nightKey();
-  opts.forEach(([k,lab],i)=>{ const x=x0+i*(bw+gap); pill(x,y,bw,bh); if(k===cur){ ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle='#ffd36b'; ctx.fillRect(x+8,y+bh-5,bw-16,3); ctx.restore(); }
-    text(lab, x+bw/2, y+bh/2, 14, k===cur?'#ffd36b':'#fff', 'center', 800, false); ND_RECTS.push({x,y,w:bw,h:bh,k}); });
+  const ids=['1-1','1-2','1-3','1-4','1-5','1-6','1-7','1-8','1-9','1-10','R'], bw=54, bh=30, gap=5, per=6;
+  ND_RECTS.length=0;
+  ids.forEach((k,i)=>{ const row=Math.floor(i/per), col=i%per, x=W/2-(per*(bw+gap)-gap)/2+col*(bw+gap), y=L.hud.h+48+row*(bh+5), on=k===ND_SEL;
+    pill(x,y,bw,bh); if(on){ ctx.save(); ctx.fillStyle='#ffd36b'; ctx.fillRect(x+8,y+bh-5,bw-16,3); ctx.restore(); }
+    text(k==='R'?'重来':k, x+bw/2, y+bh/2, 13, on?'#ffd36b':'#fff', 'center', 800, false); ND_RECTS.push({x,y,w:bw,h:bh,k}); });
+  const N=SCENE.mood(); text(N.name, W/2, L.hud.h+48+2*(bh+5)+12, 13, '#fff', 'center', 800, '#1b2033');
 }
 window.addEventListener('pointerdown', e=>{ if(!window.NIGHT_DEMO || !G.started) return; const x=PX(e), y=PY(e), r=ND_RECTS.find(q=>x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h); if(!r) return;
-  e.stopPropagation(); e.preventDefault();
-  if(r.k==='R'){ const k=SCENE.nightKey(); newGame(); G.started=true; SCENE.setNight(k); } else { SCENE.setNight(r.k); FIREFLY.length=0; } emit('ui'); }, {capture:true});
+  e.stopPropagation(); e.preventDefault(); sceneDemoGo(r.k==='R' ? ND_SEL : r.k); emit('ui'); }, {capture:true});
 function drawCorpses(dt){
   for(const c of corpses){ let cdt=dt; if(c.v.freeze>0){ c.v.freeze-=dt; cdt=0; }   // 死亡的局部顿帧
     c.t+=cdt; const f=feet(c.lane,c.p);

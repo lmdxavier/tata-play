@@ -1127,7 +1127,7 @@ function mtToggleBg(){ MT.bgMode = MT.bgMode==='grad'?'scene':'grad'; try{ local
 let BATTLE_ID = '1-1';
 function goSummon(k){ MT.tab='pets'; ROSTER=null; roster(); MT.sel=k; MT.guide=k; enterDetail(); }
 function startBattle(id){ if(id) BATTLE_ID=id;
-  if(!(window.LEVELS||{})[BATTLE_ID] || (LEVELS[BATTLE_ID].wip && !/[?&]wip=1\b/.test(location.search))){ emit('deny'); toast('暂未开放'); return; }   // 70 版：wip 的关只在网址带 ?wip=1 时能进（测试用）
+  if(!(window.LEVELS||{})[BATTLE_ID] || (LEVELS[BATTLE_ID].wip && !/[?&]wip=1\b/.test(location.search) && !window.NIGHT_DEMO)){ emit('deny'); toast('暂未开放'); return; }   // 70 版：wip 的关只在网址带 ?wip=1 时能进（测试用）
   { const k=PET_ORDER.find(canSummon); if(k){ goSummon(k); toast(DATA.pets[k].cn+'的碎片已集齐，先召唤它'); return; } }   // 有宠物可以召唤：先去召唤，下一关要用
   if(L.kind==='landscape'){ orientMode='portrait'; resize(); }   // 战斗的横屏界面还没做（进去会报错停住，64 版就有）：进战斗先回竖屏
   if(!BATTLE_READY){ BATTLE_WAIT=true; BATTLE_WAIT_TAB=MT.tab; emit('ui'); return; }   // 55 版：战斗特效还在后台加载 → 先显示进度，加载完自动开始（render.js loadLater）
@@ -1306,7 +1306,7 @@ function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(
   profileSave(); ROSTER=null; FIRST_RUN=false; MT.tab='battle'; }
 { const q=/[?&]skip=(\d+)/.exec(location.search); if(q) document.addEventListener('DOMContentLoaded', ()=>cheatSkip(+q[1])); }
 draw = function(){
-  if(window.NIGHT_DEMO && FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; cheatSkip(7); startBattle('1-6'); }   // 71 版：夜景预览，直接进一局（存档只在内存里）
+  if(window.NIGHT_DEMO && FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; cheatSkip(10); sceneDemoGo('1-8'); }   // 72 版：场景预览（?scenedemo=1），直接进一局（存档只在内存里）
   if(FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; if(!levelCleared('1-1')){ MT.tab='battle'; startBattle('1-1'); } }   // 65 版：第一次打开直接进 1-1，不进营地
   if(!MT.inBattle){ drawMeta();
     if(MT.tab==='pets'){ const now=performance.now(), cdt=Math.min(0.05,(now-(MT.fxT||now))/1000); MT.fxT=now; COMBO.draw(cdt,'world'); drawPetGuide(); } else MT.fxT=0;   // 65 版：宠物页上的召唤特效
