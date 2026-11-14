@@ -1,0 +1,7 @@
+// Cloudflare Workers 自动部署用（Workers Builds 连这个仓库后，每次推送自动执行 npx wrangler deploy）。
+// name 必须和 Cloudflare 后台的 Worker 名字一样（tata）。只有静态文件，没有脚本。
+{
+  "name": "tata",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./" }
+}
