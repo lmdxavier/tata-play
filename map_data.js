@@ -23,7 +23,7 @@ window.MAP_DATA = {
         {id:'1-7',  name:'山坡小路',     lanes:5, first:[['shard','goldfish',10]],          again:[['coin',35]]},
         {id:'1-8',  name:'林间夜路',     lanes:5, first:[['coin',120]],           again:[['coin',35]]},
         {id:'1-9',  name:'深林山谷',     lanes:5, first:[['coin',150]],           again:[['coin',40]]},
-        {id:'1-10', name:'森林之王',     lanes:5, first:[['coin',300]],           again:[['coin',50]], boss:'bear'},
+        {id:'1-10', name:'森林之王',     lanes:5, first:[['coin',500],['star',10]],          again:[['coin',50]], boss:'bear'},
       ] },
     { id:2, name:'风车农场', soon:true },
   ],

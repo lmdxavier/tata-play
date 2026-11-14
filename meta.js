@@ -1127,7 +1127,7 @@ function mtToggleBg(){ MT.bgMode = MT.bgMode==='grad'?'scene':'grad'; try{ local
 let BATTLE_ID = '1-1';
 function goSummon(k){ MT.tab='pets'; ROSTER=null; roster(); MT.sel=k; MT.guide=k; enterDetail(); }
 function startBattle(id){ if(id) BATTLE_ID=id;
-  if(!(window.LEVELS||{})[BATTLE_ID]){ emit('deny'); toast('暂未开放'); return; }
+  if(!(window.LEVELS||{})[BATTLE_ID] || (LEVELS[BATTLE_ID].wip && !/[?&]wip=1\b/.test(location.search))){ emit('deny'); toast('暂未开放'); return; }   // 70 版：wip 的关只在网址带 ?wip=1 时能进（测试用）
   { const k=PET_ORDER.find(canSummon); if(k){ goSummon(k); toast(DATA.pets[k].cn+'的碎片已集齐，先召唤它'); return; } }   // 有宠物可以召唤：先去召唤，下一关要用
   if(L.kind==='landscape'){ orientMode='portrait'; resize(); }   // 战斗的横屏界面还没做（进去会报错停住，64 版就有）：进战斗先回竖屏
   if(!BATTLE_READY){ BATTLE_WAIT=true; BATTLE_WAIT_TAB=MT.tab; emit('ui'); return; }   // 55 版：战斗特效还在后台加载 → 先显示进度，加载完自动开始（render.js loadLater）

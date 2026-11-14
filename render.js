@@ -218,7 +218,7 @@ let BANKED = false;
 // 38 版（用户 2026-11-13）：资源 = 金币 + 星星，跨局累积（正式存档做好前先存浏览器本地）；金币 = 胜利结算的 coins，星星以后由星之祭坛产出
 let WALLET = {gold:0, star:0}; try{ Object.assign(WALLET, JSON.parse(localStorage.getItem('tata_wallet')||'{}')||{}); }catch(e){}
 function walletSave(){ try{ localStorage.setItem('tata_wallet', JSON.stringify(WALLET)); }catch(e){} }
-function bankCoins(){ if(!G.over || !G.over.coins || G.over._banked) return; G.over._banked=true; WALLET.gold+=G.over.coins; walletSave(); }
+function bankCoins(){ if(!G.over || !G.over.coins || G.over._banked) return; G.over._banked=true; WALLET.gold+=G.over.coins; WALLET.star+=(G.over.starGain||0); walletSave(); }
 function bankShards(){ if(BANKED) return; BANKED=true; G.shardsBefore={...OWNED}; for(const [k,n] of Object.entries(G.shards)) OWNED[k]=(OWNED[k]||0)+n; try{ localStorage.setItem('tata_shards', JSON.stringify(OWNED)); }catch(e){} }
 // 碎片图标：品质色物品框 + 怪物头像（不加和怪物无关的宝石）
 // 碎片 = 菱形（把品质框转 45°）里放头像；完整角色是方形卡。很多手游的「灵魂石」也是这个区分方式
@@ -402,7 +402,7 @@ const SND = { ac:null, bufs:{}, last:{}, muted:false, musicOff:false, queue:[], 
 try{ const o=JSON.parse(localStorage.getItem('tata_sound')||'{}')||{}; SND.muted=!!o.sfxOff; SND.musicOff=!!o.musicOff; }catch(e){}
 function soundSave(){ try{ localStorage.setItem('tata_sound', JSON.stringify({sfxOff:SND.muted, musicOff:SND.musicOff})); }catch(e){} }
 function audioInit(){
-  if(SND.ac){ if(SND.ac.state==='suspended') SND.ac.resume(); return; }
+  if(SND.ac){ if(SND.ac.state!=='running') SND.ac.resume(); return; }   // 70 版：iOS 切回前台后可能是 interrupted，也要恢复
   try { SND.ac = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ return; }
   // 压缩器：把整体响度推上去、瞬态更结实，又不会爆音
   const comp = SND.ac.createDynamicsCompressor(); comp.threshold.value=-20; comp.knee.value=8; comp.ratio.value=4; comp.attack.value=0.003; comp.release.value=0.12;
@@ -532,6 +532,12 @@ HOOKS.push((type, d)=>{
     case 'breath': { const e=d.e, v=visOf(e,false), f=fwd(), m=feet(e.lane,e.p-0.3), far=d.pets.length?d.pets.reduce((a,b)=>b.col<a.col?b:a):null;   // 69 版：敌方喷火蜥，火焰朝宠物那边铺 2 格（复用「喷火-T2」，方向反过来）
       COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:{x:-f.x, y:-f.y}, target2:far?atPet(far,0.4):null}, {freeze:[v, ...d.pets.map(p=>visOf(p,true))]});
       for(const p of d.pets){ const pv=visOf(p,true); pv.squash=0.1; pv.hitFlash=0.08; } break; }
+    case 'bossWarn': sfx('alert'); G.fx.push({kind:'banner', text:`格鲁姆要换到第 ${d.lane+1} 路`, t:0, life:1.8, color:'#ff8a6a'}); break;
+    case 'bossMove': { const v=visOf(d.e,false); v.squash=0.12; COMBO.later(0.6, ()=>{ const g=atE(d.e); COMBO.play('放置', {x:g.gx, y:g.gy-L.cs*0.1}, {scale:1.8}); shakeDir(0.03,0.2); }); break; }
+    case 'bossRoar': { const e=d.e, v=visOf(e,false), g=atE(e); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); v.squash=0.12;
+      COMBO.play('Boss-咆哮', g); vfxXY('ring_shockwave_white', g.x, g.y, 2.4); COMBO.later(0.25, ()=>vfxXY('ring_shockwave_white', g.x, g.y, 3.2)); shakeDir(0.05,0.6, null, true); break; }
+    case 'slam': { const g=atPet(d.pet,0.2); COMBO.play('Boss-重击', g); vfxXY('ring_shockwave_white', g.gx, g.gy-L.cs*0.15, 1.6); shakeDir(0.05,0.3, fwd());
+      for(const p of d.side){ const pv=visOf(p,true); pv.squash=0.12; pv.hitFlash=0.1; const s=atPet(p,0.3); vfxXY('ring_shockwave_white', s.gx, s.gy-L.cs*0.15, 1.0); } break; }
     case 'biteStart': { const v=visOf(d.e,false); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); break; }
     case 'bite': { const v=visOf(d.e,false);
       monAttackFx(d.e, v, d.pet);
@@ -768,7 +774,8 @@ function drawEnemy(e, dt){
   if(v.kb){ v.kb=Math.max(0, v.kb-dt*1.2); }
   // 被挡住时画面上稍微退后一点，不和宠物叠成一团（逻辑位置不变）
   v.back = (v.back||0) + ((e.blocked?0.14:0) - (v.back||0))*Math.min(1,dt*8);
-  const f=feet(e.lane, e.p + (v.kb||0) + v.back);
+  let f=feet(e.lane, e.p + (v.kb||0) + v.back);
+  if(e.lmv){ const a=feet(e.lmv.from, e.p + (v.kb||0) + v.back), k=Math.min(1,e.lmv.t/0.6), q=k*k*(3-2*k); f={x:a.x+(f.x-a.x)*q, y:a.y+(f.y-a.y)*q - Math.sin(k*Math.PI)*cs*0.25}; }   // 70 版：Boss 换路，横移带一点跳
   if(!v.state){ const want = (e.blocked || tutCur()) ? 'Idle' : 'Walk'; if(v.cur!==want){ v.m.play(want); v.cur=want; } } else v.cur=null;
   v.m.update(dt*(e.slow>0?0.85:1)*(e.def.speed>0.4||e.rage?1.5:1));
   groundShadow(f.x, f.y, cs*(e.def.role==='elite'?0.95:0.68));
@@ -879,7 +886,8 @@ function drawBells(){
 }
 function drawPreviewLanes(){
   const cs=L.cs; if(G.over) return;
-  for(const ev of EVENTS) if(ev.kind==='preview'&&G.t>=ev.t&&G.t<ev.until){
+  const evs = G.bossWarn ? [...EVENTS, {kind:'preview', t:-1, until:1e9, lanes:[G.bossWarn.lane]}] : EVENTS;   // 70 版：Boss 要换过去的那一路亮红
+  for(const ev of evs) if(ev.kind==='preview'&&G.t>=ev.t&&G.t<ev.until){
     for(const lane of ev.lanes){
       const t=tinted('gui/Frame/BasicFrame_Round24.png','#ff3b3b'); const r1=L.cellRect(lane,COLS-1), r2=L.cellRect(lane,0);
       if(t){ ctx.globalAlpha=0.10+0.06*Math.sin(G.t*6); nine(t, r1.x+3, r1.y+3, cs-6, r2.y+cs-r1.y-6, 20, cs*0.3); ctx.globalAlpha=1; }
@@ -1072,16 +1080,17 @@ function drawResult2(){
   } else { const f=Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration)); text(`撑到 ${Math.floor(G.t)} 秒，仍拿到 ${Math.round(f*100)}% 奖励`, cx, top+90, 15, '#fff'); }
   // 奖励：一排方格
   const f = o.win ? 1 : Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration));
-  const rewards=[['COIN', Math.round((100+G.kills*5)*f), 'Yellow'], ['IconMisc/Icon_Star_On', Math.round(400*f), 'Blue']];
+  const rewards=[['COIN', o.win && o.coins ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow'], ['IconMisc/Icon_Star_On', Math.round(400*f), 'Blue']];   // 70 版：通关时金币按实际入账（含章节宝箱）
+  if(o.win && o.starGain) rewards.push(['STAR', o.starGain, 'Purple', null, null, 'star']);
   for(const [k,n] of Object.entries(G.shards)) rewards.push([null, n, null, null, k]);
   const UL = o.win && o.unlock && window.UNLOCK_CN ? UNLOCK_CN[o.unlock] : null;
   text('奖励', cx, top+226, 14, '#cfe3ff', 'center', 800, false);
   const rs=Math.min(64,(W-40)/rewards.length-10), rx0=cx-(rewards.length*(rs+10)-10)/2;
   REWARD_RECTS.length=0;
-  rewards.forEach(([ic,n,col,nm,mk],i)=>{ const x=rx0+i*(rs+10), y=top+246; REWARD_RECTS.push({x,y,w:rs,h:rs+20,kind:mk?'shard':(i===0?'coin':'exp'),key:mk,n});
+  rewards.forEach(([ic,n,col,nm,mk,kd],i)=>{ const x=rx0+i*(rs+10), y=top+246; REWARD_RECTS.push({x,y,w:rs,h:rs+20,kind:mk?'shard':kd||(i===0?'coin':'exp'),key:mk,n});
     const k=clamp01((G.overT-1.3-i*0.1)/0.25); if(k<=0) return; ctx.save(); const sc=ease.outBack(k,2); ctx.translate(x+rs/2,y+rs/2); ctx.scale(sc,sc); ctx.translate(-(x+rs/2),-(y+rs/2));
     if(mk) shardCard(mk, n, x, y, rs);
-    else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():gui(ic), x+rs/2, y+rs*0.44, rs*0.56);
+    else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():ic==='STAR'?icon('Star_Altar_05_Star'):gui(ic), x+rs/2, y+rs*0.44, rs*0.56);
       text(String(n), x+rs/2, y+rs*0.84, rs*(String(n).length>4?0.17:0.24), '#fff'); }
     ctx.restore(); });
   if(UL){ const k=clamp01((G.overT-1.6)/0.25), y=top+246+rs+22; if(k>0){ ctx.globalAlpha=k; if(!o._ul){ o._ul=1; sfx('sparkle'); }
@@ -1101,6 +1110,7 @@ function drawRewardTip(){
   if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
     title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, PROFILE.owned[q.key] ? (!starOpen(q.key)?`已收集 ${have} 片，升星暂未开放`:have>=rr0.need?'已经可以升星':`再收集 ${rr0.need-have} 片可升星`) : (have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`)]; }
   else if(q.kind==='coin'){ title='金币'; rows=['用来购买道具和进化宠物']; }
+  else if(q.kind==='star'){ title='星星'; rows=['本章全部通关的奖励']; }
   else { title='经验'; rows=['分给本局出战的宠物，用来升级']; }
   const w=Math.min(220,W-20), h=24+16+rows.length*18; let x=q.x+q.w/2-w/2, y=q.y-h-10; if(x<8) x=8; if(x+w>W-8) x=W-8-w;
   const bg=tinted('gui/Frame/BasicFrame_Round24.png','#121729'); if(bg){ ctx.globalAlpha=0.92; nine(bg, x, y, w, h, 20, 14); ctx.globalAlpha=1; }
@@ -1351,3 +1361,12 @@ function frame(now){
 }
 resize(); newGame(); loadAll(); requestAnimationFrame(frame);
 window.TATA = {skip:n=>cheatSkip(n), msg:()=>LOADMSG, G:()=>G, DATA, newGame, placePet, movePet, update, ready:()=>READY, setOrient:(m)=>{orientMode=m;resize();}, SND};
+// 70 版（用户 2026-11-14：切到后台还发热）：切到后台时战斗自动暂停、音频引擎挂起；切回来停在暂停界面，声音恢复
+function onHide(){
+  try{ if(G && G.started && !G.over && typeof MT!=='undefined' && MT.inBattle){ G.paused=true; G.drag=null; } }catch(e){}
+  try{ if(SND.ac && SND.ac.state==='running') SND.ac.suspend(); }catch(e){}
+}
+function onShow(){ try{ if(SND.ac && SND.ac.state!=='running') SND.ac.resume(); }catch(e){} lastT=performance.now(); }
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) onHide(); else onShow(); });
+window.addEventListener('pagehide', onHide);
+window.addEventListener('pageshow', e=>{ if(!document.hidden) onShow(); });

@@ -38,7 +38,8 @@ const DATA = {
     lizard: {cn:'喷火蜥', desc:'隔 1 格停下，向前喷火 2 格，烧到最前面的宠物：每次 16 伤害。近战 1 格的宠物打不到它。', name:'Lizard_Fire', short:'火蜥', el:'fire', hp:360, speed:0.2, atk:16, atkInt:1.6, role:'minor', drop:0, r:0.32, windup:0.28, range:2},
     hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
     hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 260，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:260, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
-    bear:   {cn:'格鲁姆', desc:'生命 2600，每次攻击 40 伤害。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:2600, speed:0.15, atk:40, atkInt:1.5, role:'elite', drop:0.21, r:0.44, windup:0.47},
+    bear:   {cn:'格鲁姆', desc:'生命 5000。重击面前的宠物 60 伤害，同一列上下两路的宠物也受 60 伤害。每 16 秒换到相邻一路（那一路先亮红 2 秒）；每 24 秒吼叫，左右两路各出 2 只绿莱姆。生命降到一半后移动速度 +50%，换路、吼叫更频繁。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:5000, speed:0.15, atk:60, atkInt:1.8, role:'elite', drop:0, r:0.44, windup:0.47,
+             boss:{switchEvery:16, switchRage:10, warn:2, roarEvery:24, roarRage:16, roarT:1.2, cleave:true}, enrage:{at:0.5, speed:1.5, atkInt:0.85}},
   },
   level: {
     id:'1-5', title:'花田保卫战', loadout:['flower','goldfish','pug','pumpkin','bomb','lizard'],
@@ -246,7 +247,7 @@ function newGame(){
     spawns: buildSpawns(), spawnIdx:0,
     nextSky: DATA.level.skyDrop.firstAt,
     bells: Array.from({length:LANES}, (_,l)=>laneOn(l)),
-    bellsUsed: 0,
+    bellsUsed: 0, bossWarn: null,
     swaps: swapMax(), swapCap: swapMax(), swapRegen: 0,   // swapCap：这一局的换位上限（进关时定；通关当场解锁的下一局才生效）
     selected: null,       // 卡 key 或 'shovel'
     drag: null,
@@ -422,6 +423,28 @@ function petRelease(pet){
   }
 }
 
+// ---------- Boss（70 版，关卡设计.md「Boss 棕熊」）----------
+// 换路：目标路亮红 warn 秒 → 0.6 秒横移过去（期间不走不咬）；吼叫：停 roarT 秒，结束时左右两路各出 2 只绿莱姆；半血后间隔缩短
+function bossTick(e, dt){
+  const B=e.def.boss; if(!e.bs) e.bs={sw:B.switchEvery*0.6, roar:B.roarEvery*0.75, warn:null, roarLeft:0};
+  const s=e.bs;
+  if(e.lmv){ e.lmv.t+=dt; if(e.lmv.t>=0.6) e.lmv=null; else return true; }
+  if(s.roarLeft>0){ s.roarLeft-=dt;
+    if(s.roarLeft<=0){ for(const l of [e.lane-1,e.lane+1]) if(laneOn(l)) for(const dp of [0.3,1.0]){ const def=DATA.enemies.slime;
+        const m={key:'slime', def, lane:l, p:Math.min(COLS+0.4, e.p+dp), hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0, summoned:true}; G.enemies.push(m); emit('spawn',{e:m}); } }
+    return true; }
+  if(s.warn){ s.warn.t-=dt;
+    if(s.warn.t<=0){ const to=s.warn.lane; s.warn=null; G.bossWarn=null;
+      if(laneOn(to)){ e.lmv={from:e.lane, t:0}; e.lane=to; e.windup=0; e.blocked=false; emit('bossMove',{e}); return true; } } }
+  else { s.sw-=dt;
+    if(s.sw<=0){ s.sw=e.rage?B.switchRage:B.switchEvery; const opts=[e.lane-1,e.lane+1].filter(laneOn);
+      if(opts.length){ const busy=l=>G.pets.filter(p=>p.lane===l&&!p.dead).length;   // 往宠物少的一路换（逼玩家跟着调）
+        opts.sort((a,b)=>busy(a)-busy(b)||Math.random()-0.5); s.warn={lane:opts[0], t:B.warn}; G.bossWarn={lane:opts[0], until:G.t+B.warn}; emit('bossWarn',{e,lane:opts[0]}); } } }
+  s.roar-=dt;
+  if(s.roar<=0 && !s.warn && !(e.windup>0)){ s.roar=e.rage?B.roarRage:B.roarEvery; s.roarLeft=B.roarT; emit('bossRoar',{e}); return true; }
+  return false;
+}
+
 // ---------- 更新 ----------
 function update(dt){
   if(G.over) { G.fx.forEach(f=>f.t+=dt); return; }
@@ -510,6 +533,7 @@ function update(dt){
       if(e.burn.t<=0){ e.burn=null; e.burnTick=0; } if(e.hp<=0){ killEnemy(e); continue; } }
     if(e.slow>0) e.slow-=dt;
     if(e.def.enrage && !e.rage && e.hp<=e.maxHp*e.def.enrage.at){ e.rage=true; emit('enrage',{e}); }   // 棘背蜥：半血后发怒
+    if(e.def.boss && bossTick(e, dt)) continue;   // 70 版：Boss 换路 / 吼叫时不走也不咬
     const spd = e.def.speed*(e.slow>0?0.85:1)*(e.rage?e.def.enrage.speed:1)*(e.rush||1);
     // 被谁挡住：同 lane、非地雷、身后的最近宠物
     const ext = e.def.range && e.p<=COLS-0.2 ? e.def.range-0.6 : 0;   // 69 版：远程的怪（喷火蜥）隔着停下，停的位置近战 1 格够不着；先走进棋盘再停（宠物放在最后两格时不能停在棋盘外）
@@ -527,7 +551,9 @@ function update(dt){
           if(t.type==='crate'){ e.bite=0.15; emit(e.def.range?'breath':'propBite',{e,c:t,pets:[]}); damageProp(t, e.def.atk, false); }
           else if(e.def.range){ const wall=pb?pb.col:-1, hits=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col>wall&&inReach(p.col));   // 喷火：范围内的宠物都烧到；道具后面的烧不到
             e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt); }
-          else { e.bite=0.15; emit('bite',{e,pet:t}); hurt(t); } } }
+          else { e.bite=0.15; emit('bite',{e,pet:t}); hurt(t);
+            if(e.def.boss && e.def.boss.cleave){ const side=G.pets.filter(p=>!p.dead&&p.col===t.col&&Math.abs(p.lane-t.lane)===1&&p.def.shape!=='mine');   // 70 版：Boss 重击，同一列上下两路也受伤
+              emit('slam',{e,pet:t,side}); side.forEach(hurt); } } } }
       e.atkT-=dt;
       if(e.atkT<=0 && !(e.windup>0)){ e.atkT=e.def.atkInt*(e.rage?e.def.enrage.atkInt:1); e.windup=e.def.windup; e.biteTarget=tgt; emit('biteStart',{e,pet:tgt}); }
     } else {
@@ -540,7 +566,7 @@ function update(dt){
         G.bells[e.lane]=false; G.bellsUsed++; emit('bell',{lane:e.lane});
         G.fx.push({kind:'bell',lane:e.lane,t:0,life:1.2});
         G.fx.push({kind:'banner',text:`第 ${e.lane+1} 路的警钟响了`,t:0,life:1.6,color:'#ffd25a'});
-        G.enemies.forEach(o=>{ if(!o.dead&&o.lane===e.lane) killEnemy(o,true); });
+        G.enemies.forEach(o=>{ if(o.dead||o.lane!==e.lane) return; if(o.def.boss){ o.p=Math.max(o.p,3); hitEnemy(o, 1000, 'none'); } else killEnemy(o,true); });   // 70 版：警钟消灭不了 Boss，只把它打回第 3 格、扣 1000
       } else if(!G.over && !G.demo){ G.over={win:false}; G.overT=0; emit('lose'); }
     }
   }
@@ -566,8 +592,9 @@ function finish(){
   // 65 版：每关首次通关只给一样东西（关卡设计.md）：宠物碎片（数量固定）或一个新机制
   const rw = DATA.level.first ? DATA.level.reward : null; let unlock=null;
   if(rw && rw.shard) G.shards[rw.shard[0]]=(G.shards[rw.shard[0]]||0)+rw.shard[1];
+  let bonus=0, starBonus=0; if(rw && rw.chest){ bonus=rw.chest.coin||0; starBonus=rw.chest.star||0; }   // 70 版：章节终关宝箱（地图「终关奖励」）
   if(rw && rw.unlock && !PROFILE.unlock[rw.unlock]){ PROFILE.unlock[rw.unlock]=1; profileSave(); unlock=rw.unlock; }
-  G.over={win:true, stars, exp, coins, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
+  G.over={win:true, stars, exp, coins:coins+bonus, starGain:starBonus, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
 }
 
 // ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------
