@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<title>塔塔 · M2 素材版 63（宠物页拖动面板不再每帧重画底纹）</title>
+<title>塔塔 · M2 素材版 64（修：点能量时卡牌闪白块）</title>
 <style>
   html,body{margin:0;height:100%;background:#2b3a2a;overflow:hidden;touch-action:none;overscroll-behavior:none;position:fixed;inset:0;   /* 35 版：页面整体固定，拖动时 iOS 不会把页面推走 */
     font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none}
@@ -26,7 +26,7 @@
   html.ios-sa canvas{position:absolute}
 </style>
 <script>/* 61 版起：版本自检——网页被手机缓存住时自动换成最新的（build.txt 不走缓存）；双击打开不检查 */
-window.__BUILD='63';
+window.__BUILD='64';
 if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{ t=t.trim(); if(!t||t===window.__BUILD) return;
   const q=new URLSearchParams(location.search); if(q.get('b')===t) return; q.set('b',t); location.replace(location.pathname+'?'+q.toString()); }).catch(()=>{});
 </script>
@@ -39,7 +39,7 @@ if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store
 <script src="assets/vendor/filepack.js"></script>   <!-- 57 版：双击打开（file://）时图片走数据包，WebGL 才能用 -->
 <!-- 57 版：PixiJS 8（WebGL）绘制整个游戏；pixi-ctx.js 把原来的 Canvas 2D 绘制调用转成 Pixi 显示对象。网址加 ?gl=0 回到 Canvas 2D 对比，?perf=1 性能面板 -->
 <script src="assets/vendor/pixi.min.js"></script>
-<script src="assets/vendor/pixi-ctx.js?v=63"></script>
+<script src="assets/vendor/pixi-ctx.js?v=64"></script>
 <script src="assets/vendor/perf-hud.js"></script>
 <script src="assets/vendor/spine-canvas.min.js"></script>
 <script src="assets/vendor/spine-seamfix.js"></script>
@@ -59,23 +59,23 @@ if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store
 <script>window.SFX2V2 = window.SFX2;   // rhythm 项目的扩展音效类型注册在 SFX2V2 上</script>
 <script src="assets/sfx/sfx2_ext.js"></script>
 <!-- 效果组合（tools/build_combos.py 从 素材库\效果组合 打包）-->
-<script src="assets/combos/combos.js?v=63"></script>
-<script src="assets/combos/crops.js?v=63"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
+<script src="assets/combos/combos.js?v=64"></script>
+<script src="assets/combos/crops.js?v=64"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
 <!-- 55 版：音效数据 assets/combos/audio.js、音乐 assets/bgm/bgm.js 改为进游戏后后台加载（render.js loadLater），不再挡住开场 -->
 <!-- 逻辑层（同灰盒 1）+ 画面层 -->
-<script src="game.js?v=63"></script>
+<script src="game.js?v=64"></script>
 <script src="assets/env1/env1.js"></script>
-<script src="scene.js?v=63"></script>
-<script src="combo.js?v=63"></script>
-<script src="render.js?v=63"></script>
+<script src="scene.js?v=64"></script>
+<script src="combo.js?v=64"></script>
+<script src="render.js?v=64"></script>
 <!-- 局外界面：底部切换 战斗 / 宠物 / 营地（11 版） -->
-<script src="map_data.js?v=63"></script>
-<script src="map.js?v=63"></script>
-<script src="card_bbox.js?v=63"></script>
-<script src="meta.js?v=63"></script>
+<script src="map_data.js?v=64"></script>
+<script src="map.js?v=64"></script>
+<script src="card_bbox.js?v=64"></script>
+<script src="meta.js?v=64"></script>
 <!-- 32 版：营地（宠物自由活动 + 投喂） -->
-<script src="camp.js?v=63"></script>
+<script src="camp.js?v=64"></script>
 <!-- 29 版：背景音乐（局外 main / 战斗 battle）-->
-<script src="music.js?v=63"></script>
+<script src="music.js?v=64"></script>
 </body>
 </html>

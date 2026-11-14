@@ -268,7 +268,10 @@ class PixiCtx {
       if(!n) g.rect(-10, -10, 1, 1);   // 空路径裁剪 = 全部裁掉
       g.fill({ color:0xffffff }); list.gs.push(g); }
     while(this.mk.size > 400){ const [k, o] = this.mk.entries().next().value; if(o.f === QID) break; this.mk.delete(k); for(const x of o.gs) DEAD_G.push(x); }
-    e.c.removeChildren(); e.c.mask = g;
+    e.c.removeChildren();
+    // 63b：同一个遮罩图形换到另一个容器上用时，先从原来的容器上正式卸下。否则原容器随后换遮罩时，Pixi 会把这个图形恢复成「普通可见图形」，
+    //      它就以白色块的样子被画出来一两帧（能量够了、少一张卡变暗时，后面几张暗卡闪白块）。
+    if(e.g !== g){ const o = g.__own; if(o && o !== e){ o.c.mask = null; o.g = null; } e.c.mask = g; if(e.g && e.g.__own === e) e.g.__own = null; g.__own = e; e.g = g; }
     this.target.addChild(g); this.target.addChild(e.c); this.target = e.c; return e.c;
   }
   _place(s, m){
