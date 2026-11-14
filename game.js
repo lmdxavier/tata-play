@@ -336,7 +336,7 @@ function canPlaceAt(lane,col){
 function placePet(key,lane,col){
   const def = DATA.pets[key];
   if(G.energy<def.cost || G.cooldown[key]>0 || !canPlaceAt(lane,col)) return false;
-  { const ts=tutCur(); if(ts && ts.key!==key) return false; }
+  { const ts=tutCur(); if(ts && ts.key!==key) return false; if(G.demo && !ts) return false; }   // 67 版：演示里只能按提示放，不能自己加宠物（用户加了一只把怪打死，演示卡住）
   G.energy -= def.cost; G.cooldown[key] = def.cd;
   const pet={key, def, lane, col, hp:def.hp, maxHp:def.hp, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
                stun:0, armT: def.arm||0, flash:0, move:null};
@@ -505,7 +505,7 @@ function update(dt){
       if(e.burn.t<=0){ e.burn=null; e.burnTick=0; } if(e.hp<=0){ killEnemy(e); continue; } }
     if(e.slow>0) e.slow-=dt;
     if(e.def.enrage && !e.rage && e.hp<=e.maxHp*e.def.enrage.at){ e.rage=true; emit('enrage',{e}); }   // 棘背蜥：半血后发怒
-    const spd = e.def.speed*(e.slow>0?0.85:1)*(e.rage?e.def.enrage.speed:1);
+    const spd = e.def.speed*(e.slow>0?0.85:1)*(e.rage?e.def.enrage.speed:1)*(e.rush||1);
     // 被谁挡住：同 lane、非地雷、身后的最近宠物
     const blocker = G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&e.p>p.col+0.2&&e.p<=p.col+1+e.def.r*0.6)
                           .sort((a,b)=>b.col-a.col)[0];
@@ -585,12 +585,12 @@ function tutBegin(s){
     s.free=true;
   } else if(s.kind==='run'){
     s.free=true;
-    if(s.run==='spawn'){ const def=DATA.enemies[s.type]; const e={key:s.type, def, lane:s.lane, p:s.p, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0}; G.enemies.push(e); emit('spawn',{e}); }
+    if(s.run==='spawn'){ const def=DATA.enemies[s.type], hp0=s.hp||def.hp; const e={key:s.type, def, lane:s.lane, p:s.p, hp:hp0, maxHp:hp0, atkT:0, flash:0, burn:null, slow:0}; G.enemies.push(e); emit('spawn',{e}); }
     else if(s.run==='bellSetup'){   // 演示最后防线：场上只留聚能花，放一只怪走到它面前，两口咬掉
       for(const p of G.pets) if(p.key!=='flower'){ p.dead=true; emit('petdeath',{pet:p}); G.fx.push({kind:'pop',lane:p.lane,p:p.col+0.5,t:0,life:0.4,color:'#ccc'}); }
       G.pets=G.pets.filter(p=>!p.dead); G.projs=[]; recalcResonance();
       const f=G.pets.find(p=>p.key==='flower'), def=DATA.enemies.slime; if(!f) return false; f.hp=def.atk*2;
-      const e={key:'slime', def, lane:f.lane, p:f.col+2.6, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0}; G.enemies.push(e); emit('spawn',{e}); }
+      const e={key:'slime', def, lane:f.lane, p:f.col+1.5, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0, rush:2.4};   /* rush：演示里这只走快一点 */ G.enemies.push(e); emit('spawn',{e}); }
     else if(s.run==='restart'){ PROFILE.demo=1; profileSave(); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); return false; }
   } else if(s.kind==='move'){
     if(G.swapCap<1) return false;
@@ -608,13 +608,13 @@ function tutDone(s){
   if(s.kind==='card') return s.tapT!=null && G.tut.t-s.tapT>2.6;   // 点了卡片，留 2.6 秒看说明
   if(s.kind==='info') return !!s.ok;
   if(s.kind==='run') return true;
-  if(s.kind==='wait') return s.secs!=null ? G.tut.t>=s.secs : s.until==='noEnemy' ? G.enemies.length===0 : s.until==='petDead' ? !G.pets.some(p=>p.key===s.key) : s.until==='bell' ? (G.bellsUsed>0 && G.enemies.length===0) : true;
+  if(s.kind==='wait') return s.secs!=null ? G.tut.t>=s.secs : s.until==='noEnemy' ? G.enemies.length===0 : s.until==='petDead' ? (!G.pets.some(p=>p.key===s.key) || G.enemies.length===0) : s.until==='bell' ? G.enemies.length===0 : true;   // 场上没怪了也算过，免得卡住
   if(s.kind==='move') return s.pet.dead || (s.pet.lane===s.L && s.pet.col===s.C);
   return true;
 }
 function tutUpdate(dt){
   const T=G.tut; if(!T) return;
-  if(T.cur){ T.t+=dt; if(tutDone(T.cur)){ emit('tutDone',{s:T.cur}); T.cur=null; T.i++; T.gap=0.5; } return; }
+  if(T.cur){ T.t+=dt; if(tutDone(T.cur)){ emit('tutDone',{s:T.cur}); T.gap=T.cur.free?0:0.4; T.cur=null; T.i++; } return; }
   if(T.i>=T.steps.length){ G.tut=null; return; }
   if(T.gap>0){ T.gap-=dt; return; }
   const s=T.steps[T.i]; if(G.t<(s.at||0)) return;
@@ -647,7 +647,7 @@ function onDown(e){
       const d=DATA.pets[it.key];
       emit('ui');
       if(ts && ts.kind==='card' && ts.key===it.key){ if(ts.tapT==null) ts.tapT=G.tut.t; return; }   // 只看说明，不选中
-      if(ts && !(ts.kind==='place' && ts.key===it.key)){ emit('deny',{key:it.key, why:'tut'}); return; }
+      if((ts && !(ts.kind==='place' && ts.key===it.key)) || (G.demo && !ts)){ emit('deny',{key:it.key, why:'tut'}); return; }
       if(G.energy>=d.cost && G.cooldown[it.key]<=0){ G.selected = G.selected===it.key?null:it.key; G.drag={kind:'card',key:it.key,x,y,sx:x,sy:y}; } else emit('deny',{key:it.key, why: G.cooldown[it.key]>0?'cd':'energy'});
     } else if(it.id==='shovel'){ G.selected = G.selected==='shovel'?null:'shovel'; }
     else if(it.id==='pause'){ G.paused=!G.paused; G.drag=null; emit('ui'); }
@@ -665,7 +665,7 @@ function onDown(e){
   if(ts && ts.kind!=='move') return;
   const pc=cellAt(lane,col); if(!ts && propAlive(pc) && !petAt(lane,col)){ pc.marked=!pc.marked; emit('ui'); return; }
   const pet=petAt(lane,col);
-  if(pet && (!ts || ts.pet===pet)) G.drag={kind:'pet',pet,x,y,sx:x,sy:y};
+  if(pet && !G.demo && (!ts || ts.pet===pet)) G.drag={kind:'pet',pet,x,y,sx:x,sy:y};
 }
 function onMove(e){ pointer.x=PX(e); pointer.y=PY(e); if(G.drag){ G.drag.x=PX(e); G.drag.y=PY(e); } }
 function onUp(e){
@@ -688,6 +688,6 @@ window.addEventListener('keydown',e=>{
   if(e.key===' ') G.paused=!G.paused;
   if(e.key==='e'||e.key==='E') G.energy+=500;
   if(e.key==='r'||e.key==='R'){ setLevel(DATA.level.id); newGame(); G.started=true; }   // 和「再打一次」同一条路：重新判断是不是首通，不重复领奖励
-  const n=parseInt(e.key); if(n>=1&&n<=DATA.level.loadout.length){ const k=DATA.level.loadout[n-1]; G.selected=G.selected===k?null:k; }
+  const n=parseInt(e.key); if(n>=1&&n<=DATA.level.loadout.length && !G.demo && !tutCur()){ const k=DATA.level.loadout[n-1]; G.selected=G.selected===k?null:k; }
 });
 

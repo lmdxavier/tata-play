@@ -509,7 +509,7 @@ HOOKS.push((type, d)=>{
   if(!READY) return;
   switch(type){
     case 'start': sfx('start'); break;
-    case 'tutStep': if(!d.s.free){ sfx('alert'); TUT_T0=performance.now(); } break;
+    case 'tutStep': if(!d.s.free){ sfx('alert'); TUT_T0=performance.now(); TIP.card=null; TIP.cell=null; } break;   /* 67 版：新的一步出现时，之前点开的卡牌说明先关掉，免得盖住浮窗 */
     case 'tutDone': if(d.s.kind==='card') TIP.card=null; break;
     case 'enrage': { const v=visOf(d.e,false); v.squash=0.12; floatText(d.e.lane, d.e.p, '发怒', '#ff6a3d', 13); COMBO.play('发怒', atE(d.e)); break; }
     case 'place': { const v=visOf(d.pet,true); v.drop=0.16; break; }   // 落地那一刻才播「放置」（drawPet 里）
@@ -1175,7 +1175,6 @@ function tutBubble(str, ax, ay, mode, tapHint){
   if(mode==='side' && x<8) x=Math.min(W-8-w, ax+L.cs+10);
   x=Math.max(8, Math.min(W-8-w, x)); y=Math.max(L.hud.h+6, Math.min(L.bar.y-h-8, y));
   const bg=tinted('gui/Frame/BasicFrame_Round24.png','#121729'); if(bg){ ctx.globalAlpha=0.94; nine(bg, x, y, w, h, 20, 14); ctx.globalAlpha=1; }
-  const fl=tinted('gui/Frame/ItemFrame00~03_FocusLine.png','#ffe14d'); if(fl){ ctx.globalAlpha=0.55; nine(fl, x-1, y-1, w+2, h+2, 20, 14); ctx.globalAlpha=1; }
   lines.forEach((q,i)=>text(q, x+pad, y+pad+8+i*20, fs, '#fff', 'left', 800, false));
   if(tapHint) text('点一下继续', x+w-pad, y+h-pad-4, 11, '#ffe9a0', 'right', 800, false);
 }
