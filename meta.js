@@ -202,7 +202,25 @@ function mtPattern(color){
   if(MT_PAT[color]) return MT_PAT[color]; const t=heroT('Pattern_512', color); if(!t) return null;
   return MT_PAT[color]=ctx.createPattern(t, 'repeat');
 }
+// 62b：面板底纹（带 ax/ay 的两处）——面板被拖动时区域高度每帧都变，原来每帧按新尺寸重画一整块花纹再上传（宠物页拖动卡、显存图猛涨的最大来源）。
+//       改成按「最高能到多高」画一次存起来，之后只贴这张图的上面一段；摆放对齐整数屏幕像素。
+const MT_PATBIG = new Map();
+function mtFillPatternBig(color, r, alpha, scale){
+  const t=heroT('Pattern_512', color); if(!t) return false;
+  const m=ctx.getTransform(); if(m.b || m.c || !(m.a>0) || !(m.d>0)) return false;
+  const kx=m.a, ky=m.d, pw=Math.round(r.w*kx), need=Math.round(r.h*ky); if(pw<1 || need<1) return true;
+  const ox=Math.round((r.ax-r.x)*kx), oy=Math.round((r.ay-r.y)*ky), k=color+'|'+scale+'|'+pw+'|'+ox+','+oy+'|'+kx+','+ky;
+  let c=MT_PATBIG.get(k);
+  if(!c || c.height<need){
+    if(!c && MT_PATBIG.size>=6){ for(const q of MT_PATBIG.values()){ q.width=0; q.height=0; } MT_PATBIG.clear(); }
+    const ph=Math.max(need, ctx.canvas.height+Math.ceil(48*ky)); if(pw*ph>2600*2600) return false;
+    if(c){ c.width=0; c.height=0; } c=document.createElement('canvas'); c.width=pw; c.height=ph; const g=c.getContext('2d'), pat=g.createPattern(t,'repeat'); if(!pat) return false;
+    const sx=kx*scale, sy=ky*scale; g.translate(ox,oy); g.scale(sx,sy); g.fillStyle=pat; g.fillRect(-ox/sx, -oy/sy, pw/sx, ph/sy); MT_PATBIG.set(k,c); }
+  ctx.save(); ctx.globalAlpha*=alpha; ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(c, 0, 0, pw, need, Math.round(m.a*r.x+m.e), Math.round(m.d*r.y+m.f), pw, need); ctx.restore();
+  return true;
+}
 function mtFillPattern(color, r, alpha, scale){
+  if(r.ax!=null && typeof DYN_TEXT!=='undefined' && DYN_TEXT && ctx.__dynText && ctx.canvas && mtFillPatternBig(color, r, alpha, scale)) return;
   const p=mtPattern(color); if(!p) return; ctx.save(); ctx.globalAlpha*=alpha; ctx.beginPath(); ctx.rect(r.x,r.y,r.w,r.h); ctx.clip();
   // ax/ay = 花纹原点（默认区域左上角）；区域往外扩时传原来的原点，花纹不移位
   const ax=r.ax!=null?r.ax:r.x, ay=r.ay!=null?r.ay:r.y;
