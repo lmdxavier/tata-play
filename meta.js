@@ -124,7 +124,7 @@ let ROSTER = null;
 function roster(){
   if(ROSTER) return ROSTER;
   // 65 版：名单 = 已召唤的宠物 + 已经拿到碎片、还没召唤的宠物（没见过的不提前露出）
-  const all = PET_ORDER.filter(k=>PROFILE.owned[k] || shardHave(k)>0).map(k=>{ const d=DATA.pets[k], o=!!PROFILE.owned[k]; return {key:k, owned:o, d, el:d.el, role:d.shape, rar:d.rarity||'common', cn:d.cn, stars:o?1:0}; });
+  const all = PET_ORDER.filter(k=>PROFILE.owned[k] || shardHave(k)>0).map(k=>{ const d=DATA.pets[k], o=!!PROFILE.owned[k]; return {key:k, owned:o, d, el:d.el, role:d.shape, rar:d.rarity||'common', cn:d.cn, stars:o?starOf(k):0}; });
   const own = all.filter(e=>e.owned).sort((a,b)=>RAR_RANK[b.rar]-RAR_RANK[a.rar]), mons = all.filter(e=>!e.owned);
   ROSTER = [...own, ...mons];
   if(MT.sel && !ROSTER.some(e=>e.key===MT.sel)) MT.sel=null;
@@ -136,6 +136,20 @@ const filtered = () => roster().filter(e=>(MT.fEl==='all'||e.el===MT.fEl) && (MT
 const shardHave = k => (typeof OWNED!=='undefined' && OWNED[k]) || 0;
 const petVis = k => PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k]||ENEMY_MON[k],'Idle');   // 65 版：没召唤的宠物也用它自己的样子（原来未获得的一律当怪物）
 const canSummon = k => !!DATA.pets[k] && !PROFILE.owned[k] && shardHave(k) >= RAR[DATA.pets[k].rarity||'common'].need;
+// 69 版：升星。只开放战斗里已经做出变化的星级（其余的先不让升，免得花了碎片没效果）；所需碎片数先用召唤数
+const STAR_OPEN = {goldfish:2};
+const starNeed = k => RAR[DATA.pets[k].rarity||'common'].need;
+const starOpen = k => !!PROFILE.owned[k] && starOf(k) < (STAR_OPEN[k]||1);
+const canStarUp = k => !!DATA.pets[k] && starOpen(k) && shardHave(k) >= starNeed(k);
+function starUp(k){
+  if(!canStarUp(k)) return false;
+  OWNED[k] -= starNeed(k); try{ localStorage.setItem('tata_shards', JSON.stringify(OWNED)); }catch(e){}
+  PROFILE.stars=PROFILE.stars||{}; PROFILE.stars[k]=starOf(k)+1; PROFILE.tipStar=1; profileSave();
+  ROSTER=null; delete CARDPORT[k]; MT.sel=k; MT.guide=null;
+  { const lay=MT.lay, ch=lay&&lay.char; COMBO.play('升星', {x:ch?ch.x+ch.w/2:W/2, y:ch?ch.y+ch.h*0.55:H*0.3}, {scale:3}); }
+  toast(DATA.pets[k].cn+'升到 '+starOf(k)+' 星');
+  return true;
+}
 // 召唤：碎片够了点一下，变成自己的宠物
 function summonPet(k){
   if(!canSummon(k)) return false;
@@ -903,12 +917,13 @@ function cardCorner(x, y, w, h, u){
 function drawCardBar(e, x, y, w, h, u){
   const bx=x+CARD_BAR.side*u, bw=w-CARD_BAR.side*2*u, bh=CARD_BAR.h*u, by=y+h-CARD_BAR.bottom*u-bh, k=bh/32;
   const have=shardHave(e.key), need=RAR[e.rar].need, maxed=e.owned && (e.stars||1)>=5;
-  const p=maxed?1:Math.max(0, Math.min(1, have/need)), full=maxed || (!e.owned && have>=need);
+  const up=e.owned && canStarUp(e.key);
+  const p=maxed?1:Math.max(0, Math.min(1, have/need)), full=maxed || up || (!e.owned && have>=need);
   mtNine4(heroT('Slider_Border_Rectangle_01_Bg', '#2a2d44'), bx, by, bw, bh, [12,12,12,12], k);
   if(p>0){ const ins=3*k, fw=Math.max(9*k, (bw-ins*2)*p);
     mtNine4(full ? hero('Slider_Border_Rectangle_01_Fill_Yellow') : heroT('Slider_Border_Rectangle_01_Fill_White', '#6ff3ff'), bx+ins, by+ins, fw, bh-ins*2, [4,10,4,10], k); }
   mtNine4(heroT('Slider_Border_Rectangle_01_Border', '#141522'), bx, by, bw, bh, [12,12,12,12], k);
-  const t = maxed ? '满星' : (!e.owned && have>=need) ? '可召唤' : `${have}/${need}`;
+  const t = maxed ? '满星' : up ? '可升星' : (!e.owned && have>=need) ? '可召唤' : `${have}/${need}`;
   text(t, bx+bw/2, by+bh/2+1*u, 24*u, '#fff', 'center', 800, '#141522');
 }
 function drawCardSelGlow(x, y, w, h){
@@ -1050,8 +1065,10 @@ function drawActionBar(e, x, y, w, live){
   const pad=14, bh=50, by=y+6;
   if(e.owned){
     const gap=8, bw=(w-pad*2-gap*2)/3;
-    ['升级','升星','进化'].forEach((lab,i)=>{ const bx=x+pad+i*(bw+gap); heroButton(false, bx, by, bw, bh, lab);
-      if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ emit('deny'); toast('暂未开放'); }); });
+    ['升级','升星','进化'].forEach((lab,i)=>{ const bx=x+pad+i*(bw+gap), up=i===1 && canStarUp(e.key);
+      if(up){ const pu=1+0.03*Math.sin(performance.now()/180); ctx.save(); ctx.translate(bx+bw/2, by+bh/2); ctx.scale(pu,pu); heroButton(true, -bw/2, -bh/2, bw, bh, lab); ctx.restore(); }
+      else heroButton(false, bx, by, bw, bh, lab);
+      if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ if(up) starUp(e.key); else { emit('deny'); toast(i===1 && starOpen(e.key) ? `还差 ${starNeed(e.key)-shardHave(e.key)} 个碎片` : '暂未开放'); } }); });
   } else {
     const have=shardHave(e.key), need=RAR[e.rar].need, ok2=have>=need, bw=Math.min(240, w-pad*2), bx=x+w/2-bw/2;
     const pu = ok2 ? 1+0.03*Math.sin(performance.now()/180) : 1;   // 碎片够了：按钮轻轻跳，提示可以点
@@ -1118,7 +1135,7 @@ function startBattle(id){ if(id) BATTLE_ID=id;
   MT.inBattle=true; newGame(); G.started=true; emit('start'); }
 // 结算后离开战斗：这关给的碎片够召唤 → 直接到宠物页那只宠物的详情；否则回地图
 function leaveBattle(){ const k=G.over && G.over.win && G.over.summon; MT.inBattle=false; MT.tab='battle'; MT.drag=null; MT.hits.length=0; if(COMBO._LIVE) COMBO._LIVE.length=0;   // 上一次局外画面留下的点击区域、拖动状态清掉，免得这一下松手点到别处
-  if(k && canSummon(k)) goSummon(k); emit('ui'); }
+  if(k && (canSummon(k) || canStarUp(k))) goSummon(k); emit('ui'); }
 
 // ---------- 其他两个页面（下一步做；先放可进战斗的入口） ----------
 function drawBattleEntry(lay){
@@ -1272,6 +1289,8 @@ function drawPetGuide(){
       ctx.save(); ctx.globalAlpha=0.95*al; ctx.translate(x, y0+dy*k); ctx.rotate(dy<0?-Math.PI/2:Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } };
   if(MT.guide && MT.sel===MT.guide && canSummon(MT.guide) && !PROFILE.tipSummon && MT.detail){
     tutBubble('战斗中有概率获得碎片。集满后点「召唤」，它就成为你的宠物。', W/2, H*0.66, 'center'); return; }
+  if(MT.guide && MT.sel===MT.guide && canStarUp(MT.guide) && !PROFILE.tipStar && MT.detail){
+    tutBubble('碎片集齐后，点「升星」。'+DATA.pets[MT.guide].cn+'升到 '+(starOf(MT.guide)+1)+' 星：'+(STAR_ROUTE[MT.guide]?STAR_ROUTE[MT.guide][starOf(MT.guide)-1]:'')+'。', W/2, H*0.66, 'center'); return; }
   if(!MT.ptut || now<MT.ptutT) return;
   if(MT.ptut===1 && MT.detail){ exitDetail(); return; }   // 先回到显示全部宠物的样子
   const py=MT.panelY!=null ? MT.panelY : lay.snaps.mid;
@@ -1283,7 +1302,7 @@ function drawPetGuide(){
 let FIRST_RUN = true;   // 1-1 还没通关 = 新玩家：每次打开都直接进 1-1（中途刷新、关掉重开也一样），通关后才从营地开始
 // 测试用：网址加 ?skip=3（或控制台 TATA.skip(3)）= 前 3 关算已通关，对应的宠物、机制直接给；?reset=1 = 清空进度从 1-1 重来
 function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(0,n); CHAPTER_MAP.preset(n);
-  PROFILE={owned:{flower:1, goldfish:1}, unlock:{}}; for(const id of ids){ const rw=(LEVELS[id]||{}).reward; if(!rw) continue; if(rw.shard && DATA.pets[rw.shard[0]]) PROFILE.owned[rw.shard[0]]=1; if(rw.unlock) PROFILE.unlock[rw.unlock]=1; }
+  PROFILE={owned:{flower:1, goldfish:1}, unlock:{}}; for(const id of ids){ const rw=(LEVELS[id]||{}).reward; if(!rw) continue; if(rw.shard && DATA.pets[rw.shard[0]]){ const k=rw.shard[0]; if(PROFILE.owned[k]){ PROFILE.stars=PROFILE.stars||{}; PROFILE.stars[k]=starOf(k)+1; } else PROFILE.owned[k]=1; } if(rw.unlock) PROFILE.unlock[rw.unlock]=1; }
   profileSave(); ROSTER=null; FIRST_RUN=false; MT.tab='battle'; }
 { const q=/[?&]skip=(\d+)/.exec(location.search); if(q) document.addEventListener('DOMContentLoaded', ()=>cheatSkip(+q[1])); }
 draw = function(){

@@ -35,6 +35,7 @@ const DATA = {
     beetle: {cn:'赤甲虫', desc:'火系，生命 280。水系攻击对它伤害 +50%。', name:'Beetle_Red',  short:'甲', el:'fire',  hp:280,  speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.15},
     snail:  {cn:'厚壳蜗', desc:'移动 0.15 格 / 秒，生命 800。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0.07, r:0.34, windup:0.13},
     fox:    {cn:'迅火狐', desc:'移动 0.5 格 / 秒，是绿莱姆的 2 倍。生命 170。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.07, r:0.28, windup:0.09},
+    lizard: {cn:'喷火蜥', desc:'隔 1 格停下，向前喷火 2 格，烧到最前面的宠物：每次 16 伤害。近战 1 格的宠物打不到它。', name:'Lizard_Fire', short:'火蜥', el:'fire', hp:360, speed:0.2, atk:16, atkInt:1.6, role:'minor', drop:0, r:0.32, windup:0.28, range:2},
     hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
     hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 260，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:260, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
     bear:   {cn:'格鲁姆', desc:'生命 2600，每次攻击 40 伤害。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:2600, speed:0.15, atk:40, atkInt:1.5, role:'elite', drop:0.21, r:0.44, windup:0.47},
@@ -55,10 +56,11 @@ let PROFILE_NEW = false;   // 这台设备第一次打开（没有存档）：�
 (function(){ let p=null; try{ if(/[?&]reset=1\b/.test(location.search)){ for(const k of [PROFILE_KEY,'tata_map','tata_shards']) localStorage.removeItem(k);
       history.replaceState(null, '', location.pathname+location.search.replace(/([?&])reset=1&?/,'$1').replace(/[?&]$/,'')); }   // 清完把参数从网址里去掉，免得每次刷新都再清一次
     p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); }catch(e){}
-  if(p && p.owned){ PROFILE=p; PROFILE.unlock=PROFILE.unlock||{}; PROFILE.owned.flower=1; PROFILE.owned.goldfish=1; }
+  if(p && p.owned){ PROFILE=p; PROFILE.unlock=PROFILE.unlock||{}; PROFILE.stars=PROFILE.stars||{}; PROFILE.owned.flower=1; PROFILE.owned.goldfish=1; }
   else { PROFILE_NEW=true;   // 65 版关卡内容全换了：旧的地图进度、旧的怪物碎片不再对应，一起清掉
     try{ localStorage.removeItem('tata_map'); localStorage.removeItem('tata_shards'); localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE)); }catch(e){} } })();
 function profileSave(){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE)); }catch(e){} }
+const starOf = k => (PROFILE.stars && PROFILE.stars[k]) || 1;   // 69 版：宠物星级（升星在宠物页，meta.js starUp）
 const swapMax = () => PROFILE.unlock.swap3 ? 3 : PROFILE.unlock.swap ? 2 : 0;
 const laneOn = l => DATA.level.lanes.includes(l);
 const levelCleared = id => { try{ return !!(window.CHAPTER_MAP && CHAPTER_MAP.progress.cleared[id]); }catch(e){ return false; } };
@@ -339,7 +341,7 @@ function placePet(key,lane,col){
   { const ts=tutCur(); if(ts && ts.key!==key) return false; if(G.demo && !ts) return false; }   // 67 版：演示里只能按提示放，不能自己加宠物（用户加了一只把怪打死，演示卡住）
   G.energy -= def.cost; G.cooldown[key] = def.cd;
   const pet={key, def, lane, col, hp:def.hp, maxHp:def.hp, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
-               stun:0, armT: def.arm||0, flash:0, move:null};
+               stun:0, armT: def.arm||0, flash:0, move:null, star:starOf(key)};
   G.pets.push(pet);
   G.stats.placed++; emit('place',{pet});
   recalcResonance();
@@ -408,6 +410,8 @@ function petRelease(pet){
   if(d.shape==='shooter'){
     G.projs.push({lane:pet.lane,p:pet.col+0.8,speed:d.projSpeed,dmg:d.dmg*atkMul(pet),el:d.el,src:pet,
                   slow: pet.group&&pet.group.el==='water'&&pet.group.size>=3 ? 2 : 0}); emit('shoot',{pet});
+    if(pet.key==='goldfish' && pet.star>=2 && !pet.second) pet.again=0.22;   // 2 星：每次连发 2 颗水弹（vfx-design.md 9.1）
+    pet.second=false;
   } else if(d.shape==='melee'){
     const hits=meleeHits(pet), prop=meleeProp(pet); pet.swing=0.18;
     let burn = d.burn || null;
@@ -447,8 +451,9 @@ function update(dt){
   for(const pet of G.pets){
     if(pet.move){ pet.move.t+=dt; if(pet.move.t>=0.4) pet.move=null; }
     pet.flash=Math.max(0,pet.flash-dt);
-    if(pet.stun>0){ pet.stun-=dt; pet.windup=0; continue; }
+    if(pet.stun>0){ pet.stun-=dt; pet.windup=0; pet.again=0; continue; }
     const d=pet.def;
+    if(pet.again>0){ pet.again-=dt; if(pet.again<=0){ pet.second=true; petRelease(pet); } }
     if(pet.windup>0){ pet.windup-=dt; if(pet.windup<=0) petRelease(pet); continue; }   // 攻击前摇中：等动画走到出手那一帧
     // 草系 3 连：回血
     if(pet.group && pet.group.el==='grass' && pet.group.size>=3) pet.hp=Math.min(pet.maxHp, pet.hp+Math.min(pet.maxHp*0.01,6)*dt); // 每秒 1%，最多 6 点，防止草墙永动
@@ -477,7 +482,7 @@ function update(dt){
       if(pet.swing) pet.swing=Math.max(0,pet.swing-dt);
     } else if(d.shape==='mine'){
       if(pet.armT>0){ pet.armT-=dt; continue; }
-      const trig=G.enemies.find(e=>!e.dead&&e.lane===pet.lane&&e.p>=pet.col-0.1&&e.p<=pet.col+1.1);
+      const trig=G.enemies.find(e=>!e.dead&&e.lane===pet.lane&&e.p>=pet.col-0.1&&e.p<=pet.col+(e.def.range?1.9:1.1));   // 69 版：远程怪隔格停下，踩不到面前的波姆 → 触发距离按射程加长
       if(trig){
         G.enemies.forEach(e=>{ if(!e.dead&&Math.abs(e.lane-pet.lane)<=1&&e.p>=pet.col-1&&e.p<=pet.col+2) hitEnemy(e,d.dmg,d.el); });
         G.cells.forEach(c=>{ if(propAlive(c)&&Math.abs(c.lane-pet.lane)<=1&&c.col>=pet.col-1&&c.col<=pet.col+1) damageProp(c,d.dmg,true); });
@@ -507,18 +512,22 @@ function update(dt){
     if(e.def.enrage && !e.rage && e.hp<=e.maxHp*e.def.enrage.at){ e.rage=true; emit('enrage',{e}); }   // 棘背蜥：半血后发怒
     const spd = e.def.speed*(e.slow>0?0.85:1)*(e.rage?e.def.enrage.speed:1)*(e.rush||1);
     // 被谁挡住：同 lane、非地雷、身后的最近宠物
-    const blocker = G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&e.p>p.col+0.2&&e.p<=p.col+1+e.def.r*0.6)
+    const ext = e.def.range && e.p<=COLS-0.2 ? e.def.range-0.6 : 0;   // 69 版：远程的怪（喷火蜥）隔着停下，停的位置近战 1 格够不着；先走进棋盘再停（宠物放在最后两格时不能停在棋盘外）
+    const inReach = c => e.p>c+0.2 && e.p<=c+1+e.def.r*0.6+ext;
+    const blocker = G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&inReach(p.col))
                           .sort((a,b)=>b.col-a.col)[0];
-    const pb = G.cells.filter(c=>propAlive(c)&&c.lane===e.lane&&e.p>c.col+0.2&&e.p<=c.col+1+e.def.r*0.6).sort((a,b)=>b.col-a.col)[0];
+    const pb = G.cells.filter(c=>propAlive(c)&&c.lane===e.lane&&inReach(c.col)).sort((a,b)=>b.col-a.col)[0];
     const tgt = pb && (!blocker || pb.col>blocker.col) ? pb : blocker;   // 离怪最近的那个挡住它：宠物或道具
     e.blocked=!!tgt;
     if(tgt){
       // 先起手（播攻击动画），到出手那一帧才扣血
       if(e.windup>0){ e.windup-=dt;
         if(e.windup<=0){ const bt=e.biteTarget, alive=bt && (bt.type==='crate' ? propAlive(bt) : !bt.dead), t=alive?bt:tgt;
-          if(t.type==='crate'){ e.bite=0.15; emit('propBite',{e,c:t}); damageProp(t, e.def.atk, false); } else {
-          t.hp-=e.def.atk; t.flash=0.12; e.bite=0.15; emit('bite',{e,pet:t});
-          if(t.hp<=0){ t.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:t}); G.fx.push({kind:'pop',lane:t.lane,p:t.col+0.5,t:0,life:0.4,color:'#ccc'}); } } } }
+          const hurt = q => { q.hp-=e.def.atk; q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };
+          if(t.type==='crate'){ e.bite=0.15; emit(e.def.range?'breath':'propBite',{e,c:t,pets:[]}); damageProp(t, e.def.atk, false); }
+          else if(e.def.range){ const wall=pb?pb.col:-1, hits=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col>wall&&inReach(p.col));   // 喷火：范围内的宠物都烧到；道具后面的烧不到
+            e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt); }
+          else { e.bite=0.15; emit('bite',{e,pet:t}); hurt(t); } } }
       e.atkT-=dt;
       if(e.atkT<=0 && !(e.windup>0)){ e.atkT=e.def.atkInt*(e.rage?e.def.enrage.atkInt:1); e.windup=e.def.windup; e.biteTarget=tgt; emit('biteStart',{e,pet:tgt}); }
     } else {

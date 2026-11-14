@@ -22,7 +22,7 @@ const icon = n => img('icons/'+n+'.png');
 // 角色映射：宠物用 Spine，怪物（和怪物转宠物）用 Enemy Monster 播放器
 const PET_SPINE = { flower:'Flower', goldfish:'Goldfish', pug:'Pug', pumpkin:'Pumpkin', bomb:'Bomb' };
 const PET_MON   = { lizard:'Lizard_Fire' };
-const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood' };
+const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood', lizard:'Lizard_Fire' };
 const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5, lizard:0.75 };   // 身高，单位：格
 const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', grass:'Misc_Leaf_01_Green' };
 
@@ -236,7 +236,7 @@ function shardCard(key, gained, x, y, s){
   text(String(gained), x+s/2, y+s*0.86, s*0.24, '#fff');   // 和金币、经验一样：数字在下沿
   const have=(G.shardsBefore&&G.shardsBefore[key]||0)+gained, need=rarOf(key).need, bh=12;
   hpBar(x+s/2, y+s+5, s+6, Math.min(1,have/need), 'green', bh);
-  text(have>=need?'可召唤':`${have}/${need}`, x+s/2, y+s+5+bh/2, 10, have>=need?'#ffe14d':'#fff');
+  text(PROFILE.owned[key] ? (starOpen(key)&&have>=need?'可升星':`${have}/${need}`) : have>=need?'可召唤':`${have}/${need}`, x+s/2, y+s+5+bh/2, 10, have>=need&&(!PROFILE.owned[key]||starOpen(key))?'#ffe14d':'#fff');
 }
 const MONPORT = {};   // 怪物头像：碎片奖励、碎片飞行、顶部碎片计数都用它
 function makeMonPortraits(){
@@ -529,6 +529,9 @@ HOOKS.push((type, d)=>{
     case 'propBite': { const v=visOf(d.e,false); monAttackFx(d.e, v, d.c); v.freeze=Math.max(v.freeze||0, 2/60); break; }   // 怪咬道具（受击音和木屑由 crate 事件出）
     case 'propShard': { const s=L.toScreen(d.c.lane,d.c.col+0.5); COMBO.play('碎片-获得', {x:s.x, y:s.y}); flyers.push({from:{x:s.x,y:s.y}, t:-0.25, life:0.7, to:'shard', key:d.key}); LASTSHARD=d.key; break; }
     case 'hit': if(d.dmg>=1) DMG.push({lane:d.e.lane, p:d.e.p, n:Math.round(d.dmg), big:d.mult>1, t:0, dx:(Math.random()-0.5)*0.3}); break;
+    case 'breath': { const e=d.e, v=visOf(e,false), f=fwd(), m=feet(e.lane,e.p-0.3), far=d.pets.length?d.pets.reduce((a,b)=>b.col<a.col?b:a):null;   // 69 版：敌方喷火蜥，火焰朝宠物那边铺 2 格（复用「喷火-T2」，方向反过来）
+      COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:{x:-f.x, y:-f.y}, target2:far?atPet(far,0.4):null}, {freeze:[v, ...d.pets.map(p=>visOf(p,true))]});
+      for(const p of d.pets){ const pv=visOf(p,true); pv.squash=0.1; pv.hitFlash=0.08; } break; }
     case 'biteStart': { const v=visOf(d.e,false); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); break; }
     case 'bite': { const v=visOf(d.e,false);
       monAttackFx(d.e, v, d.pet);
@@ -1096,7 +1099,7 @@ function drawRewardTip(){
   if(!RTIP) return; const q=REWARD_RECTS.find(z=>z.kind===RTIP.kind&&z.key===RTIP.key); if(!q){ RTIP=null; return; }
   let title, rows;
   if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
-    title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`]; }
+    title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, PROFILE.owned[q.key] ? (!starOpen(q.key)?`已收集 ${have} 片，升星暂未开放`:have>=rr0.need?'已经可以升星':`再收集 ${rr0.need-have} 片可升星`) : (have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`)]; }
   else if(q.kind==='coin'){ title='金币'; rows=['用来购买道具和进化宠物']; }
   else { title='经验'; rows=['分给本局出战的宠物，用来升级']; }
   const w=Math.min(220,W-20), h=24+16+rows.length*18; let x=q.x+q.w/2-w/2, y=q.y-h-10; if(x<8) x=8; if(x+w>W-8) x=W-8-w;
