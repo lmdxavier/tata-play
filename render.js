@@ -559,7 +559,7 @@ HOOKS.push((type, d)=>{
     case 'sky': SKYLAND.push(...G.orbs.filter(o=>o.fall>0)); break;
     case 'spawn': if(d.e.def.role==='elite'){ sfx('elite'); shakeDir(0.03,0.3); } break;
     case 'bell': shakeDir(0.05,0.35); sfx('bell'); { const s=L.toScreen(d.lane,-0.45); vfxXY('ring_shockwave_white', s.x, s.y, 1.6); } break;
-    case 'resonance': sfx('sparkle'); break;
+    case 'resonance': break;   // 75 版：3 连的声音改由 bonus.js 在依次点亮时播「三连-传导」
     case 'win': bankShards(); bankCoins(); COMBO.play('胜利', {x:W/2, y:H*0.3, screen:true}); break;
     case 'lose': bankShards(); COMBO.play('失败', null); break;
     case 'ui': sfx('ui'); break;
@@ -741,6 +741,7 @@ function hpBar(cx, y, w, f, kind, hh){
 
 const EL_HEX = {fire:'#ff6a3d', water:'#3fa8ff', grass:'#5fe05a', light:'#ffd84a', dark:'#b07cff', none:'#cccccc'};
 function drawAuras(){
+  BONUS.update(LAST_ADT); BONUS.drawGround(); return;   // 75 版：脚下光只在 3 连时出现，由 bonus.js 画（下面是 74 版原样，不再执行）
   const cs=L.cs;
   for(const pet of G.pets){ if(!pet.nSame) continue;
     const f=feet(pet.lane,pet.col+0.5), big=pet.group&&pet.group.size>=3; const t=tinted('gui/Frame/ItemFrame00~03_BgGlow.png', EL_HEX[pet.def.el]); if(!t) continue;
@@ -770,8 +771,7 @@ function drawPet(pet, dt){
   ctx.restore();
   const hpF=pet.hp/pet.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   if(hpF<1 && pet.def.shape!=='mine') hpBar(f.x, f.y-cs*0.06, cs*0.5, hpF, 'green', 7);   // 宠物血条在脚下，和怪物头顶的血条分开
-  if(pet.nSame>0){ const lab=gui('Label/Label_Parallelogram_'+PARA[pet.def.el]); const w=cs*0.5, h=cs*0.2;
-    nine(lab, f.x-w/2, f.y+cs*0.06, w, h, 18, h*0.45); text('+'+pet.nSame*8+'%', f.x, f.y+cs*0.06+h/2, cs*0.13, '#fff'); }
+  BONUS.drawLabel(pet, f);   // 75 版：「+N%」标签由 bonus.js 画（被弹中时数字往上滚）
   if(pet.def.shape==='mine' && pet.armT>0) text('装填 '+Math.ceil(pet.armT), f.x, f.y-cs*0.5, cs*0.15, '#fff');
 }
 
@@ -1369,10 +1369,10 @@ function drawTooltip(){
 // ---------- 主绘制 ----------
 const RSNAP = { on: !/[?&]rsnap=0/.test(location.search), cv:null, over:null, key:'' };
 const rsnapKey = () => cv.width+'x'+cv.height+'|'+W+'|'+H;
-let lastDraw = performance.now();
+let lastDraw = performance.now(); let LAST_ADT = 0;   // 75 版：bonus.js 用本帧的游戏时间步长
 function draw(){
   const now=performance.now(); let dt=Math.min(0.05,(now-lastDraw)/1000); lastDraw=now;
-  const adt = !G.started ? dt : G.paused||G.over ? (G.over?dt:0) : HITSTOP>1e-6 ? 0 : dt*G.speed;
+  const adt = !G.started ? dt : G.paused||G.over ? (G.over?dt:0) : HITSTOP>1e-6 ? 0 : dt*G.speed; LAST_ADT=adt;
   if(!READY){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#2b3a2a'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); text(LOADMSG+(LOAD_N?(' '+LOAD_N[0]+'/'+LOAD_N[1]):''),W/2,H/2,18,'#fff'); return; }
   audioPump();
   SCENE.ensure(G.cells);
@@ -1405,6 +1405,7 @@ function draw(){
   list.push([L.toScreen(0,-0.45).y+L.cs*0.25, drawBells]);
   list.sort((a,b)=>a[0]-b[0]);
   for(const [,fn] of list) fn();
+  BONUS.drawAir();   // 75 版：属性小弹、3 连传导、稀有度触手 / 链子（在角色上面）
   drawCorpses(adt); drawMonFx(adt);
   SCENE.drawFx(ctx, ENV_T, dt, icon('Misc_Leaf_01_Green'));
   drawNight(dt);
