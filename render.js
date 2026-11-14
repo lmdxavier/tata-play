@@ -364,8 +364,9 @@ function drawV(v, x, y, o){
 // 接地影子：和场景道具同一种（软椭圆、略偏右）
 function groundShadow(x, y, w, a){
   const cx=x+w*0.06, rx=w*0.5, ry=Math.max(3,w*0.13);
-  const g=ctx.createRadialGradient(cx,y,0,cx,y,rx); g.addColorStop(0,`rgba(10,20,30,${0.36*(a??1)})`); g.addColorStop(0.6,`rgba(10,20,30,${0.16*(a??1)})`); g.addColorStop(1,'rgba(10,20,30,0)');
-  ctx.save(); ctx.translate(cx,y); ctx.scale(1,ry/rx); ctx.translate(-cx,-y); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,y,rx,0,7); ctx.fill(); ctx.restore();
+  // 61d：渐变颜色固定，淡出用整体透明度（原来把淡出系数写进渐变颜色，怪物倒地淡出的每一帧都重画一张再上传——真机记录里最多的一类重画）
+  const g=ctx.createRadialGradient(cx,y,0,cx,y,rx); g.addColorStop(0,'rgba(10,20,30,0.36)'); g.addColorStop(0.6,'rgba(10,20,30,0.16)'); g.addColorStop(1,'rgba(10,20,30,0)');
+  ctx.save(); if(a!==undefined && a<1) ctx.globalAlpha*=Math.max(0,a); ctx.translate(cx,y); ctx.scale(1,ry/rx); ctx.translate(-cx,-y); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,y,rx,0,7); ctx.fill(); ctx.restore();
 }
 
 function petPlay(pet, anim, then){
@@ -1005,7 +1006,7 @@ function drawUI2(){
   // 波次：「第 N/4 波」+ 进度条（走过的波次点亮）；精英 / Boss 出场后，这条换成它的血条
   const wb=L.waveBar, dur=DATA.level.duration; const clock=`${Math.floor(G.t/60)}:${String(Math.floor(G.t%60)).padStart(2,'0')}`;
   const nWave=WAVE_MARKS.filter(m=>G.t>=m).length, boss=G.enemies.find(e=>e.def.role==='elite'&&!e.dead);
-  text(clock, W/2, 30+(L.hudTop||0), 22, '#fff');
+  numText(clock, W/2, 30+(L.hudTop||0), 22, '#fff', 'center');   // 61d：计时每秒变一次，按字符贴图，不再每秒重画一张
   if(boss){
     text(boss.def.cn.replace(' · 精英',''), W/2, wb.y-7, 12, '#ffd36b', 'center', 800, false);
     hpBar(wb.x+wb.w/2, wb.y, wb.w, boss.hp/boss.maxHp, 'red', 14);
