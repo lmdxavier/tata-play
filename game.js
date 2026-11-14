@@ -67,6 +67,7 @@ function setLevel(id){
   const owned = PET_ORDER.filter(k=>PROFILE.owned[k]);
   DATA.level = { id, title:lv.title, lanes:lv.lanes.slice(), loadout:owned.slice(0,6), startEnergy:lv.startEnergy, skyDrop:lv.skyDrop, cells:lv.cells||[], duration:lv.duration,
     spawns:lv.spawns, reward:lv.reward||null, tut:lv.tut||null, boxShard:lv.boxShard||null, first:!levelCleared(id) };
+  DATA.level.demo = (lv.demo && DATA.level.first && !PROFILE.demo) ? lv.demo : null;   // 66 版：带浮窗的演示，只放一次；演示完重新开始，玩家自己打
   EVENTS = lv.events||[]; WAVE_MARKS = lv.marks||[];
   if(L) L = makeLayout(L.kind);
   return true;
@@ -253,8 +254,10 @@ function newGame(){
     shards: {}, pity: {},
     stats: {placed:0, moved:0},
     started: false,
-    tut: (DATA.level.tut && DATA.level.first) ? {steps:DATA.level.tut.map(s=>({...s})), i:0, cur:null, t:0, gap:0} : null,
+    tut: (DATA.level.demo || (DATA.level.tut && DATA.level.first)) ? {steps:(DATA.level.demo||DATA.level.tut).map(s=>({...s})), i:0, cur:null, t:0, gap:0} : null,
+    demo: !!DATA.level.demo,
   };
+  if(G.demo){ G.spawns=[]; G.nextSky=1e9; }   // 演示：怪和能量都按脚本来
   recalcResonance();
 }
 
@@ -529,7 +532,7 @@ function update(dt){
         G.fx.push({kind:'bell',lane:e.lane,t:0,life:1.2});
         G.fx.push({kind:'banner',text:`第 ${e.lane+1} 路的警钟响了`,t:0,life:1.6,color:'#ffd25a'});
         G.enemies.forEach(o=>{ if(!o.dead&&o.lane===e.lane) killEnemy(o,true); });
-      } else if(!G.over){ G.over={win:false}; G.overT=0; emit('lose'); }
+      } else if(!G.over && !G.demo){ G.over={win:false}; G.overT=0; emit('lose'); }
     }
   }
   // 清理
@@ -544,7 +547,7 @@ function update(dt){
   for(const f of G.fx) f.t+=dt;  G.fx=G.fx.filter(f=>f.t<f.life);
   for(const f of G.shardsFx) f.t+=dt;  G.shardsFx=G.shardsFx.filter(f=>f.t<f.life);
   // 胜利
-  if(G.spawnIdx>=G.spawns.length && G.enemies.length===0 && !G.over) finish();
+  if(G.spawnIdx>=G.spawns.length && G.enemies.length===0 && !G.over && !G.demo) finish();
 }
 function collectOrb(o){ if(o.got) return; o.got=true; emit('collect',{o}); G.energy+=o.value; }   // 数字变化在能量槽上看，不在原地再飘一个 +25
 
@@ -561,7 +564,7 @@ function finish(){
 // ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------
 // 做法：到了某一步，战斗停住（update 里不推进），提示玩家做一个动作，位置固定；做对了战斗继续。只在第一次打这一关时出现。
 // 步骤写在 levels.js 的 tut 里：{at:秒, kind:'place', key, lane, col|'front'} / {kind:'orb', value} / {kind:'move', key, toLane}
-const tutCur = () => (G && G.tut && G.tut.cur) || null;
+const tutCur = () => { const c=G && G.tut && G.tut.cur; return c && !c.free ? c : null; };   // free = 不停住战斗的步骤（等待、脚本动作）
 function tutBegin(s){
   const freeCol=(lane,c0,lo,hi)=>{ for(const d of [0,1,-1,2,-2,3,-3]){ const c=c0+d; if(c>=lo && c<=hi && inGrid(lane,c) && !petAt(lane,c) && !propAlive(cellAt(lane,c))) return c; } return -1; };
   if(s.kind==='place'){
@@ -574,6 +577,21 @@ function tutBegin(s){
   } else if(s.kind==='orb'){
     const lane=DATA.level.lanes[Math.floor(DATA.level.lanes.length/2)];
     s.orb={lane, p:4.5, value:s.value||25, life:0, fall:1}; G.orbs.push(s.orb); emit('sky');
+  } else if(s.kind==='card'){
+    if(!DATA.level.loadout.includes(s.key)) return false; s.tapT=null;
+  } else if(s.kind==='info'){
+    s.ok=false; if(s.range){ const p=G.pets.find(q=>q.key===s.range); if(!p) return false; s.pet=p; }
+  } else if(s.kind==='wait'){
+    s.free=true;
+  } else if(s.kind==='run'){
+    s.free=true;
+    if(s.run==='spawn'){ const def=DATA.enemies[s.type]; const e={key:s.type, def, lane:s.lane, p:s.p, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0}; G.enemies.push(e); emit('spawn',{e}); }
+    else if(s.run==='bellSetup'){   // 演示最后防线：场上只留聚能花，放一只怪走到它面前，两口咬掉
+      for(const p of G.pets) if(p.key!=='flower'){ p.dead=true; emit('petdeath',{pet:p}); G.fx.push({kind:'pop',lane:p.lane,p:p.col+0.5,t:0,life:0.4,color:'#ccc'}); }
+      G.pets=G.pets.filter(p=>!p.dead); G.projs=[]; recalcResonance();
+      const f=G.pets.find(p=>p.key==='flower'), def=DATA.enemies.slime; if(!f) return false; f.hp=def.atk*2;
+      const e={key:'slime', def, lane:f.lane, p:f.col+2.6, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0}; G.enemies.push(e); emit('spawn',{e}); }
+    else if(s.run==='restart'){ PROFILE.demo=1; profileSave(); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); return false; }
   } else if(s.kind==='move'){
     if(G.swapCap<1) return false;
     if(G.pets.some(p=>p.key===s.key && p.lane===s.toLane)) return false;   // 那一路已经有了：玩家自己做对了，不用教
@@ -581,12 +599,16 @@ function tutBegin(s){
     if(propAlive(cellAt(s.toLane, pet.col))) return false;
     s.pet=pet; s.L=s.toLane; s.C=pet.col; if(G.swaps<1) G.swaps=1;   // 目标格 = 同一排；那里有别的宠物就互换（movePet 本来支持）
   } else return false;
-  G.selected=null; G.drag=null;
+  if(!s.free){ G.selected=null; G.drag=null; }
   return true;
 }
 function tutDone(s){
   if(s.kind==='place'){ const p=petAt(s.L,s.C); return !!p && p.key===s.key; }
   if(s.kind==='orb') return !!s.orb.got;
+  if(s.kind==='card') return s.tapT!=null && G.tut.t-s.tapT>2.6;   // 点了卡片，留 2.6 秒看说明
+  if(s.kind==='info') return !!s.ok;
+  if(s.kind==='run') return true;
+  if(s.kind==='wait') return s.secs!=null ? G.tut.t>=s.secs : s.until==='noEnemy' ? G.enemies.length===0 : s.until==='petDead' ? !G.pets.some(p=>p.key===s.key) : s.until==='bell' ? (G.bellsUsed>0 && G.enemies.length===0) : true;
   if(s.kind==='move') return s.pet.dead || (s.pet.lane===s.L && s.pet.col===s.C);
   return true;
 }
@@ -597,7 +619,7 @@ function tutUpdate(dt){
   if(T.gap>0){ T.gap-=dt; return; }
   const s=T.steps[T.i]; if(G.t<(s.at||0)) return;
   if(s.when){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.when); if(es.length<3 || Math.min(...es.map(e=>e.p))>(s.whenP||7.5)) return; }   // 等这种怪成群走进场
-  if(!tutBegin(s)){ T.i++; return; }   // 条件不满足（比如这只宠物还没召唤）：跳过这一步
+  if(!tutBegin(s)){ if(G.tut===T) T.i++; return; }   // 条件不满足（比如这只宠物还没召唤）：跳过这一步；restart 会换掉整局，不再动旧的
   T.cur=s; T.t=0; emit('tutStep',{s});
 }
 
@@ -618,11 +640,13 @@ function onDown(e){
   if(!G.started){ G.started=true; emit('start'); return; }
   if(G.over){ const b=resultAgainRect(); if(b && x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ emit('ui'); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); } return; }
   const ts=tutCur();
+  if(ts && ts.kind==='info'){ if(G.tut.t>0.7){ ts.ok=true; emit('ui'); } return; }   // 说明浮窗：点任意位置继续
   const it=itemAt(x,y);
   if(it){
     if(it.id==='card'){
       const d=DATA.pets[it.key];
       emit('ui');
+      if(ts && ts.kind==='card' && ts.key===it.key){ if(ts.tapT==null) ts.tapT=G.tut.t; return; }   // 只看说明，不选中
       if(ts && !(ts.kind==='place' && ts.key===it.key)){ emit('deny',{key:it.key, why:'tut'}); return; }
       if(G.energy>=d.cost && G.cooldown[it.key]<=0){ G.selected = G.selected===it.key?null:it.key; G.drag={kind:'card',key:it.key,x,y,sx:x,sy:y}; } else emit('deny',{key:it.key, why: G.cooldown[it.key]>0?'cd':'energy'});
     } else if(it.id==='shovel'){ G.selected = G.selected==='shovel'?null:'shovel'; }

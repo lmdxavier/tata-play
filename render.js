@@ -509,7 +509,8 @@ HOOKS.push((type, d)=>{
   if(!READY) return;
   switch(type){
     case 'start': sfx('start'); break;
-    case 'tutStep': sfx('alert'); TUT_T0=performance.now(); break;
+    case 'tutStep': if(!d.s.free){ sfx('alert'); TUT_T0=performance.now(); } break;
+    case 'tutDone': if(d.s.kind==='card') TIP.card=null; break;
     case 'enrage': { const v=visOf(d.e,false); v.squash=0.12; floatText(d.e.lane, d.e.p, '发怒', '#ff6a3d', 13); COMBO.play('发怒', atE(d.e)); break; }
     case 'place': { const v=visOf(d.pet,true); v.drop=0.16; break; }   // 落地那一刻才播「放置」（drawPet 里）
     case 'move': { const mv=d.pet.move, o=mv?feet(mv.fl,mv.fc+0.5):feet(d.lane,d.col+0.5); COMBO.play('移动', {x:o.x, y:o.y-L.cs*0.1});   // 拿起：轻嗖 + 小烟团
@@ -1154,10 +1155,32 @@ function drawTutorial(){
     path({x:r0.x+cs/2, y:r0.y+cs/2}, {x:r.x+cs/2, y:r.y+cs/2}, s.key); }
   else if(s.kind==='orb' && !s.orb.got){ const p=window.orbHitPos?orbHitPos(s.orb):orbScreen(s.orb); ring(p.x, p.y, cs*0.75);
     if(arrow && s.orb.fall<=0){ const bob=Math.sin(tt*6)*cs*0.06, h=cs*0.34, w=h*arrow.width/arrow.height; ctx.save(); ctx.globalAlpha=0.9; ctx.translate(p.x, p.y-cs*0.62+bob); ctx.rotate(Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } }
-  if(s.text){ ctx.font=`800 14px ${FONT}`; const y=L.hud.h+30, lines=wrapTut(s.text, W-64), w=Math.min(W-24, Math.max(...lines.map(q=>ctx.measureText(q).width))+44), h=16+lines.length*20;
-    pill(W/2-w/2, y-h/2, w, h); lines.forEach((q,i)=>text(q, W/2, y-(lines.length-1)*10+i*20, 14, '#fff', 'center', 800, false)); }
+  // 66 版：浮窗说明（为什么这样做，一两句）。放在目标旁边，不挡住目标和箭头
+  if(s.kind==='card'){ const it=L.items.find(i=>i.id==='card'&&i.key===s.key); if(it){ ring(it.x+it.w/2, it.y+it.h/2, it.w*0.95);
+      if(arrow && s.tapT==null){ const bob=Math.sin(tt*6)*4, h=cs*0.34, w=h*arrow.width/arrow.height; ctx.save(); ctx.translate(it.x+it.w/2, it.y-14+bob); ctx.rotate(Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } }
+    if(s.tapT==null) tutBubble(s.tip, W/2, H*0.42, 'center'); }
+  else if(s.kind==='info'){
+    if(s.range && s.pet){ drawRange(s.pet.def, s.pet.lane, s.pet.col); const r=L.cellRect(s.pet.lane, Math.min(COLS-1,s.pet.col+3)); tutBubble(s.tip, r.x, r.y+cs/2, 'side', true); }
+    else if(s.bell!=null){ const b=L.toScreen(s.bell,-0.45); ring(b.x, b.y, cs*0.8); tutBubble(s.tip, b.x, b.y-cs*0.55, 'above', true); }
+    else tutBubble(s.tip, W/2, H*0.42, 'center', true); }
+  else if(s.tip){
+    if(s.kind==='orb'){ const p=window.orbHitPos?orbHitPos(s.orb):orbScreen(s.orb); tutBubble(s.tip, p.x, p.y-cs*0.95, 'above'); }
+    else { const r=L.cellRect(s.L,s.C); tutBubble(s.tip, r.x+cs/2, r.y-cs*0.12, 'above'); } }
 }
-function wrapTut(s, maxW){ const out=[]; let cur=''; for(const ch of s){ if(ctx.measureText(cur+ch).width>maxW && cur && !'，。、：；！？）'.includes(ch)){ out.push(cur); cur=''; } cur+=ch; }   // 标点不放在行首 if(cur) out.push(cur);
+// 浮窗：和卡牌说明同一种深色圆角底（BasicFrame_Round24）。mode：above = 在 (ax,ay) 上方居中；side = 在 ax 左边（放不下就右边）；center = 以 (ax,ay) 为中心
+function tutBubble(str, ax, ay, mode, tapHint){
+  if(!str) return; const fs=14, pad=12, maxW=mode==='side' ? Math.max(120, Math.min(210, ax-22)) : Math.min(W-28, 268);
+  ctx.font=`800 ${fs}px ${FONT}`; const lines=wrapTut(str, maxW-pad*2), tw=Math.max(...lines.map(q=>ctx.measureText(q).width)), w=Math.min(maxW, tw+pad*2), h=pad*2+lines.length*20-4+(tapHint?20:0);
+  let x = mode==='side' ? ax-w-10 : ax-w/2, y = mode==='above' ? ay-h : ay-h/2;
+  if(mode==='side' && x<8) x=Math.min(W-8-w, ax+L.cs+10);
+  x=Math.max(8, Math.min(W-8-w, x)); y=Math.max(L.hud.h+6, Math.min(L.bar.y-h-8, y));
+  const bg=tinted('gui/Frame/BasicFrame_Round24.png','#121729'); if(bg){ ctx.globalAlpha=0.94; nine(bg, x, y, w, h, 20, 14); ctx.globalAlpha=1; }
+  const fl=tinted('gui/Frame/ItemFrame00~03_FocusLine.png','#ffe14d'); if(fl){ ctx.globalAlpha=0.55; nine(fl, x-1, y-1, w+2, h+2, 20, 14); ctx.globalAlpha=1; }
+  lines.forEach((q,i)=>text(q, x+pad, y+pad+8+i*20, fs, '#fff', 'left', 800, false));
+  if(tapHint) text('点一下继续', x+w-pad, y+h-pad-4, 11, '#ffe9a0', 'right', 800, false);
+}
+function wrapTut(s, maxW){ const out=[]; let cur=''; for(const ch of s){ if(ctx.measureText(cur+ch).width>maxW && cur && !'，。、：；！？）'.includes(ch)){ out.push(cur); cur=''; } cur+=ch; }   /* 标点不放在行首 */
+  if(cur) out.push(cur);
   if(out.length===2 && out[1].length<=2){ const all=s, cut=Math.ceil(all.length/2); return [all.slice(0,cut), all.slice(cut)]; }   // 不让最后一行只剩一两个字
   return out; }
 // 开始界面：点一下开始（浏览器要求先点一下才能出声）

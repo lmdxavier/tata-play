@@ -142,6 +142,8 @@ function summonPet(k){
   OWNED[k] -= RAR[DATA.pets[k].rarity||'common'].need; try{ localStorage.setItem('tata_shards', JSON.stringify(OWNED)); }catch(e){}
   PROFILE.owned[k]=1; profileSave();
   ROSTER=null; delete CARDPORT[k]; delete MT.charV[k]; MT.sel=k; MT.guide=null; MT.summonT=performance.now();
+  if(!PROFILE.tipSummon){ PROFILE.tipSummon=1; profileSave(); }
+  if(!PROFILE.tipPanel && MT.lay && !MT.lay.land){ MT.ptut=1; MT.ptutT=performance.now()+1400; }   // 第一次召唤完：教面板能上下拖（等光柱播完再出现）
   { const lay=MT.lay, ch=lay&&lay.char; COMBO.play('召唤', {x:ch?ch.x+ch.w/2:W/2, y:ch?ch.y+ch.h*0.55:H*0.3}, {scale:3}); }   // 光柱 + 上扬音（效果组合「召唤」）
   toast('召唤了'+DATA.pets[k].cn);
   return true;
@@ -1261,6 +1263,23 @@ function drawMeta(){
 // 战斗结算加一个「返回」（回到战斗页）
 function backRect(){ const b=resultButton(); return {x:b.x, y:b.y+b.h+14, w:b.w, h:54}; }
 const _drawBattle = draw;
+// 66 版（用户 2026-11-14）：宠物页的两处浮窗说明，各只出现一次
+//   ① 第一次来召唤：说明碎片怎么来、集满能做什么。② 第一次召唤完：面板默认显示全部宠物，往上拖更大、往下拖看详情；玩家拖上去、再拖下来看到详情就结束
+function drawPetGuide(){
+  const lay=MT.lay; if(!lay || lay.land) return; const now=performance.now(), tt=now/1000;
+  const arrow=tinted('gui/IconMisc/Icon_Arrow_Next2.png','#ffe9a0');
+  const flow=(x,y0,y1)=>{ if(!arrow) return; const n=3, dy=y1-y0; for(let i=0;i<n;i++){ const k=((i+(tt*1.4)%1)/n), al=Math.sin(k*Math.PI), h=20, w=h*arrow.width/arrow.height;
+      ctx.save(); ctx.globalAlpha=0.95*al; ctx.translate(x, y0+dy*k); ctx.rotate(dy<0?-Math.PI/2:Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } };
+  if(MT.guide && MT.sel===MT.guide && canSummon(MT.guide) && !PROFILE.tipSummon && MT.detail){
+    tutBubble('战斗中有概率获得碎片。集满后点「召唤」，它就成为你的宠物。', W/2, H*0.66, 'center'); return; }
+  if(!MT.ptut || now<MT.ptutT) return;
+  if(MT.ptut===1 && MT.detail){ exitDetail(); return; }   // 先回到显示全部宠物的样子
+  const py=MT.panelY!=null ? MT.panelY : lay.snaps.mid;
+  if(MT.ptut===1){ if(MT.snap==='full' && !MT.drag){ MT.ptut=2; return; }
+    flow(W/2, py-6, py-70); tutBubble('这里显示全部宠物。向上拖，空间更大；向下拖，看详细信息。', W/2, py+260, 'center'); }
+  else { if(MT.detail && !MT.drag){ MT.ptut=0; PROFILE.tipPanel=1; profileSave(); return; }
+    flow(W/2, py+40, py+110); tutBubble('再向下拖，看这只宠物的详细信息。', W/2, Math.max(py+190, H*0.5), 'center'); }
+}
 let FIRST_RUN = true;   // 1-1 还没通关 = 新玩家：每次打开都直接进 1-1（中途刷新、关掉重开也一样），通关后才从营地开始
 // 测试用：网址加 ?skip=3（或控制台 TATA.skip(3)）= 前 3 关算已通关，对应的宠物、机制直接给；?reset=1 = 清空进度从 1-1 重来
 function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(0,n); CHAPTER_MAP.preset(n);
@@ -1270,7 +1289,7 @@ function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(
 draw = function(){
   if(FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; if(!levelCleared('1-1')){ MT.tab='battle'; startBattle('1-1'); } }   // 65 版：第一次打开直接进 1-1，不进营地
   if(!MT.inBattle){ drawMeta();
-    if(MT.tab==='pets'){ const now=performance.now(), cdt=Math.min(0.05,(now-(MT.fxT||now))/1000); MT.fxT=now; COMBO.draw(cdt,'world'); } else MT.fxT=0;   // 65 版：宠物页上的召唤特效
+    if(MT.tab==='pets'){ const now=performance.now(), cdt=Math.min(0.05,(now-(MT.fxT||now))/1000); MT.fxT=now; COMBO.draw(cdt,'world'); drawPetGuide(); } else MT.fxT=0;   // 65 版：宠物页上的召唤特效
     if(BATTLE_WAIT && MT.tab!==BATTLE_WAIT_TAB) BATTLE_WAIT=false;   // 换页签 = 取消等待
     if(BATTLE_WAIT){ ctx.save(); ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H); text('加载战斗素材… '+BATTLE_N[0]+'/'+BATTLE_N[1],W/2,H/2,18,'#fff'); ctx.restore(); }
     return; }
