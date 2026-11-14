@@ -123,16 +123,29 @@ function mtToggleTheme(){ MT.theme = MT.theme==='afk'?'fh':'afk'; try{ localStor
 let ROSTER = null;
 function roster(){
   if(ROSTER) return ROSTER;
-  const own = DATA.level.loadout.map(k=>{ const d=DATA.pets[k]; return {key:k, owned:true, d, el:d.el, role:d.shape, rar:d.rarity||'common', cn:d.cn, stars:1}; })
-    .sort((a,b)=>RAR_RANK[b.rar]-RAR_RANK[a.rar]);
-  const mons = Object.keys(ENEMY_MON).map(k=>{ const d=DATA.enemies[k]; return {key:k, owned:false, d, el:d.el, role:null, rar:SHARD_RAR[d.role]||'common', cn:d.cn.replace(' · 精英',''), stars:0}; });
+  // 65 版：名单 = 已召唤的宠物 + 已经拿到碎片、还没召唤的宠物（没见过的不提前露出）
+  const all = PET_ORDER.filter(k=>PROFILE.owned[k] || shardHave(k)>0).map(k=>{ const d=DATA.pets[k], o=!!PROFILE.owned[k]; return {key:k, owned:o, d, el:d.el, role:d.shape, rar:d.rarity||'common', cn:d.cn, stars:o?1:0}; });
+  const own = all.filter(e=>e.owned).sort((a,b)=>RAR_RANK[b.rar]-RAR_RANK[a.rar]), mons = all.filter(e=>!e.owned);
   ROSTER = [...own, ...mons];
+  if(MT.sel && !ROSTER.some(e=>e.key===MT.sel)) MT.sel=null;
   if(!MT.sel) MT.sel = ROSTER[0].key;
   return ROSTER;
 }
 const entry = k => roster().find(e=>e.key===k);
 const filtered = () => roster().filter(e=>(MT.fEl==='all'||e.el===MT.fEl) && (MT.fRole==='all'||e.role===MT.fRole));
 const shardHave = k => (typeof OWNED!=='undefined' && OWNED[k]) || 0;
+const petVis = k => PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k]||ENEMY_MON[k],'Idle');   // 65 版：没召唤的宠物也用它自己的样子（原来未获得的一律当怪物）
+const canSummon = k => !!DATA.pets[k] && !PROFILE.owned[k] && shardHave(k) >= RAR[DATA.pets[k].rarity||'common'].need;
+// 召唤：碎片够了点一下，变成自己的宠物
+function summonPet(k){
+  if(!canSummon(k)) return false;
+  OWNED[k] -= RAR[DATA.pets[k].rarity||'common'].need; try{ localStorage.setItem('tata_shards', JSON.stringify(OWNED)); }catch(e){}
+  PROFILE.owned[k]=1; profileSave();
+  ROSTER=null; delete CARDPORT[k]; delete MT.charV[k]; MT.sel=k; MT.guide=null; MT.summonT=performance.now();
+  { const lay=MT.lay, ch=lay&&lay.char; COMBO.play('召唤', {x:ch?ch.x+ch.w/2:W/2, y:ch?ch.y+ch.h*0.55:H*0.3}, {scale:3}); }   // 光柱 + 上扬音（效果组合「召唤」）
+  toast('召唤了'+DATA.pets[k].cn);
+  return true;
+}
 
 // ---------- 布局：竖屏上下、横屏左右（按当前方向算，不写死） ----------
 // 53 版（用户 2026-11-13：「底部按钮和白色区域整体再减低15%，图标调整accordingly」）：竖屏底栏底板、按钮高度、按钮高出底栏的量、底边留白、选中抬高都 × NAV_K；
@@ -314,7 +327,7 @@ function octBadge(pal, cx, cy, s){
 }
 const SIL = {};   // 未获得：剪影（颜色跟稀有度走，照 Fantasy Hero 卡片里的剪影）
 function silOf(key, col){
-  const k=key+col; if(SIL[k]) return SIL[k]; const src=MONPORT[key]; if(!src) return null;
+  const k=key+col; if(SIL[k]) return SIL[k]; const src=MONPORT[key]||PORTRAIT[key]; if(!src) return null;
   const c=document.createElement('canvas'); c.width=src.width; c.height=src.height; const g=c.getContext('2d');
   g.drawImage(src,0,0); g.globalCompositeOperation='source-in'; g.fillStyle=col; g.fillRect(0,0,c.width,c.height);
   return SIL[k]=c;
@@ -325,8 +338,8 @@ function cardPortrait(e){
   const k=e.key; if(CARDPORT[k]) return CARDPORT[k];
   const N=384, c=document.createElement('canvas'); c.width=c.height=N; const g=c.getContext('2d');
   let v, s, h;
-  if(e.owned && PET_SPINE[k]){ v=newSpine(PET_SPINE[k]); v.st.update(0.3); v.st.apply(v.sk); s=Math.min(300/v.sd.h, 336/v.sd.w); h=v.sd.h*s; }
-  else { const nm=e.owned?PET_MON[k]:ENEMY_MON[k]; v=newMon(nm,'Idle'); v.m.update(0.2); const b=MONB[nm]; s=Math.min(300/b.h, 336/b.w); h=b.h*s; }
+  if(PET_SPINE[k]){ v=newSpine(PET_SPINE[k]); v.st.update(0.3); v.st.apply(v.sk); s=Math.min(300/v.sd.h, 336/v.sd.w); h=v.sd.h*s; }
+  else { const nm=PET_MON[k]||ENEMY_MON[k]; v=newMon(nm,'Idle'); v.m.update(0.2); const b=MONB[nm]; s=Math.min(300/b.h, 336/b.w); h=b.h*s; }
   const r=renderChar(v, s, v.kind==='mon', {S:1, cs:360, hpx:h});
   g.drawImage(r.cv, 0,0,r.bw,r.bh, N/2-r.px, N*0.875-r.py, r.bw, r.bh);
   if(!e.owned){ g.globalCompositeOperation='source-in'; g.fillStyle=(isAFK()&&TH.locked?TH.locked:MT_PAL[e.rar]).cardSil; g.fillRect(0,0,N,N); }   // 26 版：启程配色下未解锁剪影统一灰
@@ -339,7 +352,7 @@ const portraitOf = e => e.owned ? PORTRAIT[e.key] : silOf(e.key, MT_PAL[e.rar].s
 // ---------- 大角色（只有角色区这一只播动画） ----------
 function charInst(e){
   if(MT.charV[e.key]) return MT.charV[e.key];
-  const v = e.owned ? (PET_SPINE[e.key] ? newSpine(PET_SPINE[e.key]) : newMon(PET_MON[e.key],'Idle')) : newMon(ENEMY_MON[e.key],'Idle');
+  const v = petVis(e.key);
   return MT.charV[e.key]=v;
 }
 const SILC = document.createElement('canvas');
@@ -1039,8 +1052,9 @@ function drawActionBar(e, x, y, w, live){
       if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ emit('deny'); toast('暂未开放'); }); });
   } else {
     const have=shardHave(e.key), need=RAR[e.rar].need, ok2=have>=need, bw=Math.min(240, w-pad*2), bx=x+w/2-bw/2;
-    heroButton(ok2, bx, by, bw, bh, '召唤');
-    if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ emit('deny'); toast(ok2?'暂未开放':`还差 ${need-have} 个碎片`); });
+    const pu = ok2 ? 1+0.03*Math.sin(performance.now()/180) : 1;   // 碎片够了：按钮轻轻跳，提示可以点
+    ctx.save(); ctx.translate(bx+bw/2, by+bh/2); ctx.scale(pu,pu); heroButton(ok2, -bw/2, -bh/2, bw, bh, '召唤'); ctx.restore();
+    if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ if(ok2) summonPet(e.key); else { emit('deny'); toast(`还差 ${need-have} 个碎片`); } });
   }
   ctx.fillStyle=TH.sep; ctx.fillRect(x+pad, y+AB-1, w-pad*2, 1);
 }
@@ -1078,7 +1092,7 @@ function drawDetail(e, view){
     hpBar(x+pad+90+(w-pad*2-110)/2, y+38, w-pad*2-110, have/need, have>=need?'yellow':'blue', 18);
     text(`${have}/${need}`, x+pad+90+(w-pad*2-110)/2, y+47, 12, '#fff');
     y+=98;
-    const lines=wrapCN('击败它有几率掉落碎片，打碎宝石桶也能获得。集齐后可以召唤成宠物。', w-pad*2, 13);
+    const lines=wrapCN(have>=need ? '碎片已集齐。点「召唤」，它就能上场。' : `集齐 ${need} 个碎片后可以召唤。`, w-pad*2, 13);
     lines.forEach((l,i)=>text(l, x+pad, y+8+i*19, 13, MT_UI.txt2, 'left', 800, false)); y+=lines.length*19+18;
   }
   MT.dmax=Math.max(0, (y-y0)+8-view.h);
@@ -1091,8 +1105,18 @@ function exitDetail(){ MT.detail=false; MT.sv=0; emit('ui'); }
 function stepPet(d){ let list=filtered().filter(e=>e.owned); if(!list.some(e=>e.key===MT.sel)) list=roster().filter(e=>e.owned);   // 30 版：左右切换只在已获得的之间
   const i=list.findIndex(e=>e.key===MT.sel); MT.prevSel=MT.sel; MT.selT0=performance.now(); MT.stepDir=d; MT.sel=list[(i+d+list.length)%list.length].key; MT.swapT=0.3; MT.ds=0; emit('ui'); }
 function mtToggleBg(){ MT.bgMode = MT.bgMode==='grad'?'scene':'grad'; try{ localStorage.setItem('tata_petbg29', MT.bgMode); }catch(e){} emit('ui'); }
-function startBattle(){ if(!BATTLE_READY){ BATTLE_WAIT=true; BATTLE_WAIT_TAB=MT.tab; emit('ui'); return; }   // 55 版：战斗特效还在后台加载 → 先显示进度，加载完自动开始（render.js loadLater）
+let BATTLE_ID = '1-1';
+function goSummon(k){ MT.tab='pets'; ROSTER=null; roster(); MT.sel=k; MT.guide=k; enterDetail(); }
+function startBattle(id){ if(id) BATTLE_ID=id;
+  if(!(window.LEVELS||{})[BATTLE_ID]){ emit('deny'); toast('暂未开放'); return; }
+  { const k=PET_ORDER.find(canSummon); if(k){ goSummon(k); toast(DATA.pets[k].cn+'的碎片已集齐，先召唤它'); return; } }   // 有宠物可以召唤：先去召唤，下一关要用
+  if(L.kind==='landscape'){ orientMode='portrait'; resize(); }   // 战斗的横屏界面还没做（进去会报错停住，64 版就有）：进战斗先回竖屏
+  if(!BATTLE_READY){ BATTLE_WAIT=true; BATTLE_WAIT_TAB=MT.tab; emit('ui'); return; }   // 55 版：战斗特效还在后台加载 → 先显示进度，加载完自动开始（render.js loadLater）
+  setLevel(BATTLE_ID); if(window.CHAPTER_MAP) CHAPTER_MAP.S.playing=BATTLE_ID;
   MT.inBattle=true; newGame(); G.started=true; emit('start'); }
+// 结算后离开战斗：这关给的碎片够召唤 → 直接到宠物页那只宠物的详情；否则回地图
+function leaveBattle(){ const k=G.over && G.over.win && G.over.summon; MT.inBattle=false; MT.tab='battle'; MT.drag=null; MT.hits.length=0; if(COMBO._LIVE) COMBO._LIVE.length=0;   // 上一次局外画面留下的点击区域、拖动状态清掉，免得这一下松手点到别处
+  if(k && canSummon(k)) goSummon(k); emit('ui'); }
 
 // ---------- 其他两个页面（下一步做；先放可进战斗的入口） ----------
 function drawBattleEntry(lay){
@@ -1237,13 +1261,21 @@ function drawMeta(){
 // 战斗结算加一个「返回」（回到战斗页）
 function backRect(){ const b=resultButton(); return {x:b.x, y:b.y+b.h+14, w:b.w, h:54}; }
 const _drawBattle = draw;
+let FIRST_RUN = true;   // 1-1 还没通关 = 新玩家：每次打开都直接进 1-1（中途刷新、关掉重开也一样），通关后才从营地开始
+// 测试用：网址加 ?skip=3（或控制台 TATA.skip(3)）= 前 3 关算已通关，对应的宠物、机制直接给；?reset=1 = 清空进度从 1-1 重来
+function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(0,n); CHAPTER_MAP.preset(n);
+  PROFILE={owned:{flower:1, goldfish:1}, unlock:{}}; for(const id of ids){ const rw=(LEVELS[id]||{}).reward; if(!rw) continue; if(rw.shard && DATA.pets[rw.shard[0]]) PROFILE.owned[rw.shard[0]]=1; if(rw.unlock) PROFILE.unlock[rw.unlock]=1; }
+  profileSave(); ROSTER=null; FIRST_RUN=false; MT.tab='battle'; }
+{ const q=/[?&]skip=(\d+)/.exec(location.search); if(q) document.addEventListener('DOMContentLoaded', ()=>cheatSkip(+q[1])); }
 draw = function(){
+  if(FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; if(!levelCleared('1-1')){ MT.tab='battle'; startBattle('1-1'); } }   // 65 版：第一次打开直接进 1-1，不进营地
   if(!MT.inBattle){ drawMeta();
+    if(MT.tab==='pets'){ const now=performance.now(), cdt=Math.min(0.05,(now-(MT.fxT||now))/1000); MT.fxT=now; COMBO.draw(cdt,'world'); } else MT.fxT=0;   // 65 版：宠物页上的召唤特效
     if(BATTLE_WAIT && MT.tab!==BATTLE_WAIT_TAB) BATTLE_WAIT=false;   // 换页签 = 取消等待
     if(BATTLE_WAIT){ ctx.save(); ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H); text('加载战斗素材… '+BATTLE_N[0]+'/'+BATTLE_N[1],W/2,H/2,18,'#fff'); ctx.restore(); }
     return; }
   _drawBattle();
-  if(G.over && READY){ const b=backRect(); ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip(); bigButton('Blue', b.x, b.y, b.w, b.h, '返回'); ctx.restore(); }
+  if(G.over && READY){ const b=backRect(); ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip(); bigButton('Blue', b.x, b.y, b.w, b.h, G.over.win?'再打一次':'返回'); ctx.restore(); }
 };
 const _updateBattle = update;
 update = function(dt){ if(MT.inBattle) _updateBattle(dt); };
@@ -1276,7 +1308,7 @@ function mtPP(d, dy){   // 网格状态下的上下拖：面板位置 + 详情�
 }
 window.addEventListener('pointerdown', e=>{
   if(!READY) return; const x=PX(e), y=PY(e);
-  if(MT.inBattle){ if(G.over && inR(backRect(),x,y)){ MT.inBattle=false; MT.tab='battle'; emit('ui'); e.stopImmediatePropagation(); } return; }
+  if(MT.inBattle){ const lr=G.over && resultLeaveRect(); if(lr && (G.overT||0)>0.6 && inR(lr,x,y)){ leaveBattle(); e.stopImmediatePropagation(); } return; }
   e.stopImmediatePropagation();
   MT.press={x, y, up:0};   // 37 版：按钮按下下沉
   // 32 版：营地页（除了底栏、横竖屏按钮）交给 camp.js：拖食物喂宠物、点宠物

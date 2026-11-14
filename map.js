@@ -163,7 +163,7 @@ const CHAPTER_MAP = (()=>{
   }
 
   // ---------- 宠物：出战页选中的那只（营地、宠物页同一套 Spine） ----------
-  function petKey(){ try{ const e=roster().find(q=>q.key===MT.sel && q.owned); if(e) return e.key; }catch(e){} return 'pug'; }
+  function petKey(){ try{ const e=roster().find(q=>q.key===MT.sel && q.owned); if(e) return e.key; }catch(e){} return 'goldfish'; }   // 65 版：兜底用一定有的泡泡鱼（火牙犬可能还没召唤）
   function ensurePet(){
     const k=petKey(); if(S.pet && S.petKey===k) return S.pet;
     S.petKey=k; S.pet = PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k],'Idle'); S.petAnim=null; return S.pet; }
@@ -319,7 +319,7 @@ const CHAPTER_MAP = (()=>{
     if(l.unlock) chip(`通关解锁：${l.unlock}`);
     // 第三行：奖励 + 开始按钮
     const rw = done ? l.again : l.first;
-    text(done?'再次通关':'首次通关', x+18*u, y+(102-cut)*u, 12*u, MT_UI.sub, 'left', 800, false);
+    if((rw||[]).length) text(done?'再次通关':'首次通关', x+18*u, y+(102-cut)*u, 12*u, MT_UI.sub, 'left', 800, false);
     (rw||[]).forEach((r,i)=>rewardIcon(r, x+(40+i*62)*u, y+(142-cut)*u, 42*u));
     const bw=132*u, bh=54*u, bx=x+w-bw-14*u, by=y+h-bh-16*u;
     heroButton(true, bx, by, bw, bh, '开始战斗');
@@ -375,7 +375,7 @@ const CHAPTER_MAP = (()=>{
     if(typeof HOOKS!=='undefined') HOOKS.push(type=>{ if(type==='win' && S.playing) markCleared(S.playing); });
   });
 
-  const API = { draw, markCleared, reset, preset, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(); },
+  const API = { draw, markCleared, reset, preset, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
     get progress(){ return JSON.parse(JSON.stringify(P)); }, S };
   return API;
 })();

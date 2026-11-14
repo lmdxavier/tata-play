@@ -97,6 +97,22 @@ const SCENE = (()=>{
         }
       }
     }
+    // 65 版：1 路 / 3 路关卡 —— 没开放的路不铺格子，摆满树、灌木、石头、蘑菇，像路两边的树林（参照塔塔冒险队 3 条线的战场）
+    //   贴着开放的路的那一列：实心部分最多伸进去 0.06 格，不挡住格子；越靠外越暗
+    { const on=l=>laneOn(l), lo=Math.min(...DATA.level.lanes), hi=Math.max(...DATA.level.lanes), ax0=ox+lo*cs, ax1=ox+(hi+1)*cs;
+      const CYC=[['mid',1.0],['bush',0.95],['small',1.05],['leaf',0.95],['pine',0.9],['bush',1.0],['mid',0.9],['stone',0.8],['small',1.0],['shroom',0.7],['big',0.72],['leaf',1.0]];
+      for(let l=0;l<LANES;l++){ if(on(l)) continue;
+        const cx=ox+(l+0.5)*cs, dist=l<lo?lo-l:l-hi, tone=dist>1?0.9:1; let y=oy+(0.55+0.3*(l%2))*cs, i=l*5;
+        while(y<by-0.05*cs){
+          const [set,sc]=CYC[i%CYC.length], n=pick(set), big=/big|mid|pine|small/.test(set);
+          const s2=Math.min(sc, fit(n, cs*(big?1.05:0.8)));
+          const q=add(n, cx+(R()-0.5)*0.3*cs, y, {s:s2, tone});
+          if(q){ const [sa,sb]=solid(q); if(l<lo && sb>ax0+0.06*cs) q.x-=sb-(ax0+0.06*cs); if(l>hi && sa<ax1-0.06*cs) q.x+=(ax1-0.06*cs)-sa; }
+          if(R()<0.6) flowerPatch(cx+(R()-0.5)*0.6*cs, y+0.2*cs, 2+Math.floor(R()*3));
+          y+=(big?0.78:0.5)*cs+R()*0.16*cs; i++;
+        }
+      }
+    }
     // 石像、木桶、蘑菇：完整露出，摆在两棵树之间的前面
     const side1=(n,side,c,f)=>addSide(n,side,oy+c*cs,{lim:0.1,s:fit(n,(m+0.1*cs)*f,1.0),flip:side>0});
     side1('Mushroom_Wihte_03',-1,2.75,0.7); side1('Mushroom_Pink_02',1,5.1,0.7);
@@ -119,7 +135,8 @@ const SCENE = (()=>{
   /* ---------- 静态底图：地面、树林深处、棋盘、草边、地面点缀 ---------- */
   function rr(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
   function buildStatic(cells){
-    const cs=L.cs, ox=L.ox, oy=L.oy, bw=LANES*cs, bh=COLS*cs, by=oy+bh;
+    const cs=L.cs, oy=L.oy, bh=COLS*cs, by=oy+bh;
+    const LN=DATA.level.lanes, ox=L.ox+Math.min(...LN)*cs, bw=(Math.max(...LN)-Math.min(...LN)+1)*cs;   // 65 版：棋盘 = 开放的那几路（中间连着的一块）
     const c=document.createElement('canvas'); c.width=Math.round(W*DPR); c.height=Math.round(H*DPR); const g=c.getContext('2d');
     g.setTransform(DPR,0,0,DPR,0,0); g.imageSmoothingQuality='high';
     const xmin=0, span=W, R=rng(42);
@@ -136,7 +153,7 @@ const SCENE = (()=>{
     g.save(); g.shadowColor='rgba(30,55,25,.45)'; g.shadowBlur=0.25*cs*DPR; g.fillStyle='rgb(140,185,98)'; rr(g,ox,oy,bw,bh,0.1*cs); g.fill(); g.restore();
     const special=new Map((cells||[]).map(c=>[c.lane+','+c.col,c.type]));
     g.save(); rr(g,ox,oy,bw,bh,0.1*cs); g.clip();
-    for(let l=0;l<LANES;l++) for(let c2=0;c2<COLS;c2++){
+    for(let l=0;l<LANES;l++) for(let c2=0;c2<COLS;c2++){ if(!laneOn(l)){ R(); for(let k=0;k<2;k++){ R();R();R();R();R(); } continue; }
       const r=L.cellRect(l,c2), dark=(l+c2)%2===1;
       const base=dark?[132,178,92]:[149,193,104], j=(R()-0.5)*3;
       const gr=g.createLinearGradient(0,r.y,0,r.y+cs); gr.addColorStop(0,rgb(base.map(v=>v+4+j))); gr.addColorStop(1,rgb(base.map(v=>v-4+j)));
@@ -204,7 +221,7 @@ const SCENE = (()=>{
 
   return {
     load, THEMES:['forest'], get theme(){ return 'forest'; }, setTheme(){},
-    ensure(cells){ const key=[W,H,DPR,L.cs].join('|'); if(key!==KEY){ KEY=key; layout(); } if(!STATIC) buildStatic(cells); },
+    ensure(cells){ const key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join('')].join('|'); if(key!==KEY){ KEY=key; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
     drawGround(ctx){ ctx.drawImage(STATIC,0,0,W,H); },
     props(){ return PROPS; }, drawProp, drawFx,
   };

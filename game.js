@@ -23,31 +23,59 @@ const BEATS = {fire:'grass', grass:'water', water:'fire', light:'dark', dark:'li
 
 const DATA = {
   pets: {
-    flower:  {cn:'彩虹花', desc:'每 14 秒产出 25 能量。种在花丛格上产量 +20%。', rarity:'common', name:'Flower',  short:'花', el:'grass', shape:'producer', cost:50,  cd:5,  hp:300,  prod:25, prodInt:14, windup:0.17},
-    goldfish:{cn:'鱼缸金鱼', desc:'向本路正前方吐水弹，打中第一个敌人。水系连成 3 只时，水弹附带减速。', rarity:'common', name:'Goldfish',short:'鱼', el:'water', shape:'shooter',  cost:100, cd:5,  hp:300,  dmg:20, int:1.4, projSpeed:6, windup:0.17},
-    pug:     {cn:'巴哥', desc:'咬前方 1 格内的所有敌人。火系连成 3 只时，攻击附带灼烧。', rarity:'common', name:'Pug',     short:'巴哥',el:'fire', shape:'melee',    cost:75,  cd:5,  hp:450,  dmg:40, int:1.0, reach:1, windup:0.36}   /* 出手 = Attack 动画里身体顶到最高点（0.367s），不是 Spine 自带的 0.167s 事件（那是蓄力开始） */,
-    pumpkin: {cn:'南瓜墙', desc:'血量很厚，挡住敌人前进，给后排争取时间。', rarity:'common', name:'Pumpkin', short:'南瓜',el:'grass', shape:'wall',    cost:50,  cd:20, hp:2000, windup:0.17},
-    bomb:    {cn:'炸弹', desc:'放下 3 秒后装填完毕。敌人踩上去时爆炸，伤害周围 3×3 格。', rarity:'rare', name:'Bomb',    short:'雷', el:'fire',  shape:'mine',     cost:125, cd:30, hp:1,    dmg:600, arm:3, windup:0.17},
-    lizard:  {cn:'火蜥蜴', desc:'朝前方 2 格喷火，命中的敌人持续灼烧。由怪物收服而来。', rarity:'rare', name:'Lizard_Fire',short:'火蜥',el:'fire',shape:'melee',  cost:150, cd:8,  hp:400,  dmg:30, int:1.5, reach:2, burn:{dps:6, t:3}, windup:0.28, monster:true},
+    flower:  {cn:'聚能花', desc:'每 14 秒产出 25 能量。放在花丛格上产量 +20%。', rarity:'common', name:'Flower',  short:'花', el:'grass', shape:'producer', cost:50,  cd:5,  hp:300,  prod:25, prodInt:14, windup:0.17},
+    goldfish:{cn:'泡泡鱼', desc:'向本路前方吐水弹，命中第一个敌人。水系连成 3 只时，水弹让敌人减速 15%，持续 2 秒。', rarity:'common', name:'Goldfish',short:'鱼', el:'water', shape:'shooter',  cost:100, cd:5,  hp:300,  dmg:20, int:1.4, projSpeed:6, windup:0.17},
+    pug:     {cn:'火牙犬', desc:'咬前方 1 格内的所有敌人。火系连成 3 只时，攻击附带灼烧：每秒 4 点，持续 3 秒。', rarity:'common', name:'Pug',     short:'巴哥',el:'fire', shape:'melee',    cost:75,  cd:5,  hp:450,  dmg:40, int:1.0, reach:1, windup:0.36}   /* 出手 = Attack 动画里身体顶到最高点（0.367s），不是 Spine 自带的 0.167s 事件（那是蓄力开始） */,
+    pumpkin: {cn:'硬壳南瓜', desc:'生命 2000，不攻击。挡住敌人，让后排继续输出。', rarity:'common', name:'Pumpkin', short:'南瓜',el:'grass', shape:'wall',    cost:50,  cd:20, hp:2000, windup:0.17},
+    bomb:    {cn:'波姆', desc:'放下 3 秒后就绪。敌人走到它面前时爆炸，对周围 3×3 格造成 600 伤害。', rarity:'rare', name:'Bomb',    short:'雷', el:'fire',  shape:'mine',     cost:125, cd:30, hp:1,    dmg:600, arm:3, windup:0.17},
+    lizard:  {cn:'喷火蜥', desc:'朝前方 2 格喷火，命中的敌人灼烧：每秒 6 点，持续 3 秒。', rarity:'rare', name:'Lizard_Fire',short:'火蜥',el:'fire',shape:'melee',  cost:150, cd:8,  hp:400,  dmg:30, int:1.5, reach:2, burn:{dps:6, t:3}, windup:0.28, monster:true},
   },
   enemies: {
-    slime:  {cn:'绿史莱姆', desc:'普通步兵，慢慢走过来，啃咬挡路的宠物。', name:'Slime_Green', short:'史', el:'grass', hp:200,  speed:0.25, atk:10, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.1},
-    beetle: {cn:'红甲虫', desc:'火系步兵，比史莱姆耐打。被水系克制。', name:'Beetle_Red',  short:'甲', el:'fire',  hp:280,  speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.15},
-    snail:  {cn:'绿蜗牛', desc:'很慢但血很厚，会把火力拖住。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0.07, r:0.34, windup:0.13},
-    fox:    {cn:'狐狸', desc:'跑得很快、血少，容易突然冲到家门口。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.07, r:0.28, windup:0.09},
-    bear:   {cn:'棕熊 · 精英', desc:'血量巨大、咬人很疼。用炸弹或集中火力对付。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:2600, speed:0.15, atk:40, atkInt:1.5, role:'elite', drop:0.21, r:0.44, windup:0.47},
+    slime:  {cn:'绿莱姆', desc:'移动 0.25 格 / 秒，生命 200。咬挡路的宠物。', name:'Slime_Green', short:'史', el:'grass', hp:200,  speed:0.25, atk:10, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.1},
+    beetle: {cn:'赤甲虫', desc:'火系，生命 280。水系攻击对它伤害 +50%。', name:'Beetle_Red',  short:'甲', el:'fire',  hp:280,  speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.15},
+    snail:  {cn:'厚壳蜗', desc:'移动 0.15 格 / 秒，生命 800。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0.07, r:0.34, windup:0.13},
+    fox:    {cn:'迅火狐', desc:'移动 0.5 格 / 秒，是绿莱姆的 2 倍。生命 170。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.07, r:0.28, windup:0.09},
+    hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
+    hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 110，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:110, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
+    bear:   {cn:'格鲁姆', desc:'生命 2600，每次攻击 40 伤害。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:2600, speed:0.15, atk:40, atkInt:1.5, role:'elite', drop:0.21, r:0.44, windup:0.47},
   },
   level: {
     id:'1-5', title:'花田保卫战', loadout:['flower','goldfish','pug','pumpkin','bomb','lizard'],
     startEnergy:75, skyDrop:{every:12, value:25, firstAt:6},
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:2,col:6,type:'crate',kind:'barrel'}, {lane:4,col:5,type:'crate',kind:'box'} ],
     duration:240,
-    firstClear:{enemy:'beetle', shards:5},
   },
 };
+// ---------- 65 版：关卡按 id 读取（数据在 levels.js），宠物拥有 / 机制解锁存档 ----------
+const PET_ORDER = ['flower','goldfish','pug','pumpkin','bomb','lizard'];
+const PET_NEED = {common:10, rare:15, epic:25, legend:40};   // 召唤一只宠物要的碎片（和 render.js 的 RAR.need 一致）
+let PROFILE = {owned:{flower:1, goldfish:1}, unlock:{}};
+const PROFILE_KEY = 'tata_profile';
+let PROFILE_NEW = false;   // 这台设备第一次打开（没有存档）：直接进 1-1
+(function(){ let p=null; try{ if(/[?&]reset=1\b/.test(location.search)){ for(const k of [PROFILE_KEY,'tata_map','tata_shards']) localStorage.removeItem(k);
+      history.replaceState(null, '', location.pathname+location.search.replace(/([?&])reset=1&?/,'$1').replace(/[?&]$/,'')); }   // 清完把参数从网址里去掉，免得每次刷新都再清一次
+    p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); }catch(e){}
+  if(p && p.owned){ PROFILE=p; PROFILE.unlock=PROFILE.unlock||{}; PROFILE.owned.flower=1; PROFILE.owned.goldfish=1; }
+  else { PROFILE_NEW=true;   // 65 版关卡内容全换了：旧的地图进度、旧的怪物碎片不再对应，一起清掉
+    try{ localStorage.removeItem('tata_map'); localStorage.removeItem('tata_shards'); localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE)); }catch(e){} } })();
+function profileSave(){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE)); }catch(e){} }
+const swapMax = () => PROFILE.unlock.swap3 ? 3 : PROFILE.unlock.swap ? 2 : 0;
+const laneOn = l => DATA.level.lanes.includes(l);
+const levelCleared = id => { try{ return !!(window.CHAPTER_MAP && CHAPTER_MAP.progress.cleared[id]); }catch(e){ return false; } };
+function setLevel(id){
+  const lv = (window.LEVELS||{})[id]; if(!lv) return false;
+  const owned = PET_ORDER.filter(k=>PROFILE.owned[k]);
+  DATA.level = { id, title:lv.title, lanes:lv.lanes.slice(), loadout:owned.slice(0,6), startEnergy:lv.startEnergy, skyDrop:lv.skyDrop, cells:lv.cells||[], duration:lv.duration,
+    spawns:lv.spawns, reward:lv.reward||null, tut:lv.tut||null, boxShard:lv.boxShard||null, first:!levelCleared(id) };
+  EVENTS = lv.events||[]; WAVE_MARKS = lv.marks||[];
+  if(L) L = makeLayout(L.kind);
+  return true;
+}
+DATA.level.lanes=[0,1,2,3,4];
 
 // ---------- 波次（由设计表生成）----------
 function buildSpawns(){
+  if(DATA.level.spawns) return DATA.level.spawns.map(([t,type,lane])=>({t,type,lane})).sort((a,b)=>a.t-b.t);
   const s = [];
   const add=(t,type,lane)=>s.push({t,type,lane});
   // 第 1 波 0:20–1:10：6 史莱姆，lane 2→1→3 轮流，间隔 8 秒
@@ -65,12 +93,12 @@ function buildSpawns(){
   mix.forEach((ty,i)=>add(197+i*2.2,ty,[0,4,1,3,2,0,4,1,3,0,4,2,1,3,0,4,2,1][i]));
   return s.sort((a,b)=>a.t-b.t);
 }
-const EVENTS = [
+let EVENTS = [
   {t:60,  kind:'preview', lanes:[0,4], until:90, text:'预告：下一波从最左、最右两路进攻'},
-  {t:125, kind:'preview', lanes:[1,3], until:165, text:'预告：快跑的狐狸要冲第 2、第 4 路'},
-  {t:180, kind:'banner',  text:'一大波怪物来了！', until:186},
+  {t:125, kind:'preview', lanes:[1,3], until:165, text:'预告：迅火狐走第 2、第 4 路'},
+  {t:180, kind:'banner',  text:'一大波敌人正在接近', until:186},
 ];
-const WAVE_MARKS = [20,70,130,195];
+let WAVE_MARKS = [20,70,130,195];
 const SHAPE_CN = {producer:'生产', shooter:'远程 · 直射', melee:'近战', wall:'坦克', mine:'地雷'};
 // 可破坏的场景道具（10 版）：挡住敌我双方的攻击；怪物要先咬破才能前进；我方打破才给奖励，怪物打破什么都不给
 const PROPS = {
@@ -214,9 +242,9 @@ function newGame(){
     cooldown: Object.fromEntries(DATA.level.loadout.map(k=>[k,0])),
     spawns: buildSpawns(), spawnIdx:0,
     nextSky: DATA.level.skyDrop.firstAt,
-    bells: Array(LANES).fill(true),
+    bells: Array.from({length:LANES}, (_,l)=>laneOn(l)),
     bellsUsed: 0,
-    swaps: 3, swapRegen: 0,
+    swaps: swapMax(), swapCap: swapMax(), swapRegen: 0,   // swapCap：这一局的换位上限（进关时定；通关当场解锁的下一局才生效）
     selected: null,       // 卡 key 或 'shovel'
     drag: null,
     groups: [], links: [],
@@ -225,6 +253,7 @@ function newGame(){
     shards: {}, pity: {},
     stats: {placed:0, moved:0},
     started: false,
+    tut: (DATA.level.tut && DATA.level.first) ? {steps:DATA.level.tut.map(s=>({...s})), i:0, cur:null, t:0, gap:0} : null,
   };
   recalcResonance();
 }
@@ -243,7 +272,7 @@ function damageProp(c, dmg, byPet){
   c.marked=false;
   if(byPet){ const P=PROPS[c.kind];
     if(P.energy) G.orbs.push({lane:c.lane,p:c.col+0.5,value:P.energy,life:0,fall:0,pop:0.3});
-    if(P.shards){ const ks=[...new Set(G.spawns.map(s=>s.type))], k=ks[Math.floor(Math.random()*ks.length)];
+    if(P.shards && DATA.level.boxShard){ const k=DATA.level.boxShard;
       G.shards[k]=(G.shards[k]||0)+P.shards; emit('propShard',{c,key:k,n:P.shards}); } }
   G.fx.push({kind:'pop',lane:c.lane,p:c.col+0.5,t:0,life:0.4,color:'#b07a45'}); recalcResonance();
 }
@@ -295,7 +324,8 @@ function atkMul(pet){
 
 // ---------- 放置 / 移动 / 铲除 ----------
 function canPlaceAt(lane,col){
-  if(!inGrid(lane,col)) return false;
+  if(!inGrid(lane,col) || !laneOn(lane)) return false;
+  const ts=tutCur(); if(ts && !(ts.kind==='place' && ts.L===lane && ts.C===col)) return false;   // 教学中：只能放在指定格
   if(petAt(lane,col)) return false;
   const c=cellAt(lane,col); if(c && c.type==='crate' && c.hpNow>0) return false;
   return true;
@@ -303,6 +333,7 @@ function canPlaceAt(lane,col){
 function placePet(key,lane,col){
   const def = DATA.pets[key];
   if(G.energy<def.cost || G.cooldown[key]>0 || !canPlaceAt(lane,col)) return false;
+  { const ts=tutCur(); if(ts && ts.key!==key) return false; }
   G.energy -= def.cost; G.cooldown[key] = def.cd;
   const pet={key, def, lane, col, hp:def.hp, maxHp:def.hp, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
                stun:0, armT: def.arm||0, flash:0, move:null};
@@ -312,7 +343,8 @@ function placePet(key,lane,col){
   return true;
 }
 function movePet(pet,lane,col){
-  if(G.swaps<1 || !inGrid(lane,col) || (pet.lane===lane&&pet.col===col)) return false;
+  if(G.swaps<1 || !inGrid(lane,col) || !laneOn(lane) || (pet.lane===lane&&pet.col===col)) return false;
+  { const ts=tutCur(); if(ts && !(ts.kind==='move' && ts.pet===pet && ts.L===lane && ts.C===col)) return false; }
   const c=cellAt(lane,col); if(c && c.type==='crate' && c.hpNow>0) return false;
   const other = petAt(lane,col);
   const go=(p,l,cc)=>{ p.move={fl:p.lane,fc:p.col,t:0}; p.lane=l; p.col=cc; p.stun=Math.max(p.stun,1.5); };
@@ -352,7 +384,7 @@ function killEnemy(e, silent){
     const n = G.enemies.filter(o=>!o.dead&&Math.abs(o.lane-e.lane)<=1&&Math.abs(o.p-e.p)<1.2)[0];
     if(n) n.burn={dps:e.burn.dps,t:3};
   }
-  if(silent) return;
+  if(silent || !e.def.drop || !DATA.pets[e.key]) return;   // 65 版：只有能收服成宠物的怪才掉碎片
   // 碎片掉落：看本关角色（drop），带保底 N = 2/p
   const k=e.key, p=e.def.drop, N=Math.round(2/p);
   G.pity[k]=(G.pity[k]||0)+1;
@@ -386,14 +418,21 @@ function petRelease(pet){
 // ---------- 更新 ----------
 function update(dt){
   if(G.over) { G.fx.forEach(f=>f.t+=dt); return; }
+  tutUpdate(dt);
+  if(tutCur()){   // 教学步骤进行中：战斗停住（不是暂停界面），只有能量球和提示在动，等玩家做完
+    for(const o of G.orbs){ o.life=Math.min(o.life+dt, 3); if(o.fall>0) o.fall=Math.max(0,o.fall-dt); if(o.pop) o.pop=Math.max(0,o.pop-dt); }
+    G.orbs=G.orbs.filter(o=>!o.got);
+    for(const pet of G.pets){ if(pet.move){ pet.move.t+=dt; if(pet.move.t>=0.4) pet.move=null; } pet.flash=Math.max(0,pet.flash-dt); }
+    for(const f of G.fx) f.t+=dt;  G.fx=G.fx.filter(f=>f.t<f.life);
+    return; }
   G.t += dt;
   // 冷却与换阵次数
   for(const k in G.cooldown) G.cooldown[k]=Math.max(0,G.cooldown[k]-dt);
-  if(G.swaps<3){ G.swapRegen+=dt; if(G.swapRegen>=20){ G.swapRegen=0; G.swaps++; } } else G.swapRegen=0;
+  if(G.swaps<G.swapCap){ G.swapRegen+=dt; if(G.swapRegen>=20){ G.swapRegen=0; G.swaps++; } } else G.swapRegen=0;
   // 天降能量
   if(G.t>=G.nextSky){
     G.nextSky += DATA.level.skyDrop.every;
-    G.orbs.push({lane:Math.floor(Math.random()*LANES), p:1+Math.random()*6, value:DATA.level.skyDrop.value, life:0, fall:1}); emit('sky');
+    G.orbs.push({lane:DATA.level.lanes[Math.floor(Math.random()*DATA.level.lanes.length)], p:1+Math.random()*6, value:DATA.level.skyDrop.value, life:0, fall:1}); emit('sky');
   }
   // 刷怪
   while(G.spawnIdx<G.spawns.length && G.spawns[G.spawnIdx].t<=G.t){
@@ -462,7 +501,8 @@ function update(dt){
       if(e.burnTick>=0.5 && e.burnAcc>=1){ emit('burnTick',{e,dmg:e.burnAcc}); e.burnTick=0; e.burnAcc=0; }
       if(e.burn.t<=0){ e.burn=null; e.burnTick=0; } if(e.hp<=0){ killEnemy(e); continue; } }
     if(e.slow>0) e.slow-=dt;
-    const spd = e.def.speed*(e.slow>0?0.85:1);
+    if(e.def.enrage && !e.rage && e.hp<=e.maxHp*e.def.enrage.at){ e.rage=true; emit('enrage',{e}); }   // 棘背蜥：半血后发怒
+    const spd = e.def.speed*(e.slow>0?0.85:1)*(e.rage?e.def.enrage.speed:1);
     // 被谁挡住：同 lane、非地雷、身后的最近宠物
     const blocker = G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&e.p>p.col+0.2&&e.p<=p.col+1+e.def.r*0.6)
                           .sort((a,b)=>b.col-a.col)[0];
@@ -475,9 +515,9 @@ function update(dt){
         if(e.windup<=0){ const bt=e.biteTarget, alive=bt && (bt.type==='crate' ? propAlive(bt) : !bt.dead), t=alive?bt:tgt;
           if(t.type==='crate'){ e.bite=0.15; emit('propBite',{e,c:t}); damageProp(t, e.def.atk, false); } else {
           t.hp-=e.def.atk; t.flash=0.12; e.bite=0.15; emit('bite',{e,pet:t});
-          if(t.hp<=0){ t.dead=true; emit('petdeath',{pet:t}); G.fx.push({kind:'pop',lane:t.lane,p:t.col+0.5,t:0,life:0.4,color:'#ccc'}); } } } }
+          if(t.hp<=0){ t.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:t}); G.fx.push({kind:'pop',lane:t.lane,p:t.col+0.5,t:0,life:0.4,color:'#ccc'}); } } } }
       e.atkT-=dt;
-      if(e.atkT<=0 && !(e.windup>0)){ e.atkT=e.def.atkInt; e.windup=e.def.windup; e.biteTarget=tgt; emit('biteStart',{e,pet:tgt}); }
+      if(e.atkT<=0 && !(e.windup>0)){ e.atkT=e.def.atkInt*(e.rage?e.def.enrage.atkInt:1); e.windup=e.def.windup; e.biteTarget=tgt; emit('biteStart',{e,pet:tgt}); }
     } else {
       e.windup=0;   // 挡路的宠物没了：这一口取消
       e.p -= spd*dt;
@@ -509,10 +549,56 @@ function update(dt){
 function collectOrb(o){ if(o.got) return; o.got=true; emit('collect',{o}); G.energy+=o.value; }   // 数字变化在能量槽上看，不在原地再飘一个 +25
 
 function finish(){
-  const stars = 1 + (G.bellsUsed===0?1:0) + (G.bellsUsed===0&&G.fire3Seen?1:0);
+  const stars = 1 + (G.bellsUsed===0?1:0) + (!(G.stats.lost>0)?1:0);   // 65 版：第三颗星 = 没有宠物倒下（原来是「触发火系 3 连」，前几关没有火系宠物拿不到）
   const exp=400, coins=100+G.kills*5;
-  G.shards[DATA.level.firstClear.enemy]=(G.shards[DATA.level.firstClear.enemy]||0)+DATA.level.firstClear.shards;
-  G.over={win:true, stars, exp, coins}; G.overT=0; emit('win',{stars});
+  // 65 版：每关首次通关只给一样东西（关卡设计.md）：宠物碎片（数量固定）或一个新机制
+  const rw = DATA.level.first ? DATA.level.reward : null; let unlock=null;
+  if(rw && rw.shard) G.shards[rw.shard[0]]=(G.shards[rw.shard[0]]||0)+rw.shard[1];
+  if(rw && rw.unlock && !PROFILE.unlock[rw.unlock]){ PROFILE.unlock[rw.unlock]=1; profileSave(); unlock=rw.unlock; }
+  G.over={win:true, stars, exp, coins, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
+}
+
+// ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------
+// 做法：到了某一步，战斗停住（update 里不推进），提示玩家做一个动作，位置固定；做对了战斗继续。只在第一次打这一关时出现。
+// 步骤写在 levels.js 的 tut 里：{at:秒, kind:'place', key, lane, col|'front'} / {kind:'orb', value} / {kind:'move', key, toLane}
+const tutCur = () => (G && G.tut && G.tut.cur) || null;
+function tutBegin(s){
+  const freeCol=(lane,c0,lo,hi)=>{ for(const d of [0,1,-1,2,-2,3,-3]){ const c=c0+d; if(c>=lo && c<=hi && inGrid(lane,c) && !petAt(lane,c) && !propAlive(cellAt(lane,c))) return c; } return -1; };
+  if(s.kind==='place'){
+    if(!DATA.level.loadout.includes(s.key)) return false;
+    let c0=s.col;
+    if(c0==='front'){ const mine=G.pets.filter(p=>p.lane===s.lane); c0=Math.max(s.min||3, mine.length?Math.max(...mine.map(p=>p.col))+1:0); }
+    if(s.ahead){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.ahead&&Math.abs(e.lane-s.lane)<=1); if(es.length) c0=Math.max(1, Math.min(c0, Math.floor(Math.min(...es.map(e=>e.p))-1.6))); }   // 波姆：放在怪群前面
+    const c=freeCol(s.lane, Math.min(c0,COLS-2), 0, COLS-2); if(c<0) return false;
+    s.L=s.lane; s.C=c; const d=DATA.pets[s.key]; G.cooldown[s.key]=0; if(G.energy<d.cost) G.energy=d.cost;
+  } else if(s.kind==='orb'){
+    const lane=DATA.level.lanes[Math.floor(DATA.level.lanes.length/2)];
+    s.orb={lane, p:4.5, value:s.value||25, life:0, fall:1}; G.orbs.push(s.orb); emit('sky');
+  } else if(s.kind==='move'){
+    if(G.swapCap<1) return false;
+    if(G.pets.some(p=>p.key===s.key && p.lane===s.toLane)) return false;   // 那一路已经有了：玩家自己做对了，不用教
+    const pet=G.pets.filter(p=>p.key===s.key).sort((a,b)=>Math.abs(a.lane-s.toLane)-Math.abs(b.lane-s.toLane))[0]; if(!pet) return false;
+    if(propAlive(cellAt(s.toLane, pet.col))) return false;
+    s.pet=pet; s.L=s.toLane; s.C=pet.col; if(G.swaps<1) G.swaps=1;   // 目标格 = 同一排；那里有别的宠物就互换（movePet 本来支持）
+  } else return false;
+  G.selected=null; G.drag=null;
+  return true;
+}
+function tutDone(s){
+  if(s.kind==='place'){ const p=petAt(s.L,s.C); return !!p && p.key===s.key; }
+  if(s.kind==='orb') return !!s.orb.got;
+  if(s.kind==='move') return s.pet.dead || (s.pet.lane===s.L && s.pet.col===s.C);
+  return true;
+}
+function tutUpdate(dt){
+  const T=G.tut; if(!T) return;
+  if(T.cur){ T.t+=dt; if(tutDone(T.cur)){ emit('tutDone',{s:T.cur}); T.cur=null; T.i++; T.gap=0.5; } return; }
+  if(T.i>=T.steps.length){ G.tut=null; return; }
+  if(T.gap>0){ T.gap-=dt; return; }
+  const s=T.steps[T.i]; if(G.t<(s.at||0)) return;
+  if(s.when){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.when); if(es.length<3 || Math.min(...es.map(e=>e.p))>(s.whenP||7.5)) return; }   // 等这种怪成群走进场
+  if(!tutBegin(s)){ T.i++; return; }   // 条件不满足（比如这只宠物还没召唤）：跳过这一步
+  T.cur=s; T.t=0; emit('tutStep',{s});
 }
 
 // ---------- 输入（指针统一处理：鼠标与触屏）----------
@@ -530,15 +616,17 @@ function orbScreen(o){ const s=L.toScreen(o.lane,o.p); const off = o.fall*o.fall
 function onDown(e){
   const x=PX(e),y=PY(e); pointer={x,y,down:true};
   if(!G.started){ G.started=true; emit('start'); return; }
-  if(G.over){ const b=resultButton(); if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ emit('ui'); newGame(); G.started=true; emit('start'); } return; }
+  if(G.over){ const b=resultAgainRect(); if(b && x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ emit('ui'); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); } return; }
+  const ts=tutCur();
   const it=itemAt(x,y);
   if(it){
     if(it.id==='card'){
       const d=DATA.pets[it.key];
       emit('ui');
+      if(ts && !(ts.kind==='place' && ts.key===it.key)){ emit('deny',{key:it.key, why:'tut'}); return; }
       if(G.energy>=d.cost && G.cooldown[it.key]<=0){ G.selected = G.selected===it.key?null:it.key; G.drag={kind:'card',key:it.key,x,y,sx:x,sy:y}; } else emit('deny',{key:it.key, why: G.cooldown[it.key]>0?'cd':'energy'});
     } else if(it.id==='shovel'){ G.selected = G.selected==='shovel'?null:'shovel'; }
-    else if(it.id==='pause'){ G.paused=!G.paused; emit('ui'); }
+    else if(it.id==='pause'){ G.paused=!G.paused; G.drag=null; emit('ui'); }
     else if(it.id==='mute'){ emit('ui'); emit('mute'); }
     else if(it.id==='speed'){ G.speed = G.speed===1?2:1; emit('ui'); }
     else if(it.id==='orient'){ orientMode = L.kind==='landscape'?'portrait':'landscape'; resize(); }
@@ -550,9 +638,10 @@ function onDown(e){
   if(!inGrid(lane,col)){ G.selected=null; return; }
   if(G.selected==='shovel'){ shovel(lane,col); G.selected=null; return; }
   if(G.selected){ if(placePet(G.selected,lane,col)) G.selected=null; return; }
-  const pc=cellAt(lane,col); if(propAlive(pc) && !petAt(lane,col)){ pc.marked=!pc.marked; emit('ui'); return; }
+  if(ts && ts.kind!=='move') return;
+  const pc=cellAt(lane,col); if(!ts && propAlive(pc) && !petAt(lane,col)){ pc.marked=!pc.marked; emit('ui'); return; }
   const pet=petAt(lane,col);
-  if(pet) G.drag={kind:'pet',pet,x,y,sx:x,sy:y};
+  if(pet && (!ts || ts.pet===pet)) G.drag={kind:'pet',pet,x,y,sx:x,sy:y};
 }
 function onMove(e){ pointer.x=PX(e); pointer.y=PY(e); if(G.drag){ G.drag.x=PX(e); G.drag.y=PY(e); } }
 function onUp(e){
@@ -563,7 +652,7 @@ function onUp(e){
   if(dr.kind==='card' && moved){ placePet(dr.key,lane,col); G.selected=null; }   // 拖动后松手：放没放成都取消选中（轻点才是选中）
   if(dr.kind==='pet' && moved){
     // 拖到底部卡槽区松手 = 卖掉（返还一半能量）
-    if(PY(e) >= L.bar.y - 8){ shovel(dr.pet.lane, dr.pet.col); emit('sell',{pet:dr.pet}); }
+    if(PY(e) >= L.bar.y - 8){ if(!tutCur()){ shovel(dr.pet.lane, dr.pet.col); emit('sell',{pet:dr.pet}); } }
     else movePet(dr.pet,lane,col);
   }
 }
@@ -574,7 +663,7 @@ window.addEventListener('keydown',e=>{
   // 横屏版界面还没按新风格做，先只开放竖屏
   if(e.key===' ') G.paused=!G.paused;
   if(e.key==='e'||e.key==='E') G.energy+=500;
-  if(e.key==='r'||e.key==='R') newGame();
+  if(e.key==='r'||e.key==='R'){ setLevel(DATA.level.id); newGame(); G.started=true; }   // 和「再打一次」同一条路：重新判断是不是首通，不重复领奖励
   const n=parseInt(e.key); if(n>=1&&n<=DATA.level.loadout.length){ const k=DATA.level.loadout[n-1]; G.selected=G.selected===k?null:k; }
 });
 

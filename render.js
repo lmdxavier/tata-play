@@ -22,7 +22,7 @@ const icon = n => img('icons/'+n+'.png');
 // 角色映射：宠物用 Spine，怪物（和怪物转宠物）用 Enemy Monster 播放器
 const PET_SPINE = { flower:'Flower', goldfish:'Goldfish', pug:'Pug', pumpkin:'Pumpkin', bomb:'Bomb' };
 const PET_MON   = { lizard:'Lizard_Fire' };
-const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly' };
+const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood' };
 const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5, lizard:0.75 };   // 身高，单位：格
 const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', grass:'Misc_Leaf_01_Green' };
 
@@ -76,7 +76,8 @@ async function loadAll(){
     SPR = new spine.SkeletonRenderer(ctx); SPR.triangleRendering = true;
     // 只加载本关用到的怪物；ink 版贴图 = 换色线 + 饱和 +15%（离线处理好的 atlas_final）
     const used = [...Object.values(ENEMY_MON), ...Object.values(PET_MON)];
-    const D = window.ENEMY_MONSTER_DATA, pick = dir => ({...D, monsters:Object.fromEntries(used.map(n=>[n,{...D.monsters[n], atlas:dir+n+'.png'}]))});
+    const D = window.ENEMY_MONSTER_DATA, ORIG_HAS = ['Animal_Fox','Bear_Grizzly','Beetle_Red','Lizard_Fire','Slime_Green','Snail_Green'],   // 素材原样的图集（按 Q 对比用）只有这 6 只，其余的对比时也用处理过的图集
+      pick = dir => ({...D, monsters:Object.fromEntries(used.map(n=>[n,{...D.monsters[n], atlas:(dir==='atlas/' && !ORIG_HAS.includes(n) ? 'atlas_final/' : dir)+n+'.png'}]))});
     MONLIB = await EnemyMonsters.load(pick('atlas_final/'), ASSET+'monsters/');
     MONLIB_ORIG = await EnemyMonsters.load(pick('atlas/'), ASSET+'monsters/');
     MONH = {};
@@ -208,7 +209,9 @@ let LASTSHARD = null;
 // 碎片图标：怪物头像 + 右下角一个小碎片角标
 const SHARD_RAR = { minor:'common', elite:'rare' };
 const RAR = { common:{cn:'普通', need:10, frame:'Green'}, rare:{cn:'稀有', need:15, frame:'Blue'}, epic:{cn:'史诗', need:25, frame:'Purple'}, legend:{cn:'传说', need:40, frame:'Yellow'} };
-const rarOf = k => RAR[SHARD_RAR[DATA.enemies[k].role]||'common'];
+const rarOf = k => RAR[DATA.pets[k] ? (DATA.pets[k].rarity||'common') : (SHARD_RAR[(DATA.enemies[k]||{}).role]||'common')];   // 65 版：碎片按宠物算（宠物碎片 / 能收服的怪）
+const shardName = k => ((DATA.pets[k]||DATA.enemies[k]||{}).cn||k).replace(' · 精英','');
+const shardPort = k => PORTRAIT[k] || MONPORT[k];
 // 已收集的碎片（跨局累积；正式存档做好前先存浏览器本地，读不到就从 0 开始）
 let OWNED = {}; try{ OWNED = JSON.parse(localStorage.getItem('tata_shards')||'{}')||{}; }catch(e){ OWNED={}; }
 let BANKED = false;
@@ -224,7 +227,7 @@ function shardIcon(key, cx, cy, size){
   ctx.save(); ctx.translate(cx,cy); ctx.rotate(Math.PI/4);
   nine(fr, -d/2, -d/2, d, d, 40, d*0.22);
   ctx.beginPath(); rr(-d/2+d*0.1, -d/2+d*0.1, d*0.8, d*0.8, d*0.14); ctx.clip();
-  ctx.rotate(-Math.PI/4); const pc=MONPORT[key]; if(pc) ctx.drawImage(pc, -size*0.42, -size*0.47, size*0.84, size*0.84);
+  ctx.rotate(-Math.PI/4); const pc=shardPort(key); if(pc) ctx.drawImage(pc, -size*0.42, -size*0.47, size*0.84, size*0.84);
   ctx.restore();
 }
 // 碎片格（结算用）：头像框 + 右上角本局获得数 + 下方「已收集/召唤所需」进度条
@@ -246,7 +249,7 @@ function makeMonPortraits(){
 }
 function makePortraits(){
   makeMonPortraits();
-  for(const key of DATA.level.loadout){
+  for(const key of Object.keys(DATA.pets)){
     const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
     let v, s, h;
     if(PET_SPINE[key]){ v = newSpine(PET_SPINE[key]); v.st.update(0.3); v.st.apply(v.sk); s = Math.min(100/v.sd.h, 112/v.sd.w); h=v.sd.h*s; }
@@ -506,6 +509,8 @@ HOOKS.push((type, d)=>{
   if(!READY) return;
   switch(type){
     case 'start': sfx('start'); break;
+    case 'tutStep': sfx('alert'); TUT_T0=performance.now(); break;
+    case 'enrage': { const v=visOf(d.e,false); v.squash=0.12; floatText(d.e.lane, d.e.p, '发怒', '#ff6a3d', 13); COMBO.play('发怒', atE(d.e)); break; }
     case 'place': { const v=visOf(d.pet,true); v.drop=0.16; break; }   // 落地那一刻才播「放置」（drawPet 里）
     case 'move': { const mv=d.pet.move, o=mv?feet(mv.fl,mv.fc+0.5):feet(d.lane,d.col+0.5); COMBO.play('移动', {x:o.x, y:o.y-L.cs*0.1});   // 拿起：轻嗖 + 小烟团
       for(const p of [d.pet,d.other]) if(p) petPlay(p,'Walk','Idle'); COMBO.later(0.36, ()=>{ const f=feet(d.lane,d.col+0.5); COMBO.play('放置', {x:f.x, y:f.y-L.cs*0.1}); }); break; }   // 落下复用「放置」
@@ -760,13 +765,13 @@ function drawEnemy(e, dt){
   // 被挡住时画面上稍微退后一点，不和宠物叠成一团（逻辑位置不变）
   v.back = (v.back||0) + ((e.blocked?0.14:0) - (v.back||0))*Math.min(1,dt*8);
   const f=feet(e.lane, e.p + (v.kb||0) + v.back);
-  if(!v.state){ const want = e.blocked ? 'Idle' : 'Walk'; if(v.cur!==want){ v.m.play(want); v.cur=want; } } else v.cur=null;
-  v.m.update(dt*(e.slow>0?0.85:1)*(e.def.speed>0.4?1.5:1));
+  if(!v.state){ const want = (e.blocked || tutCur()) ? 'Idle' : 'Walk'; if(v.cur!==want){ v.m.play(want); v.cur=want; } } else v.cur=null;
+  v.m.update(dt*(e.slow>0?0.85:1)*(e.def.speed>0.4||e.rage?1.5:1));
   groundShadow(f.x, f.y, cs*(e.def.role==='elite'?0.95:0.68));
   v.hitFlash=Math.max(0,(v.hitFlash||0)-dt);
   ctx.save(); if(v.squash){ v.squash=Math.max(0,v.squash-dt); const k=v.squash/0.12; ctx.translate(f.x,f.y); ctx.scale(1+0.16*k,1-0.18*k); ctx.translate(-f.x,-f.y); }
   const fl = Math.max(v.hitFlash>0?0.8:0, e.flash>0?0.6:0);
-  v.dh = drawV(v, f.x, f.y, {fc:true, flash:fl, tint: e.slow>0 ? 'rgba(120,190,255,.22)' : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : null});
+  v.dh = drawV(v, f.x, f.y, {fc:true, flash:fl, tint: e.slow>0 ? 'rgba(120,190,255,.22)' : e.rage ? `rgba(255,60,40,${0.2+0.08*Math.sin(G.t*10)})` : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : null});
   ctx.restore();
   const hpF=e.hp/e.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   const hy=f.y-v.dh-8;
@@ -864,7 +869,7 @@ function drawFlyers(dt){
 }
 function drawBells(){
   const cs=L.cs;
-  for(let lane=0;lane<LANES;lane++){ const s=L.toScreen(lane,-0.45), on=G.bells[lane]; const ring=G.fx.find(x=>x.kind==='bell'&&x.lane===lane);
+  for(let lane=0;lane<LANES;lane++){ if(!laneOn(lane)) continue; const s=L.toScreen(lane,-0.45), on=G.bells[lane]; const ring=G.fx.find(x=>x.kind==='bell'&&x.lane===lane);
     ctx.save(); ctx.translate(s.x, s.y); if(ring) ctx.rotate(Math.sin(ring.t*30)*0.5*(1-ring.t/1.2));
     drawImgC(icon(on?'Item_Bell_01_Gold':'Item_Bell_01_Silver'), 0, 0, cs*0.5, on?1:0.5); ctx.restore(); }
 }
@@ -886,9 +891,9 @@ function drawPlacement(){
   const dragPet = G.drag&&G.drag.kind==='pet';
   const focus = gui('Frame/ItemFrame00~03_FocusLine');
   if(sel || dragPet){
-    ctx.globalAlpha=0.16; for(let lane=0;lane<LANES;lane++) for(let col=0;col<COLS;col++){ if(sel && !canPlaceAt(lane,col)) continue; const r=L.cellRect(lane,col); nine(focus, r.x+cs*0.1, r.y+cs*0.1, cs*0.8, cs*0.8, 20, cs*0.18); } ctx.globalAlpha=1;
+    ctx.globalAlpha=0.16; for(let lane=0;lane<LANES;lane++) for(let col=0;col<COLS;col++){ if(sel ? !canPlaceAt(lane,col) : !laneOn(lane)) continue; const r=L.cellRect(lane,col); nine(focus, r.x+cs*0.1, r.y+cs*0.1, cs*0.8, cs*0.8, 20, cs*0.18); } ctx.globalAlpha=1;
     const p = dragPet ? {x:G.drag.x,y:G.drag.y} : pointer; const {lane,col}=L.toCell(p.x,p.y);
-    if(inGrid(lane,col)){ const r=L.cellRect(lane,col); const good = sel ? canPlaceAt(lane,col) : G.swaps>=1;
+    if(inGrid(lane,col)){ const r=L.cellRect(lane,col); const good = sel ? canPlaceAt(lane,col) : (G.swaps>=1 && laneOn(lane) && !(tutCur() && !(tutCur().L===lane && tutCur().C===col)));
       const t=tinted('gui/Frame/ItemFrame00~03_FocusLine.png', good?'#ffffff':'#ff4d4d'); if(t) nine(t, r.x+2, r.y+2, cs-4, cs-4, 20, cs*0.22);
       const key = sel || (dragPet && G.drag.pet.key);
       if(good && key && (sel || Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8)) drawRange(DATA.pets[key], lane, col); }
@@ -1001,14 +1006,14 @@ function drawUI2(){
     if(it.id==='mute'){ roundBtn(it, gui('IconMisc/Icon_Megaphone'), null, false); if(SND.muted) drawImgC(gui('IconMisc/Icon_Close01'), it.x+it.w*0.72, it.y+it.h*0.3, it.w*0.36); }
   }
   // 换阵次数：黄色菱形
-  const sb=L.swapBox; pill(sb.x, sb.y, sb.w, sb.h); text('换阵', sb.x+26, sb.y+sb.h/2, 12, '#cfe3ff', 'center', 800, false);
-  for(let i=0;i<3;i++) drawImgC(gui(i<G.swaps?'Slider/Slider_StageHorizontal_Icon_s_Yellow':'Slider/Slider_StageHorizontal_Icon_s_White1'), sb.x+56+i*19, sb.y+sb.h/2, 18, i<G.swaps?1:0.35);
+  const sb=L.swapBox, sN=G.swapCap||0, sW=sN?56+sN*19-2:0; if(sN){ pill(sb.x, sb.y, sW, sb.h); text('换位', sb.x+26, sb.y+sb.h/2, 12, '#cfe3ff', 'center', 800, false); }   // 65 版：1-3 通关后才有；宽度跟着次数走
+  for(let i=0;i<sN;i++) drawImgC(gui(i<G.swaps?'Slider/Slider_StageHorizontal_Icon_s_Yellow':'Slider/Slider_StageHorizontal_Icon_s_White1'), sb.x+56+i*19, sb.y+sb.h/2, 18, i<G.swaps?1:0.35);
   // 波次：「第 N/4 波」+ 进度条（走过的波次点亮）；精英 / Boss 出场后，这条换成它的血条
   const wb=L.waveBar, dur=DATA.level.duration; const clock=`${Math.floor(G.t/60)}:${String(Math.floor(G.t%60)).padStart(2,'0')}`;
   const nWave=WAVE_MARKS.filter(m=>G.t>=m).length, boss=G.enemies.find(e=>e.def.role==='elite'&&!e.dead);
   numText(clock, W/2, 30+(L.hudTop||0), 22, '#fff', 'center');   // 61d：计时每秒变一次，按字符贴图，不再每秒重画一张
   if(boss){
-    text(boss.def.cn.replace(' · 精英',''), W/2, wb.y-7, 12, '#ffd36b', 'center', 800, false);
+    text(shardName(boss.key), W/2, wb.y-7, 12, '#ffd36b', 'center', 800, false);
     hpBar(wb.x+wb.w/2, wb.y, wb.w, boss.hp/boss.maxHp, 'red', 14);
     drawImgC(gui('UI_Etc/ResourceBar_Single_Icon_Monster'), wb.x+wb.w, wb.y+7, 24);
   } else {
@@ -1043,7 +1048,7 @@ function drawWaveWarning(t, life){
   ctx.fillStyle=band; ctx.fillRect(0, cy-36, W, 72);
   const tri=gui('Image_Warning1'), ex=gui('Image_Warning2'), ts=58*pop*(1+0.06*pulse);
   if(ok(tri)){ drawImgC(tri, W/2, cy-62, ts); drawImgC(ex, W/2, cy-58, ts*0.48); }
-  actionText('一大波怪物来了！', W/2, cy+6, 30, 'red', pop);
+  actionText('一大波敌人正在接近', W/2, cy+6, 26, 'red', pop);
   ctx.restore();
 }
 function ribbon(color, cx, cy, w, label, size){ const im=gui('Label/Title_Ribbon01_'+color); if(!ok(im)) return; const h=w*im.naturalHeight/im.naturalWidth; ctx.drawImage(im, cx-w/2, cy-h/2, w, h); text(label, cx, cy-h*0.08, size||h*0.3, '#fff'); }
@@ -1058,13 +1063,14 @@ function drawResult2(){
       drawImgC(gui('IconMisc/Icon_Star_Off'), x, y, s);
       const t0=0.45+i*0.32, k=clamp01((G.overT-t0)/0.22); if(on && k>0){ if(!o['s'+i]){ o['s'+i]=1; sfx('star'); shakeDir(0.012,0.12); }
         drawImgC(gui('IconMisc/Icon_Star_On'), x, y, s*(1+1.2*(1-ease.outBack(k,2.2)))); } }
-    const lines=[[true,'通关'],[G.bellsUsed===0, G.bellsUsed?`警钟响了 ${G.bellsUsed} 次`:'没响警钟'],[G.fire3Seen,'触发火系 3 连']];
+    const lost=G.stats.lost||0, lines=[[true,'通关'],[G.bellsUsed===0, G.bellsUsed?`警钟响了 ${G.bellsUsed} 次`:'没响警钟'],[lost===0, lost?`${lost} 只宠物倒下`:'没有宠物倒下']];
     lines.forEach(([on,t],i)=>{ drawImgC(gui(on?'IconMisc/Icon_Star_On':'IconMisc/Icon_Star_Off'), cx-70, top+140+i*24, 16); text(t, cx-56, top+140+i*24, 13, on?'#fff':'#9aa3b8', 'left', 800, false); });
   } else { const f=Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration)); text(`撑到 ${Math.floor(G.t)} 秒，仍拿到 ${Math.round(f*100)}% 奖励`, cx, top+90, 15, '#fff'); }
   // 奖励：一排方格
   const f = o.win ? 1 : Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration));
   const rewards=[['COIN', Math.round((100+G.kills*5)*f), 'Yellow'], ['IconMisc/Icon_Star_On', Math.round(400*f), 'Blue']];
   for(const [k,n] of Object.entries(G.shards)) rewards.push([null, n, null, null, k]);
+  const UL = o.win && o.unlock && window.UNLOCK_CN ? UNLOCK_CN[o.unlock] : null;
   text('奖励', cx, top+226, 14, '#cfe3ff', 'center', 800, false);
   const rs=Math.min(64,(W-40)/rewards.length-10), rx0=cx-(rewards.length*(rs+10)-10)/2;
   REWARD_RECTS.length=0;
@@ -1074,7 +1080,9 @@ function drawResult2(){
     else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():gui(ic), x+rs/2, y+rs*0.44, rs*0.56);
       text(String(n), x+rs/2, y+rs*0.84, rs*(String(n).length>4?0.17:0.24), '#fff'); }
     ctx.restore(); });
-  const b=resultButton(); bigButton(o.win?'Yellow':'Green', b.x, b.y, b.w, b.h, '再来一局');
+  if(UL){ const k=clamp01((G.overT-1.6)/0.25), y=top+246+rs+22; if(k>0){ ctx.globalAlpha=k; if(!o._ul){ o._ul=1; sfx('sparkle'); }
+      text('解锁：'+UL.name, cx, y, 16, '#ffe14d'); text(UL.desc, cx, y+22, 12, '#dfe7ff', 'center', 800, false); ctx.globalAlpha=1; } }
+  const b=resultButton(); bigButton(o.win?'Yellow':'Green', b.x, b.y, b.w, b.h, o.win?'继续':'再来一局');
   drawRewardTip();
 }
 // 结算奖励：点一下弹说明（名字、品质、收集进度），点别处关
@@ -1086,8 +1094,8 @@ cv.addEventListener('pointerdown', e=>{ if(!G.over) return; const x=PX(e), y=PY(
 function drawRewardTip(){
   if(!RTIP) return; const q=REWARD_RECTS.find(z=>z.kind===RTIP.kind&&z.key===RTIP.key); if(!q){ RTIP=null; return; }
   let title, rows;
-  if(q.kind==='shard'){ const d=DATA.enemies[q.key], rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
-    title=d.cn.replace(' · 精英','')+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`]; }
+  if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
+    title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`]; }
   else if(q.kind==='coin'){ title='金币'; rows=['用来购买道具和进化宠物']; }
   else { title='经验'; rows=['分给本局出战的宠物，用来升级']; }
   const w=Math.min(220,W-20), h=24+16+rows.length*18; let x=q.x+q.w/2-w/2, y=q.y-h-10; if(x<8) x=8; if(x+w>W-8) x=W-8-w;
@@ -1110,20 +1118,52 @@ cv.addEventListener('pointerdown', e=>{ if(!G.paused||G.over) return; const x=PX
   if((x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h) || (pz&&x>=pz.x&&x<=pz.x+pz.w&&y>=pz.y&&y<=pz.y+pz.h)){ G.paused=false; emit('ui'); }
   e.stopImmediatePropagation(); }, {capture:true});
 function resultButton(){ return {x:W/2-90, y:H*0.2+370, w:180, h:62}; }
+// 65 版：胜利 = 主按钮「继续」（回地图 / 去召唤），下面「再打一次」；失败 = 主按钮「再来一局」，下面「返回」
+function resultAgainRect(){ return G.over && G.over.win ? (typeof backRect==='function'?backRect():null) : resultButton(); }
+function resultLeaveRect(){ return G.over && G.over.win ? resultButton() : (typeof backRect==='function'?backRect():null); }
 
 // 拖动宠物时，底部卡槽区变成「卖出区」
 function drawSellZone(){
-  if(!(G.drag && G.drag.kind==='pet' && Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8)) return;
+  if(!(G.drag && G.drag.kind==='pet' && Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8) || tutCur()) return;
   const b=L.bar, over = G.drag.y >= b.y-8, refund=Math.floor(G.drag.pet.def.cost*0.5);
   const t=tinted('gui/Frame/BasicFrame_Round24.png', over?'#e8344a':'#7a1d2b'); if(t){ ctx.globalAlpha=over?0.92:0.78; nine(t, 8, b.y+4, W-16, b.h-12, 20, 18); ctx.globalAlpha=1; }
   const fl=tinted('gui/Frame/ItemFrame00~03_FocusLine.png', over?'#ffffff':'#ff9aa5'); if(fl) nine(fl, 8, b.y+4, W-16, b.h-12, 20, 18);
   drawImgC(energyIcon(), W/2-70, b.y+b.h/2-4, 34*(over?1.15:1));   // 41 版：卖掉退回的是能量（费用的一半），原来误用金币图标
   text(`拖到这里卖掉  +${refund}`, W/2+14, b.y+b.h/2-4, 17, '#fff');
 }
+// ---------- 教学提示（65 版）：目标格子高光 + 半透明的宠物沿箭头从卡牌滑到格子，演示「拖过去」；上方一行说明 ----------
+// 素材：格子框 ItemFrame FocusLine、光晕 CardFrame04_Glow、箭头 IconMisc/Icon_Arrow_Next2（白色无描边，着暖黄），都是界面里已经在用的
+let TUT_T0 = 0;
+function drawTutorial(){
+  const s=tutCur(); if(!s || G.over || G.paused) return;
+  const cs=L.cs, tt=(performance.now()-TUT_T0)/1000, pulse=0.5+0.5*Math.sin(tt*5);
+  const glow=gui('Frame/CardFrame04_Glow'), arrow=tinted('gui/IconMisc/Icon_Arrow_Next2.png','#ffe9a0');
+  const ring=(x,y,r)=>{ if(ok(glow)){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.45+0.3*pulse; ctx.drawImage(glow, x-r, y-r, r*2, r*2); ctx.restore(); } };
+  const cellMark=(lane,col)=>{ const r=L.cellRect(lane,col); ring(r.x+cs/2, r.y+cs/2, cs*0.95);
+    const t=tinted('gui/Frame/ItemFrame00~03_FocusLine.png','#ffe14d'); if(t){ const g=cs*0.04*pulse; ctx.globalAlpha=0.75+0.25*pulse; nine(t, r.x+2-g, r.y+2-g, cs-4+g*2, cs-4+g*2, 20, cs*0.22); ctx.globalAlpha=1; } };
+  // 从 a 到 b：一串向前流动的箭头 + 半透明的宠物头像沿路滑过去
+  const path=(a,b,key)=>{ const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx), n=Math.max(2,Math.floor(len/(cs*0.55)));
+    if(arrow) for(let i=0;i<n;i++){ const k=((i+ (tt*1.6)%1)/n), x=a.x+dx*k, y=a.y+dy*k, al=Math.sin(k*Math.PI);
+      ctx.save(); ctx.globalAlpha=0.9*al; ctx.translate(x,y); ctx.rotate(ang); const h=cs*0.36, w=h*arrow.width/arrow.height; ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); }
+    const dragging = G.drag && Math.hypot(G.drag.x-G.drag.sx, G.drag.y-G.drag.sy)>8;
+    if(!dragging && PORTRAIT[key]){ const c=(tt%1.8)/1.8, k=c<0.75 ? ease.outCubic(c/0.75) : 1, al=c<0.1 ? c/0.1 : c>0.85 ? Math.max(0,(1-c)/0.15) : 1;
+      ctx.save(); ctx.globalAlpha=0.6*al; ctx.drawImage(PORTRAIT[key], a.x+dx*k-cs*0.5, a.y+dy*k-cs*0.72, cs, cs); ctx.restore(); } };
+  if(s.kind==='place'){ const it=L.items.find(i=>i.id==='card'&&i.key===s.key), r=L.cellRect(s.L,s.C); cellMark(s.L,s.C);
+    if(it) path({x:it.x+it.w/2, y:it.y+it.h*0.3}, {x:r.x+cs/2, y:r.y+cs/2}, s.key); }
+  else if(s.kind==='move'){ const r0=L.cellRect(s.pet.lane,s.pet.col), r=L.cellRect(s.L,s.C); cellMark(s.L,s.C);
+    path({x:r0.x+cs/2, y:r0.y+cs/2}, {x:r.x+cs/2, y:r.y+cs/2}, s.key); }
+  else if(s.kind==='orb' && !s.orb.got){ const p=window.orbHitPos?orbHitPos(s.orb):orbScreen(s.orb); ring(p.x, p.y, cs*0.75);
+    if(arrow && s.orb.fall<=0){ const bob=Math.sin(tt*6)*cs*0.06, h=cs*0.34, w=h*arrow.width/arrow.height; ctx.save(); ctx.globalAlpha=0.9; ctx.translate(p.x, p.y-cs*0.62+bob); ctx.rotate(Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } }
+  if(s.text){ ctx.font=`800 14px ${FONT}`; const y=L.hud.h+30, lines=wrapTut(s.text, W-64), w=Math.min(W-24, Math.max(...lines.map(q=>ctx.measureText(q).width))+44), h=16+lines.length*20;
+    pill(W/2-w/2, y-h/2, w, h); lines.forEach((q,i)=>text(q, W/2, y-(lines.length-1)*10+i*20, 14, '#fff', 'center', 800, false)); }
+}
+function wrapTut(s, maxW){ const out=[]; let cur=''; for(const ch of s){ if(ctx.measureText(cur+ch).width>maxW && cur && !'，。、：；！？）'.includes(ch)){ out.push(cur); cur=''; } cur+=ch; }   // 标点不放在行首 if(cur) out.push(cur);
+  if(out.length===2 && out[1].length<=2){ const all=s, cut=Math.ceil(all.length/2); return [all.slice(0,cut), all.slice(cut)]; }   // 不让最后一行只剩一两个字
+  return out; }
 // 开始界面：点一下开始（浏览器要求先点一下才能出声）
 function drawStartOverlay(){
   ctx.fillStyle='rgba(8,10,24,.55)'; ctx.fillRect(0,0,W,H);
-  ribbon('Blue', W/2, H*0.36, Math.min(W*0.8,300), '1-5 花田保卫战', 20);
+  ribbon('Blue', W/2, H*0.36, Math.min(W*0.8,300), DATA.level.id+' '+DATA.level.title, 20);
   const pulse=1+0.04*Math.sin(performance.now()/180);
   ctx.save(); ctx.translate(W/2, H*0.52); ctx.scale(pulse,pulse); bigButton('Yellow', -90, -31, 180, 62, '开始'); ctx.restore();
   text('拖动卡牌放置宠物 · 拖动宠物换位 · 拖回卡槽卖掉', W/2, H*0.62, 12, '#dfe7ff', 'center', 800, false);
@@ -1228,9 +1268,10 @@ function draw(){
   SCENE.drawFx(ctx, ENV_T, dt, icon('Misc_Leaf_01_Green'));
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();
   if(G.started && !G.over) watchEvents();
-  drawUI2(); drawSellZone(); drawDragGhost(); drawFlyers(dt);   // 拖着的宠物画在卖出区上面，不被挡住
+  drawUI2(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt);   // 拖着的宠物画在卖出区上面，不被挡住
   const bn=[...G.fx.filter(f=>f.kind==='banner'), ...EVENTS.filter(ev=>G.t>=ev.t&&G.t<ev.until&&ev.text).map(ev=>({text:ev.text,big:ev.kind==='banner'}))];
-  if(!G.over && !G.paused) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
+  /* 65 版：教学提示出现时，同一位置的预告文字先不画，免得叠在一起 */
+  if(!G.over && !G.paused && !tutCur()) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
     else { ctx.font=`800 14px ${FONT}`; const w=Math.min(W-30, ctx.measureText(b.text).width+44); pill(W/2-w/2, y-17, w, 34); text(b.text, W/2, y, 14, b.color&&b.color!=='#fff'?b.color:'#fff', 'center', 800, false); } });
   if(G.paused&&!G.over){ ctx.fillStyle='rgba(38,30,28,.6)'; ctx.fillRect(0,0,W,H);
     // 31 版：继续 / 返回营地；46 版：音乐 / 音效开关。
@@ -1284,4 +1325,4 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 resize(); newGame(); loadAll(); requestAnimationFrame(frame);
-window.TATA = {msg:()=>LOADMSG, G:()=>G, DATA, newGame, placePet, movePet, update, ready:()=>READY, setOrient:(m)=>{orientMode=m;resize();}, SND};
+window.TATA = {skip:n=>cheatSkip(n), msg:()=>LOADMSG, G:()=>G, DATA, newGame, placePet, movePet, update, ready:()=>READY, setOrient:(m)=>{orientMode=m;resize();}, SND};
