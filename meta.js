@@ -1306,6 +1306,7 @@ function cheatSkip(n){ const ids=MAP_DATA.chapters[0].levels.map(l=>l.id).slice(
   profileSave(); ROSTER=null; FIRST_RUN=false; MT.tab='battle'; }
 { const q=/[?&]skip=(\d+)/.exec(location.search); if(q) document.addEventListener('DOMContentLoaded', ()=>cheatSkip(+q[1])); }
 draw = function(){
+  if(window.NIGHT_DEMO && FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; cheatSkip(7); startBattle('1-6'); }   // 71 版：夜景预览，直接进一局（存档只在内存里）
   if(FIRST_RUN && READY && !MT.inBattle){ FIRST_RUN=false; if(!levelCleared('1-1')){ MT.tab='battle'; startBattle('1-1'); } }   // 65 版：第一次打开直接进 1-1，不进营地
   if(!MT.inBattle){ drawMeta();
     if(MT.tab==='pets'){ const now=performance.now(), cdt=Math.min(0.05,(now-(MT.fxT||now))/1000); MT.fxT=now; COMBO.draw(cdt,'world'); drawPetGuide(); } else MT.fxT=0;   // 65 版：宠物页上的召唤特效

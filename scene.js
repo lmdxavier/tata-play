@@ -116,6 +116,7 @@ const SCENE = (()=>{
     // 石像、木桶、蘑菇：完整露出，摆在两棵树之间的前面
     const side1=(n,side,c,f)=>addSide(n,side,oy+c*cs,{lim:0.1,s:fit(n,(m+0.1*cs)*f,1.0),flip:side>0});
     side1('Mushroom_Wihte_03',-1,2.75,0.7); side1('Mushroom_Pink_02',1,5.1,0.7);
+    { const N=night(); if(N && N.shroom){ side1('Mushroom_Pink_01',-1,4.6,0.6); side1('Mushroom_Yellow_02',1,3.5,0.6); side1('Mushroom_Wihte_01',-1,6.9,0.6); side1('Mushroom_Yellow_03',1,7.3,0.6); } }   // 71 版夜景 C：两边多几丛会发光的蘑菇
     // 右上那段空地：一根叠石石柱，脚下一块小石头
     side1('Stone_Gray1_11',1,2.2,1.0); side1('Stone_Gray1_06',1,2.38,0.55);
     // 底部两角（家门口两边，最靠前，不会被树挡住）：左边石像 + 蘑菇，右边木桶 + 石蛙
@@ -174,8 +175,25 @@ const SCENE = (()=>{
       // 四个角补一块草色圆角，盖住草边交接
       g.fillStyle=rgb(GROUND); for(const [x,y] of [[ox,oy],[ox+bw,oy],[ox,by],[ox+bw,by]]){ g.beginPath(); g.arc(x,y,fh*0.55,0,7); g.fill(); }
     }
+    { const N=night(); if(N) nightPaint(g, c.width, c.height, N, null); }
     STATIC=c;
   }
+
+  /* ---------- 71 版：夜景（预览中，用户选定后定稿） ----------
+     做法参照 PvZ1 夜晚：整片场景压暗偏蓝紫；地面和道具在烘焙时一次乘好（每帧不多花），角色和特效、能量、界面不在这一步。
+     env = 场景最终的乘色，chr = 角色、落叶等每帧再乘的一层（全屏一次）。烘焙时用 env / chr，叠上每帧那层后场景正好是 env。 */
+  const NIGHTS = {
+    A:{name:'A 冷色夜', env:[118,130,190], chr:[214,220,245]},
+    B:{name:'B 月光夜', env:[78,92,160],  chr:[176,186,228], moon:true, fire:true},
+    C:{name:'C 蘑菇夜', env:[96,108,172], chr:[196,202,238], fire:true, shroom:true},
+  };
+  let NIGHT_FORCE = (/[?&]night=([ABC])\b/.exec(location.search)||[])[1] || null;
+  const nightKey = () => NIGHT_FORCE!==null ? NIGHT_FORCE : (DATA.level.night||'');
+  const night = () => NIGHTS[nightKey()] || null;
+  const bakeMul = N => N.env.map((v,i)=>Math.min(255, Math.round(v/N.chr[i]*255)));
+  function nightPaint(g, w, h, N, mask){   // 乘色；mask 有值 = 只乘不透明的部分（道具）
+    g.save(); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation='multiply'; g.fillStyle=rgb(bakeMul(N)); g.fillRect(0,0,w,h);
+    if(mask){ g.globalCompositeOperation='destination-in'; g.drawImage(mask,0,0); } g.restore(); }
 
   /* ---------- 道具：按显示尺寸烘焙一次（高质量缩小）；后排压暗 ---------- */
   function bake(p){
@@ -186,6 +204,7 @@ const SCENE = (()=>{
     const a=document.createElement('canvas'); a.width=w+pad*2; a.height=h+pad*2; const g=a.getContext('2d'); g.imageSmoothingQuality='high';
     g.save(); if(p.flip){ g.translate(a.width,0); g.scale(-1,1); } if(p.bri!==1) g.filter=`brightness(${p.bri})`; g.drawImage(src,pad,pad,w,h); g.restore(); g.filter='none';
     if(p.tone<0.999){ g.globalCompositeOperation='source-atop'; g.fillStyle=rgb(DEEP.map(v=>v*0.55),(1-p.tone)*1.7); g.fillRect(0,0,a.width,a.height); g.globalCompositeOperation='source-over'; }
+    { const N=night(); if(N){ const m=document.createElement('canvas'); m.width=a.width; m.height=a.height; m.getContext('2d').drawImage(a,0,0); nightPaint(g, a.width, a.height, N, m); m.width=0; m.height=0; } }
     const res={img:a,pad,S}; BAKED.set(p,res); return res;
   }
   function drawProp(ctx,p,t){
@@ -202,8 +221,9 @@ const SCENE = (()=>{
   function drawFx(ctx,t,dt,leaf){
     const xmin=0, span=W, cs=L.cs;
     // 云影：大块很淡的暗斑缓慢飘过
+    const NT=night();
     ctx.save(); ctx.globalCompositeOperation='multiply';
-    if(!FX_OFF) for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
+    if(!FX_OFF && !NT) for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
       g.addColorStop(0,'rgba(110,130,150,.16)'); g.addColorStop(1,'rgba(110,130,150,0)'); ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2); }
     ctx.restore();
     // 落叶：叶子贴图，边落边翻
@@ -211,6 +231,7 @@ const SCENE = (()=>{
       const sz=cs*(0.11+p.s*0.06);
       ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(t*1.2+p.a); ctx.scale(Math.cos(t*3+p.a*2),1); ctx.globalAlpha=0.8;
       if(leaf&&leaf.complete&&leaf.naturalWidth) ctx.drawImage(leaf,-sz/2,-sz/2,sz,sz); ctx.restore(); }
+    if(NT) return;   // 71 版：夜里没有左上的暖光
     // 左上来的暖光
     const g=ctx.createLinearGradient(xmin,0,xmin+span*0.7,H); g.addColorStop(0,'rgba(255,240,190,.12)'); g.addColorStop(0.55,'rgba(255,240,190,0)'); ctx.fillStyle=g;
     if(FX_OFF) return;
@@ -221,7 +242,8 @@ const SCENE = (()=>{
 
   return {
     load, THEMES:['forest'], get theme(){ return 'forest'; }, setTheme(){},
-    ensure(cells){ const key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join('')].join('|'); if(key!==KEY){ KEY=key; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
+    NIGHTS, night, nightKey, setNight(k){ NIGHT_FORCE=k; },
+    ensure(cells){ const key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join(''),nightKey()].join('|'); if(key!==KEY){ KEY=key; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
     drawGround(ctx){ ctx.drawImage(STATIC,0,0,W,H); },
     props(){ return PROPS; }, drawProp, drawFx,
   };
