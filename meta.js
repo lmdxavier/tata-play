@@ -52,7 +52,7 @@ const roleIcon = r => hero(ROLE_ICON[r]);
 const roleIco = (r, on) => MT.theme==='afk' ? heroT(ROLE_ICON[r], on?'#f4f0e7':'#8d8485') : roleIcon(r);
 const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦克', mine:'地雷'};
 const EL_CN = {fire:'火', water:'水', grass:'草', none:'无'};
-const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧'};
+const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速'};
 // 升星后攻击方式的变化：照抄 docs/vfx-design.md 9.1（提案），那边改了这里跟着改
 const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
@@ -137,7 +137,7 @@ const shardHave = k => (typeof OWNED!=='undefined' && OWNED[k]) || 0;
 const petVis = k => PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k]||ENEMY_MON[k],'Idle');   // 65 版：没召唤的宠物也用它自己的样子（原来未获得的一律当怪物）
 const canSummon = k => !!DATA.pets[k] && !PROFILE.owned[k] && shardHave(k) >= RAR[DATA.pets[k].rarity||'common'].need;
 // 69 版：升星。只开放战斗里已经做出变化的星级（其余的先不让升，免得花了碎片没效果）；所需碎片数先用召唤数
-const STAR_OPEN = {goldfish:2};
+const STAR_OPEN = {goldfish:2, pug:2};
 const starNeed = k => RAR[DATA.pets[k].rarity||'common'].need;
 const starOpen = k => !!PROFILE.owned[k] && starOf(k) < (STAR_OPEN[k]||1);
 const canStarUp = k => !!DATA.pets[k] && starOpen(k) && shardHave(k) >= starNeed(k);

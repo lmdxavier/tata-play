@@ -21,9 +21,9 @@ const icon = n => img('icons/'+n+'.png');
 
 // 角色映射：宠物用 Spine，怪物（和怪物转宠物）用 Enemy Monster 播放器
 const PET_SPINE = { flower:'Flower', goldfish:'Goldfish', pug:'Pug', pumpkin:'Pumpkin', bomb:'Bomb' };
-const PET_MON   = { lizard:'Lizard_Fire' };
-const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood', lizard:'Lizard_Fire' };
-const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5, lizard:0.75 };   // 身高，单位：格
+const PET_MON   = { lizard:'Lizard_Fire', snail:'Snail_Green' };
+const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood', lizard:'Lizard_Fire', snake:'Snake_Green', gull:'Bird_Gull' };
+const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5, lizard:0.75, snail:0.6 };   // 身高，单位：格
 const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', grass:'Misc_Leaf_01_Green' };
 
 // ---------- 加载 ----------
@@ -263,12 +263,12 @@ function makePortraits(){
 // ---------- 实体 → 画面实例 ----------
 const VIS = new WeakMap(); let VIS_ID = 0;
 // 体型标准：所有角色按「待机姿势」缩放到基本占满一格（高 0.84 格、宽不超过 0.94 格）；精英大一号，地雷小一号
-const FIT = { pet:[0.84,0.94], mine:[0.6,0.7], enemy:[0.84,0.94], elite:[1.06,1.2] };
+const FIT = { pet:[0.84,0.94], mine:[0.6,0.7], enemy:[0.84,0.94], elite:[1.06,1.2], boss:[1.4,1.5] };   // 73 版：Boss 比精英再大一号
 function visOf(ent, isPet){
   let v = VIS.get(ent); if(v) return v;
   const orig = LOOK==='orig';
   if(isPet){ v = PET_SPINE[ent.key] ? newSpine(PET_SPINE[ent.key], orig) : newMon(PET_MON[ent.key],'Idle', orig); v.fit = ent.def.shape==='mine' ? FIT.mine : FIT.pet; }
-  else { v = newMon(ENEMY_MON[ent.key],'Walk', orig); v.state='Walk'; v.fit = ent.def.role==='elite' ? FIT.elite : FIT.enemy; }
+  else { v = newMon(ENEMY_MON[ent.key],'Walk', orig); v.state='Walk'; v.fit = ent.def.boss ? FIT.boss : ent.def.role==='elite' ? FIT.elite : FIT.enemy; }
   v.hpGhost = 1; v.id = (VIS_ID++); VIS.set(ent, v); return v;
 }
 function charScale(v, mul){
@@ -511,6 +511,7 @@ HOOKS.push((type, d)=>{
     case 'start': sfx('start'); break;
     case 'tutStep': if(!d.s.free){ sfx('alert'); TUT_T0=performance.now(); TIP.card=null; TIP.cell=null; } break;   /* 67 版：新的一步出现时，之前点开的卡牌说明先关掉，免得盖住浮窗 */
     case 'tutDone': if(d.s.kind==='card') TIP.card=null; break;
+    case 'poison': if(d.fresh) floatText(d.pet.lane, d.pet.col+0.5, '中毒', '#8fe36a', 12); break;   // 73 版：只在刚中毒时飘一次字
     case 'enrage': { const v=visOf(d.e,false); v.squash=0.12; floatText(d.e.lane, d.e.p, '发怒', '#ff6a3d', 13); COMBO.play('发怒', atE(d.e)); break; }
     case 'place': { const v=visOf(d.pet,true); v.drop=0.16; break; }   // 落地那一刻才播「放置」（drawPet 里）
     case 'move': { const mv=d.pet.move, o=mv?feet(mv.fl,mv.fc+0.5):feet(d.lane,d.col+0.5); COMBO.play('移动', {x:o.x, y:o.y-L.cs*0.1});   // 拿起：轻嗖 + 小烟团
@@ -522,7 +523,7 @@ HOOKS.push((type, d)=>{
     case 'melee': {
       const p=d.pet; const v=visOf(p,true); v.lunge=0.15;   // 动画已在起手时开始，这里是出手那一帧
       if(p.key==='lizard') FX.fire(p, d.hits);
-      else for(const e of d.hits) FX.bite(p, e);   // 咬空了不出声、不出特效
+      else for(const e of d.hits){ FX.bite(p, e); if(d.heavy){ COMBO.play('咬-命中-T2', atE(e), {scale:1.5}); shakeDir(0.035,0.2,fwd()); floatText(e.lane, e.p, '重咬', '#ffb14a', 12); } }   // 咬空了不出声、不出特效；73 版：2 星重咬加大一号的咬特效 + 震屏
       break; }
     case 'projhit': FX.water(d.e); break;
     case 'burnTick': DMG.push({lane:d.e.lane, p:d.e.p, n:Math.round(d.dmg), burn:true, t:0, dx:(Math.random()-0.5)*0.4}); break;   // 灼烧：小号橙红数字
@@ -532,6 +533,7 @@ HOOKS.push((type, d)=>{
     case 'breath': { const e=d.e, v=visOf(e,false), f=fwd(), m=feet(e.lane,e.p-0.3), far=d.pets.length?d.pets.reduce((a,b)=>b.col<a.col?b:a):null;   // 69 版：敌方喷火蜥，火焰朝宠物那边铺 2 格（复用「喷火-T2」，方向反过来）
       COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:{x:-f.x, y:-f.y}, target2:far?atPet(far,0.4):null}, {freeze:[v, ...d.pets.map(p=>visOf(p,true))]});
       for(const p of d.pets){ const pv=visOf(p,true); pv.squash=0.1; pv.hitFlash=0.08; } break; }
+    case 'hop': COMBO.play('移动', atE(d.e)); break;   // 73 版：长信翁起飞（复用「移动」的嗖声 + 小烟团）
     case 'bossWarn': sfx('alert'); G.fx.push({kind:'banner', text:`格鲁姆要换到第 ${d.lane+1} 路`, t:0, life:1.8, color:'#ff8a6a'}); break;
     case 'bossMove': { const v=visOf(d.e,false); v.squash=0.12; COMBO.later(0.6, ()=>{ const g=atE(d.e); COMBO.play('放置', {x:g.gx, y:g.gy-L.cs*0.1}, {scale:1.8}); shakeDir(0.03,0.2); }); break; }
     case 'bossRoar': { const e=d.e, v=visOf(e,false), g=atE(e); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); v.squash=0.12;
@@ -759,7 +761,7 @@ function drawPet(pet, dt){
     if(v.drop<=0){ v.squash=0.12; v.pop=0.25; COMBO.play('放置', {x:f.x, y:f.y-cs*0.1}); } }
   v.hitFlash=Math.max(0,(v.hitFlash||0)-dt);
   ctx.save(); if(v.squash){ v.squash=Math.max(0,v.squash-dt); const k=v.squash/0.12; ctx.translate(f.x,f.y); ctx.scale(1+0.12*k,1-0.14*k); ctx.translate(-f.x,-f.y); }
-  v.dh = drawV(v, f.x, f.y, {alpha, flip:v.kind==='mon', mul, flash:v.hitFlash>0?0.75:0, cache:!pet.move&&!v.pop&&!v.lunge, fc:true});
+  v.dh = drawV(v, f.x, f.y, {alpha, flip:v.kind==='mon', mul, flash:v.hitFlash>0?0.75:0, cache:!pet.move&&!v.pop&&!v.lunge&&!pet.poison, fc:true, tint: pet.poison ? `rgba(120,200,80,${0.18+0.08*Math.sin(G.t*9)})` : null});   // 73 版：中毒时身上泛绿
   ctx.restore();
   const hpF=pet.hp/pet.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   if(hpF<1 && pet.def.shape!=='mine') hpBar(f.x, f.y-cs*0.06, cs*0.5, hpF, 'green', 7);   // 宠物血条在脚下，和怪物头顶的血条分开
@@ -775,6 +777,7 @@ function drawEnemy(e, dt){
   // 被挡住时画面上稍微退后一点，不和宠物叠成一团（逻辑位置不变）
   v.back = (v.back||0) + ((e.blocked?0.14:0) - (v.back||0))*Math.min(1,dt*8);
   let f=feet(e.lane, e.p + (v.kb||0) + v.back);
+  if(e.hopT!=null){ const k=Math.min(1,e.hopT/0.7); f={x:f.x, y:f.y-Math.sin(k*Math.PI)*cs*0.8}; }   // 73 版：长信翁飞越，向上的弧线
   if(e.lmv){ const a=feet(e.lmv.from, e.p + (v.kb||0) + v.back), k=Math.min(1,e.lmv.t/0.6), q=k*k*(3-2*k); f={x:a.x+(f.x-a.x)*q, y:a.y+(f.y-a.y)*q - Math.sin(k*Math.PI)*cs*0.25}; }   // 70 版：Boss 换路，横移带一点跳
   if(!v.state){ const want = (e.blocked || tutCur()) ? 'Idle' : 'Walk'; if(v.cur!==want){ v.m.play(want); v.cur=want; } } else v.cur=null;
   v.m.update(dt*(e.slow>0?0.85:1)*(e.def.speed>0.4||e.rage?1.5:1));
@@ -782,7 +785,7 @@ function drawEnemy(e, dt){
   v.hitFlash=Math.max(0,(v.hitFlash||0)-dt);
   ctx.save(); if(v.squash){ v.squash=Math.max(0,v.squash-dt); const k=v.squash/0.12; ctx.translate(f.x,f.y); ctx.scale(1+0.16*k,1-0.18*k); ctx.translate(-f.x,-f.y); }
   const fl = Math.max(v.hitFlash>0?0.8:0, e.flash>0?0.6:0);
-  v.dh = drawV(v, f.x, f.y, {fc:true, flash:fl, tint: e.slow>0 ? 'rgba(120,190,255,.22)' : e.rage ? `rgba(255,60,40,${0.2+0.08*Math.sin(G.t*10)})` : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : null});
+  v.dh = drawV(v, f.x, f.y, {fc:true, flash:fl, tint: e.slow>0 ? 'rgba(120,190,255,.22)' : e.sticky>0 ? 'rgba(150,220,110,.24)' : e.rage ? `rgba(255,60,40,${0.2+0.08*Math.sin(G.t*10)})` : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : null});
   ctx.restore();
   const hpF=e.hp/e.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   const hy=f.y-v.dh-8;
@@ -832,13 +835,13 @@ function drawNight(dt){
 // 72 版：场景预览（网址加 ?scenedemo=1）：按钮切到每一关的场景（真实的路数、摆放、氛围），进局后先摆好一排宠物方便对比
 //   1-8、1-9 还没做，先用 1-6 的关卡数据 + 它们的场景（夜 A、夜 C）
 const ND_RECTS = []; let ND_SEL = '1-8';
-const ND_PROXY = {'1-8':['1-6','A'], '1-9':['1-6','C']};
+const ND_PROXY = {};
 function sceneDemoGo(id){
   ND_SEL=id; const px=ND_PROXY[id]; MT.inBattle=false;
   SCENE.setMood(px ? px[1] : null); startBattle(px ? px[0] : id); FIREFLY.length=0; MIST.length=0; FLECK.length=0;
 }
 function nightDemoSetup(){
-  if(!window.NIGHT_DEMO || !G.started || G._nd) return; G._nd=true; G.energy=99999;
+  if(!window.NIGHT_DEMO || !G.started || G._nd) return; G._nd=true; if(G.pick && G.pick.on) pickDone(); G.energy=99999;
   const ln=DATA.level.lanes, F=[['flower',0],['goldfish',1],['lizard',2],['pug',3],['pumpkin',4]];
   ln.forEach((l,i)=>{ for(const [k,c] of F){ if((i+c)%3===2 && k!=='goldfish') continue; for(const q in G.cooldown) G.cooldown[q]=0; placePet(k,l,c); } });
   for(const k in G.cooldown) G.cooldown[k]=0;
@@ -855,6 +858,37 @@ function drawNightDemo(){
 }
 window.addEventListener('pointerdown', e=>{ if(!window.NIGHT_DEMO || !G.started) return; const x=PX(e), y=PY(e), r=ND_RECTS.find(q=>x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h); if(!r) return;
   e.stopPropagation(); e.preventDefault(); sceneDemoGo(r.k==='R' ? ND_SEL : r.k); emit('ui'); }, {capture:true});
+// ---------- 73 版：开战前选上阵（宠物超过 6 只时；参照 PvZ 开战前选卡：上面是全部宠物，选中的进底部卡槽，点「开战」开始） ----------
+// 面板和按钮用暂停界面同一套启程配色（dBox）；面板只占信息栏和卡槽之间，安全区里不放东西
+const PICK_RECTS = [];
+function pickGeom(){
+  const own=PET_ORDER.filter(k=>PROFILE.owned[k]), card=L.items.find(i=>i.id==='card') || {w:56,h:66}, cw=card.w, ch=card.h, per=4, gap=10;
+  const rows=Math.ceil(own.length/per), pw=Math.min(W-24, per*cw+(per-1)*gap+36), first=!PROFILE.tipPick;
+  const ph=58+(first?24:0)+rows*(ch+gap)-gap+18+56+18, px=W/2-pw/2, py=Math.max(L.hud.h+10, Math.min(L.bar.y-ph-14, (L.hud.h+L.bar.y)/2-ph/2));
+  return {own, cw, ch, per, gap, pw, ph, px, py, first, gx:W/2-(Math.min(per,own.length)*cw+(Math.min(per,own.length)-1)*gap)/2};
+}
+function drawPick(){
+  PICK_RECTS.length=0; if(!G.pick || !G.pick.on || G.over) return;
+  const g=pickGeom(), U=TH_AFK.ui, lo=DATA.level.loadout;
+  ctx.save(); ctx.fillStyle='rgba(20,18,24,.45)'; ctx.fillRect(0,L.hud.h,W,L.bar.y-L.hud.h); ctx.restore();
+  const pf=dBox(g.px, g.py, g.pw, g.ph, 22, U.panel, D37.sideL, D37.out, 0);
+  ctx.save(); ctx.strokeStyle=D37.gold; ctx.lineWidth=1.5; rr(pf.x+6, pf.y+6, pf.w-12, pf.h-12, 17); ctx.stroke(); ctx.restore();
+  text(`选择上阵宠物  ${lo.length}/6`, W/2, g.py+34, 19, U.txt, 'center', 800, false);
+  let y0=g.py+58; if(g.first){ text('点卡片换上或换下，最多 6 只', W/2, y0+4, 13, U.sub, 'center', 800, false); y0+=24; }
+  g.own.forEach((k,i)=>{ const r=Math.floor(i/g.per), c=i%g.per, n=Math.min(g.per, g.own.length-r*g.per), rx=W/2-(n*g.cw+(n-1)*g.gap)/2,
+      it={x:rx+c*(g.cw+g.gap), y:y0+r*(g.ch+g.gap), w:g.cw, h:g.ch}, on=lo.includes(k);
+    drawCard(it, DATA.pets[k], k, false);
+    if(on){ ctx.save(); ctx.globalAlpha=0.55; ctx.fillStyle='#1b1a22'; rr(it.x+2, it.y+2, it.w-4, it.h-4, it.w*0.18); ctx.fill(); ctx.restore();
+      drawImgC(gui('IconMisc/Icon_Check01'), it.x+it.w/2, it.y+it.h*0.42, it.w*0.42); }
+    PICK_RECTS.push({...it, k}); });
+  const bw=150, bh=50, bx=W/2-bw/2, by=g.py+g.ph-bh-20, f=dBox(bx, by, bw, bh, 14, '#749965', '#587a4c', D37.out, 0); dHi(f,14);
+  text('开战', f.x+f.w/2, f.y+f.h/2+1, 20, '#fff', 'center', 800, '#587a4c'); PICK_RECTS.push({x:bx,y:by,w:bw,h:bh,k:'@go'});
+  for(const it of L.items) if(it.id==='card') PICK_RECTS.push({...it, k:it.key});   // 点底部卡槽里的卡 = 换下
+}
+window.addEventListener('pointerdown', e=>{ if(!G || !G.pick || !G.pick.on || G.over || G.paused || !G.started || (typeof MT!=='undefined' && !MT.inBattle)) return;
+  const x=PX(e), y=PY(e), pz=L.items.find(i=>i.id==='pause'); if(pz && x>=pz.x&&x<=pz.x+pz.w&&y>=pz.y&&y<=pz.y+pz.h) return;   // 暂停键照常能点
+  e.stopPropagation(); e.preventDefault(); const r=PICK_RECTS.find(q=>x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h); if(!r) return;
+  if(r.k==='@go') pickDone(); else pickToggle(r.k); }, {capture:true});
 function drawCorpses(dt){
   for(const c of corpses){ let cdt=dt; if(c.v.freeze>0){ c.v.freeze-=dt; cdt=0; }   // 死亡的局部顿帧
     c.t+=cdt; const f=feet(c.lane,c.p);
@@ -1368,7 +1402,7 @@ function draw(){
   drawNight(dt);
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();
   if(G.started && !G.over) watchEvents();
-  drawUI2(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt);   // 拖着的宠物画在卖出区上面，不被挡住
+  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt);   // 拖着的宠物画在卖出区上面，不被挡住
   const bn=[...G.fx.filter(f=>f.kind==='banner'), ...EVENTS.filter(ev=>G.t>=ev.t&&G.t<ev.until&&ev.text).map(ev=>({text:ev.text,big:ev.kind==='banner'}))];
   /* 65 版：教学提示出现时，同一位置的预告文字先不画，免得叠在一起 */
   if(!G.over && !G.paused && !tutCur()) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
