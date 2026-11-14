@@ -36,7 +36,7 @@ const DATA = {
     snail:  {cn:'厚壳蜗', desc:'移动 0.15 格 / 秒，生命 800。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0.07, r:0.34, windup:0.13},
     fox:    {cn:'迅火狐', desc:'移动 0.5 格 / 秒，是绿莱姆的 2 倍。生命 170。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.07, r:0.28, windup:0.09},
     hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
-    hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 110，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:110, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
+    hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 260，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:260, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
     bear:   {cn:'格鲁姆', desc:'生命 2600，每次攻击 40 伤害。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:2600, speed:0.15, atk:40, atkInt:1.5, role:'elite', drop:0.21, r:0.44, windup:0.47},
   },
   level: {
@@ -571,7 +571,7 @@ function tutBegin(s){
     if(!DATA.level.loadout.includes(s.key)) return false;
     let c0=s.col;
     if(c0==='front'){ const mine=G.pets.filter(p=>p.lane===s.lane); c0=Math.max(s.min||3, mine.length?Math.max(...mine.map(p=>p.col))+1:0); }
-    if(s.ahead){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.ahead&&Math.abs(e.lane-s.lane)<=1); if(es.length) c0=Math.max(1, Math.min(c0, Math.floor(Math.min(...es.map(e=>e.p))-1.6))); }   // 波姆：放在怪群前面
+    if(s.ahead){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.ahead&&Math.abs(e.lane-s.lane)<=1); if(es.length) c0=Math.max(1, Math.floor(Math.min(...es.map(e=>e.p))-2.3)); }   // 波姆：放在怪群前面
     const c=freeCol(s.lane, Math.min(c0,COLS-2), 0, COLS-2); if(c<0) return false;
     s.L=s.lane; s.C=c; const d=DATA.pets[s.key]; G.cooldown[s.key]=0; if(G.energy<d.cost) G.energy=d.cost;
   } else if(s.kind==='orb'){
@@ -594,10 +594,14 @@ function tutBegin(s){
     else if(s.run==='restart'){ PROFILE.demo=1; profileSave(); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); return false; }
   } else if(s.kind==='move'){
     if(G.swapCap<1) return false;
-    if(G.pets.some(p=>p.key===s.key && p.lane===s.toLane)) return false;   // 那一路已经有了：玩家自己做对了，不用教
-    const pet=G.pets.filter(p=>p.key===s.key).sort((a,b)=>Math.abs(a.lane-s.toLane)-Math.abs(b.lane-s.toLane))[0]; if(!pet) return false;
-    if(propAlive(cellAt(s.toLane, pet.col))) return false;
-    s.pet=pet; s.L=s.toLane; s.C=pet.col; if(G.swaps<1) G.swaps=1;   // 目标格 = 同一排；那里有别的宠物就互换（movePet 本来支持）
+    /* 68 版（用户 2026-11-14：没放泡泡鱼，换位教学就跳过了）：别的路上没有这只宠物时，先像前面的关那样提示放一只，再教换位；这一步不再跳过 */
+    const pet=G.pets.filter(p=>p.key===s.key && p.lane!==s.toLane).sort((a,b)=>Math.abs(a.lane-s.toLane)-Math.abs(b.lane-s.toLane))[0];
+    if(!pet){ if(s.forced || !DATA.level.loadout.includes(s.key)) return false; s.forced=true;
+      const ln=DATA.level.lanes.filter(l=>l!==s.toLane), lane=ln[Math.floor((ln.length-1)/2)];
+      G.tut.steps.splice(G.tut.i, 0, {kind:'place', key:s.key, lane, col:1}); return 'again'; }
+    let c=-1; for(const d of [0,1,-1,2,-2,3,-3,4,-4]){ const q=pet.col+d, o=petAt(s.toLane,q); if(q>=0 && q<=COLS-2 && !propAlive(cellAt(s.toLane,q)) && !(o && o.key===s.key)){ c=q; break; } }
+    if(c<0) return false;
+    s.pet=pet; s.L=s.toLane; s.C=c; if(G.swaps<1) G.swaps=1;   /* 目标格 = 同一排（那里已经是同一种宠物就换旁边一格）；有别的宠物就互换 */
   } else return false;
   if(!s.free){ G.selected=null; G.drag=null; }
   return true;
@@ -619,7 +623,7 @@ function tutUpdate(dt){
   if(T.gap>0){ T.gap-=dt; return; }
   const s=T.steps[T.i]; if(G.t<(s.at||0)) return;
   if(s.when){ const es=G.enemies.filter(e=>!e.dead&&e.key===s.when); if(es.length<3 || Math.min(...es.map(e=>e.p))>(s.whenP||7.5)) return; }   // 等这种怪成群走进场
-  if(!tutBegin(s)){ if(G.tut===T) T.i++; return; }   // 条件不满足（比如这只宠物还没召唤）：跳过这一步；restart 会换掉整局，不再动旧的
+  { const ok=tutBegin(s); if(ok==='again') return; if(!ok){ if(G.tut===T) T.i++; return; } }   // 条件不满足（比如这只宠物还没召唤）：跳过这一步；restart 会换掉整局，不再动旧的
   T.cur=s; T.t=0; emit('tutStep',{s});
 }
 

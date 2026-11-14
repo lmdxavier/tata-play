@@ -64,7 +64,7 @@
     events:[ {t:58, kind:'preview', lanes:[0,4], until:84, text:'预告：下一波走最左、最右两路'},
              {t:165, kind:'banner', text:'一大波敌人正在接近', until:171} ],
     reward:{unlock:'swap3'},
-    tut:[ {at:112, when:'hornbug', whenP:7.4, kind:'place', key:'bomb', lane:2, col:5, ahead:'hornbug', tip:'尖角虫成群来。把波姆放在它们前面：3 秒后就绪，炸周围 3×3 格，600 伤害。'} ] };
+    tut:[ {at:112, when:'hornbug', whenP:9.2, kind:'place', key:'bomb', lane:2, col:5, ahead:'hornbug', tip:'尖角虫成群来。把波姆放在它们前面：3 秒后就绪，炸周围 3×3 格，600 伤害。'} ] };
 
   window.LEVELS = L;
   window.UNLOCK_CN = { swap:{name:'战斗中换位', desc:'拖动场上的宠物换格子。有 2 次，用掉后每 20 秒恢复 1 次'}, swap3:{name:'换位次数 +1', desc:'换位次数上限从 2 次变成 3 次'} };
