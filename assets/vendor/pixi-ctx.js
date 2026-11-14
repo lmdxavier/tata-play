@@ -158,6 +158,10 @@ class Path {
     for(let i = 0; i < C.length; i += 3){ const m = C[i+1]; g.setTransform(m[0], m[1], m[2], m[3], m[4]-ox, m[5]-oy); g[C[i]](...C[i+2]); } }
 }
 
+// ---------- 3.9 图片登记（61 版：进战斗前预先上传显卡用） ----------
+const ALLIMG = [];
+{ const OI = window.Image; if(OI && !OI.__pxwrap){ const W = function(w, h){ const i = arguments.length ? new OI(w, h) : new OI(); ALLIMG.push(i); return i; }; W.prototype = OI.prototype; W.__pxwrap = true; window.Image = W; } }
+
 // ---------- 4. 光栅化缓存（文字、路径、渐变、阴影） ----------
 const RC = new Map(); let RC_PX = 0; const RC_MAX = 8e6;   // 约 32MB
 function rcGet(key){ const e = RC.get(key); if(e){ RC.delete(key); RC.set(key, e); } return e; }
@@ -193,7 +197,8 @@ class PixiCtx {
     this.stats = { frames:0, flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0 };
     this.fstat = { flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0 };
     P.autoDetectRenderer({ preference:'webgl', canvas:cv, width:cv.width || 1, height:cv.height || 1, resolution:1, autoDensity:false,
-      antialias:!/[?&]aa=0\b/.test(location.search), backgroundAlpha:0, clearBeforeRender:true, preserveDrawingBuffer:false, powerPreference:'high-performance',
+      antialias:/[?&]aa=1\b/.test(location.search) || (() => { try{ return JSON.parse(localStorage.getItem('tata_opts') || '{}').aa === true; }catch(e){ return false; } })(),   // 61 版：默认关抗锯齿（用户 2026-11-14 真机对比「没看出什么区别所以默认可以关」；Pixi 官方对移动端的建议），?aa=1 打开对比
+      backgroundAlpha:0, clearBeforeRender:true, preserveDrawingBuffer:false, powerPreference:'high-performance',
       gcMaxUnusedTime:20000, gcFrequency:10000 })   // 20 秒没画过的贴图释放显存（Pixi 默认 60 秒）
       .then(r => { this.r = r; this.ready = true;
         // 统计（?pxstat=1）：每帧 GPU 绘制调用次数、纹理上传像素
@@ -288,7 +293,7 @@ class PixiCtx {
   get _shadow(){ const S = this.S; return (S.shb > 0 || S.shx || S.shy) && parseColor(S.shc).a > 0; }
   get _fx(){ return this._shadow || (this.S.filter && this.S.filter !== 'none'); }
   // ----- 光栅化：把一个 2D 操作画进对齐屏幕像素的小画布，缓存后当精灵贴 -----
-  _raster(kind, bounds, keyBody, paint){
+  _raster(kind, bounds, keyBody, paint, dyn){   // dyn（61 版）：{s, tx, ty} —— bounds 是「标准大小、原点在文字锚点」的范围；光栅图只画一次，位置（可带小数）和缩放 s 交给 GPU
     if(!this.live) return;
     const S = this.S, cv = this.canvas;
     let pad = 2; if(this._shadow) pad += Math.ceil(S.shb * 1.6) + Math.ceil(Math.max(Math.abs(S.shx), Math.abs(S.shy)));
@@ -297,10 +302,11 @@ class PixiCtx {
     // 同一个形状 / 文字只是平移时缓存键不变，可以直接复用（例如战场上缓慢飘动的云影，不用每帧重画、重传）。
     // 特别大的（超过约一屏半）才按屏幕裁掉，按整像素对齐。
     let x0 = bounds[0] - pad, y0 = bounds[1] - pad, x1 = bounds[2] + pad, y1 = bounds[3] + pad;
-    if(x1 <= 0 || y1 <= 0 || x0 >= cv.width || y0 >= cv.height) return;   // 完全在屏幕外
+    if(!dyn && (x1 <= 0 || y1 <= 0 || x0 >= cv.width || y0 >= cv.height)) return;   // 完全在屏幕外
     let w = Math.ceil(x1 - x0), h = Math.ceil(y1 - y0);
     let px = x0, py = y0, qx = 0, qy = 0;   // px,py：精灵摆放的整像素位置；qx,qy：烘进光栅图的小数偏移（1/4 像素）
-    if(w * h > cv.width * cv.height * 1.5){
+    if(dyn){ px = Math.floor(x0); py = Math.floor(y0); w += 1; h += 1; }
+    else if(w * h > cv.width * cv.height * 1.5){
       const M = 64; x0 = Math.max(Math.floor(x0), -M); y0 = Math.max(Math.floor(y0), -M); x1 = Math.min(Math.ceil(x1), cv.width + M); y1 = Math.min(Math.ceil(y1), cv.height + M);
       w = x1 - x0; h = y1 - y0; px = x0; py = y0; }
     else {
@@ -310,7 +316,7 @@ class PixiCtx {
     if(w <= 0 || h <= 0) return;
     // 带阴影时透明度要烘进光栅（Canvas 是阴影、形状各自乘透明度再叠，和整体乘透明度不等价）
     const bake = this._shadow && S.alpha < 1, ba = bake ? Math.round(S.alpha * 64) / 64 : 1;
-    const key = kind + '|' + w + 'x' + h + '|' + (this._shadow ? S.shc + S.shb + ',' + S.shx + ',' + S.shy + ',' + ba : '') + '|' + S.filter + '|' + qx + ',' + qy + '|' + keyBody(x0, y0);
+    const key = (dyn ? 'D' : '') + kind + '|' + w + 'x' + h + '|' + (this._shadow ? S.shc + S.shb + ',' + S.shx + ',' + S.shy + ',' + ba : '') + '|' + S.filter + '|' + qx + ',' + qy + '|' + keyBody(x0, y0);
     let e = rcGet(key);
     this.fstat.raster++;
     if(!e){
@@ -321,13 +327,15 @@ class PixiCtx {
       if(txt){ g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); }
       g.shadowColor = S.shc; g.shadowBlur = S.shb; g.shadowOffsetX = S.shx; g.shadowOffsetY = S.shy; g.filter = S.filter;
       g.imageSmoothingEnabled = S.smooth; g.imageSmoothingQuality = S.smq; g.globalAlpha = ba;
-      paint(g, x0 - qx, y0 - qy); g.globalAlpha = 1;
+      if(dyn) paint(g, px, py); else paint(g, x0 - qx, y0 - qy); g.globalAlpha = 1;
       if(txt){ g.shadowColor = 'rgba(0,0,0,0)'; g.filter = 'none'; const cg = c.getContext('2d'); cg.drawImage(tc, 0, 0, w, h, 0, 0, w, h); }
       const src = new P.CanvasSource({ resource:c, width:w, height:h, resolution:1 });
       e = { w, h, cv:c, tex:new P.Texture({ source:src }) }; rcPut(key, e); this.fstat.rasterMiss++;
-      if(window.__PXMISS) window.__PXMISS.push(w + 'x' + h + ' ' + key.slice(0, 160));
+      if(window.__PXMISS) window.__PXMISS.push(w + 'x' + h + ' ' + key.slice(0, 160) + (txt ? '|' + key.slice(key.lastIndexOf('|') + 1, key.lastIndexOf('|') + 13) : ''));
     }
-    const s = this._sprite(e.tex); const t = _MT; t.a = 1; t.b = 0; t.c = 0; t.d = 1; t.tx = px; t.ty = py; s.setFromMatrix(t);
+    const s = this._sprite(e.tex); const t = _MT; t.b = 0; t.c = 0;
+    if(dyn){ t.a = dyn.s; t.d = dyn.s; t.tx = dyn.tx + px * dyn.s; t.ty = dyn.ty + py * dyn.s; } else { t.a = 1; t.d = 1; t.tx = px; t.ty = py; }
+    s.setFromMatrix(t);
     s.alpha = bake ? 1 : S.alpha; s.blendMode = BLEND[S.comp] || 'normal'; s.tint = 0xffffff;
   }
   _strokeStyleKey(){ const S = this.S; return (typeof S.stroke === 'string' ? S.stroke : 'obj') + '|' + n2(S.lw) + S.cap + S.join + S.miter + '|' + S.dash.join(',') + ',' + S.dashOff; }
@@ -514,6 +522,15 @@ class PixiCtx {
     const lw = stroke ? S.lw : 0, m = S.m, ex = lw + 2;
     const cs = [[x - L*k - ex, y - A - ex], [x + R*k + ex, y - A - ex], [x - L*k - ex, y + D + ex], [x + R*k + ex, y + D + ex]].map(([u, v]) => [m[0]*u + m[2]*v + m[4], m[1]*u + m[3]*v + m[5]]);
     const bd = [Math.min(...cs.map(q => q[0])), Math.min(...cs.map(q => q[1])), Math.max(...cs.map(q => q[0])), Math.max(...cs.map(q => q[1]))];
+    if(this._dyn && maxW === undefined && !m[1] && !m[2]){   // 61 版：会动的字（伤害数字、飘字）——按标准大小画一次，移动 / 缩放不再重画
+      const ds = this._dyn, c0 = m[0] / ds, c3 = m[3] / ds, sty = stroke ? this._strokeStyleKey() + styleKey(S.stroke) : styleKey(S.fill), font = S.font, al = S.align, bs = S.base, dir = S.dir, ls = S.ls, st = stroke ? S.stroke : S.fill;
+      const bx = [(-L - ex) * c0, (R + ex) * c0], by = [(-A - ex) * c3, (D + ex) * c3];
+      this._raster(stroke ? 'TS' : 'TF', [Math.min(bx[0], bx[1]), Math.min(by[0], by[1]), Math.max(bx[0], bx[1]), Math.max(by[0], by[1])],
+        () => FONTGEN + '|' + font + '|' + ls + al + bs + dir + '|' + sty + '|' + n2(c0) + ',' + n2(c3) + '|' + (typeof st === 'string' ? '' : n2(x) + ',' + n2(y)) + '|' + t,
+        (g, ox, oy) => { g.font = font; g.letterSpacing = ls; g.textAlign = al; g.textBaseline = bs; g.direction = dir; g.setTransform(c0, 0, 0, c3, -ox - c0 * x, -oy - c3 * y);   // 锚点 (x, y) 落在光栅图的原点；渐变仍按用户坐标定位
+          if(stroke){ this._applyStroke(g); g.strokeText(t, x, y); } else { g.fillStyle = realStyle(g, st); g.fillText(t, x, y); } },
+        { s: ds, tx: m[0] * x + m[4], ty: m[3] * y + m[5] });
+      return; }
     const fm = mul(m, 1, 0, 0, 1, x, y), sty = stroke ? this._strokeStyleKey() + styleKey(S.stroke) : styleKey(S.fill), font = S.font, al = S.align, bs = S.base, dir = S.dir, ls = S.ls, fill = S.fill;
     this._raster(stroke ? 'TS' : 'TF', bd, (ox, oy) => FONTGEN + '|' + font + '|' + ls + al + bs + dir + '|' + sty + '|' + n2(fm[0]) + ',' + n2(fm[1]) + ',' + n2(fm[2]) + ',' + n2(fm[3]) + ',' + n2(fm[4]-ox) + ',' + n2(fm[5]-oy) + '|' + (maxW ?? '') + '|' + ((stroke ? typeof S.stroke : typeof fill) === 'string' ? '' : n2(x) + ',' + n2(y)) + '|' + t,
       (g, ox, oy) => { g.font = font; g.letterSpacing = ls; g.textAlign = al; g.textBaseline = bs; g.direction = dir;
@@ -523,6 +540,18 @@ class PixiCtx {
         if(stroke){ this._applyStroke(g); maxW === undefined ? g.strokeText(t, px, py) : g.strokeText(t, px, py, maxW); }
         else { g.fillStyle = realStyle(g, fill); maxW === undefined ? g.fillText(t, px, py) : g.fillText(t, px, py, maxW); } });
   }
+  // 61 版：把已经下载好、还没上传显卡的图提前上传（同 Pixi 的 prepare）。filter(src 路径) 选图；budget 毫秒内做不完就下次再调；返回还剩几张
+  __prewarm(filter, budget){
+    if(!this.ready || !this.r || !this.r.texture || !this.r.texture.bindSource) return 0;
+    const t0 = performance.now(); let left = 0;
+    for(const im of ALLIMG){
+      if(im.__pxs || im.__pw || !im.complete || !im.naturalWidth || (filter && !filter(im.src || ''))) continue;
+      if(performance.now() - t0 > (budget || 8)){ left++; continue; }
+      try{ const t = this._tex(im, 0, 0, im.naturalWidth, im.naturalHeight); t.source.autoGarbageCollect = false; this.r.texture.bindSource(t.source, 0); }catch(e){} im.__pw = 1;
+    }
+    return left;
+  }
+  __dynText(s){ this._dyn = s > 0 ? s : 0; }   // 61 版：之后的文字当「会动的字」画；s = 当前变换里属于动画的那部分缩放（没有缩放传 1），画完传 0 关掉
   fillText(t, x, y, w){ this._text(false, t, x, y, w); }
   strokeText(t, x, y, w){ this._text(true, t, x, y, w); }
   isPointInPath(){ return false; } isPointInStroke(){ return false; }

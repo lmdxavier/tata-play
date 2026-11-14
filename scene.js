@@ -181,11 +181,12 @@ const SCENE = (()=>{
   }
 
   /* ---------- 环境动态 ---------- */
+  const FX_OFF = /[?&]fx=0\b/.test(location.search);   // 诊断开关：关掉云影和暖光，真机对比发热用
   function drawFx(ctx,t,dt,leaf){
     const xmin=0, span=W, cs=L.cs;
     // 云影：大块很淡的暗斑缓慢飘过
     ctx.save(); ctx.globalCompositeOperation='multiply';
-    for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
+    if(!FX_OFF) for(let i=0;i<3+Math.floor(span/W);i++){ const x=xmin+((t*10+i*230)%(span+500))-250, y=180+(i%3)*240; const r=cs*2.8; const g=ctx.createRadialGradient(x,y,0,x,y,r);
       g.addColorStop(0,'rgba(110,130,150,.16)'); g.addColorStop(1,'rgba(110,130,150,0)'); ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2); }
     ctx.restore();
     // 落叶：叶子贴图，边落边翻
@@ -194,7 +195,11 @@ const SCENE = (()=>{
       ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(t*1.2+p.a); ctx.scale(Math.cos(t*3+p.a*2),1); ctx.globalAlpha=0.8;
       if(leaf&&leaf.complete&&leaf.naturalWidth) ctx.drawImage(leaf,-sz/2,-sz/2,sz,sz); ctx.restore(); }
     // 左上来的暖光
-    const g=ctx.createLinearGradient(xmin,0,xmin+span*0.7,H); g.addColorStop(0,'rgba(255,240,190,.12)'); g.addColorStop(0.55,'rgba(255,240,190,0)'); ctx.fillStyle=g; ctx.fillRect(xmin,0,span,H);
+    const g=ctx.createLinearGradient(xmin,0,xmin+span*0.7,H); g.addColorStop(0,'rgba(255,240,190,.12)'); g.addColorStop(0.55,'rgba(255,240,190,0)'); ctx.fillStyle=g;
+    if(FX_OFF) return;
+    // 61 版：渐变过了 0.55 就全透明，只填有颜色的那一块（左上到斜线），不再整屏画一遍；画面不变
+    { const dx=span*0.7, dy=H, q=0.55*(dx*dx+dy*dy), yL=Math.min(H, q/dy+2), yR=Math.min(H, Math.max(0,(q-dx*span)/dy+2));
+      ctx.beginPath(); ctx.moveTo(xmin,0); ctx.lineTo(xmin+span,0); ctx.lineTo(xmin+span,yR); ctx.lineTo(xmin,yL); ctx.closePath(); ctx.fill(); }
   }
 
   return {

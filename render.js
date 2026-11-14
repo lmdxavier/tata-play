@@ -461,7 +461,7 @@ const FLASH = [];    // 命中闪光 {x,y,t,img,size,life,color}
 const PARTS = [];    // 粒子（屏幕坐标）
 function hitFx(e, big){ const v=VIS.get(e); if(v){ v.squash=0.12; v.kb=(v.kb||0)+(big?0.14:0.06); v.hitFlash=0.11; } }
 function hitPoint(e){ const v=VIS.get(e), f=feet(e.lane,e.p+((v&&v.kb)||0)+((v&&v.back)||0)); return {x:f.x, y:f.y-((v&&v.dh)?v.dh*0.5:L.cs*0.4)}; }
-function shakeDir(amp, t, dir){ if(amp*(dir?1:1) >= (shake.t>0?shake.amp:0)) shake={t:t||0.2, amp, dx:dir?dir.x:0, dy:dir?dir.y:0, t0:t||0.2}; }
+function shakeDir(amp, t, dir, hold){ if(amp*(dir?1:1) >= (shake.t>0?shake.amp:0)) shake={t:t||0.2, amp, dx:dir?dir.x:0, dy:dir?dir.y:0, t0:t||0.2, hold:!!hold}; }   // hold（game-test 试改）：前半段保持满幅，后半段再衰减
 function flashAt(x,y,size,life,imgName,color){ FLASH.push({x,y,t:0,size,life:life||0.12,img:imgName||'Image_Effect_Light02',color}); }
 const R01=()=>Math.random();
 // 速度线火花：沿 dir 方向扇形喷出，带拖尾、受重力
@@ -495,7 +495,8 @@ const FX = {
     COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:fwd(), target2:far?atE(far):null}, {freeze:[visOf(pet,true), ...hits.map(e=>VIS.get(e))]});
     for(const e of hits) hitFx(e,false); },
   // 怪死亡 T2；精英升 T4（全屏顿帧 + 震屏），特效放大 1.5 倍
-  death(e){ const elite=e.def.role==='elite'; COMBO.play('怪死亡', atE(e), elite?{tier:'T4', scale:1.5}:{freeze:[VIS.get(e)]}); },
+  // 61 版（用户 2026-11-14「Boss 死亡不需要震屏」）：精英死亡仍用 T4 的全屏顿帧，但不震屏
+  death(e){ const elite=e.def.role==='elite'; COMBO.play('怪死亡', atE(e), elite?{tier:'T4', scale:1.5, noShake:true}:{freeze:[VIS.get(e)]}); },
   // 炸弹 T4：铺满 3 格 + 全屏顿帧 + 震屏
   boom(pet){ const s=L.toScreen(pet.lane,pet.col+0.5), gy=s.y+L.cs*FEET; COMBO.play('炸弹-爆炸-T4', {x:s.x, y:gy-L.cs*0.2, gx:s.x, gy, dir:fwd()}); },
 };
@@ -611,11 +612,30 @@ async function loadFont(){
 // ---------- 画图小工具 ----------
 function rr(x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 // 游戏字：白字 + 深色描边（Super Casual 的统一字效）
+const DYN_TEXT = !/[?&]dyn=0\b/.test(location.search);   // 61 版：会动的字不每帧重画（?dyn=0 回到原样）
 function text(s,x,y,size,color,align,weight,stroke){
   ctx.font=`800 ${size}px ${FONT}`; ctx.textAlign=align||'center'; ctx.textBaseline='middle';
   if(stroke!==false){ ctx.lineJoin='round'; ctx.lineWidth=Math.max(2,size*0.22); ctx.strokeStyle=stroke||'#1e2236'; ctx.strokeText(s,x,y); }
   ctx.fillStyle=color||'#fff'; ctx.fillText(s,x,y);
 }
+// 61 版：会变的数字（能量、伤害）按「位图字体」的办法画——每个数字字符的图只画一次存起来，数字怎么变、怎么缩放都只是摆这几张图，
+//        不再每出现一个新数值就重画一张再上传（真机记录里每秒 10 来次重画、显存图一路涨的来源）。先描完所有字符的边再填色，和整串一起画的叠放顺序一样。
+const NUMADV = new Map();
+function numText(s, x, y, size, color, align, scale){
+  s=String(s); scale=scale||1;
+  if(!(DYN_TEXT && ctx.__dynText)){ text(s, x, y, size*scale, color, align); return; }
+  size=Math.round(size*4)/4; ctx.font=`800 ${size}px ${FONT}`;
+  let w=0; const adv=[]; for(const ch of s){ const k=size+ch; let a=NUMADV.get(k); if(a===undefined){ a=ctx.measureText(ch).width; if(NUMADV.size>4000) NUMADV.clear(); NUMADV.set(k,a); } adv.push(a); w+=a; }
+  ctx.save(); ctx.translate(x,y); if(scale!==1) ctx.scale(scale,scale); ctx.__dynText(scale);
+  const x0 = align==='left' ? 0 : align==='right' ? -w : -w/2; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.lineJoin='round'; ctx.lineWidth=Math.max(2,size*0.22); ctx.strokeStyle='#1e2236';
+  let cx=x0, i=0; for(const ch of s){ ctx.strokeText(ch, cx, 0); cx+=adv[i++]; }
+  ctx.fillStyle=color||'#fff'; cx=x0; i=0; for(const ch of s){ ctx.fillText(ch, cx, 0); cx+=adv[i++]; }
+  ctx.__dynText(0); ctx.restore();
+}
+// 61 版：火花线条用一张小胶囊图旋转 / 拉伸来摆，不再每条线每帧各画一张图
+const STREAK = new Map();
+function streakImg(color){ let c=STREAK.get(color); if(!c){ c=document.createElement('canvas'); c.width=48; c.height=12; const g=c.getContext('2d'); g.strokeStyle=color; g.lineCap='round'; g.lineWidth=10; g.beginPath(); g.moveTo(6,6); g.lineTo(42,6); g.stroke(); if(STREAK.size>64) STREAK.clear(); STREAK.set(color,c); } return c; }
 function drawImg(im, x, y, w, h, flip, alpha){
   if(!ok(im)) return;
   if(flip||alpha!=null){ ctx.save(); if(alpha!=null) ctx.globalAlpha*=alpha; if(flip){ ctx.translate(x+w,y); ctx.scale(-1,1); ctx.drawImage(im,0,0,w,h); } else ctx.drawImage(im,x,y,w,h); ctx.restore(); }
@@ -792,8 +812,12 @@ function drawVFX(dt){
     if(p.kind==='streak'){
       const sp=Math.hypot(p.vx,p.vy), len=Math.min(cs*0.5, sp*0.045)*(1-k*0.5), ux=p.vx/(sp||1), uy=p.vy/(sp||1);
       ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
-      ctx.globalAlpha=1-k; ctx.strokeStyle=p.color; ctx.lineWidth=p.w*(1-k*0.6); ctx.beginPath(); ctx.moveTo(p.x-ux*len,p.y-uy*len); ctx.lineTo(p.x,p.y); ctx.stroke();
-      ctx.strokeStyle='#ffffff'; ctx.lineWidth=p.w*0.45*(1-k); ctx.beginPath(); ctx.moveTo(p.x-ux*len*0.5,p.y-uy*len*0.5); ctx.lineTo(p.x,p.y); ctx.stroke(); ctx.restore();
+      ctx.globalAlpha=1-k; const lw=p.w*(1-k*0.6);
+      if(DYN_TEXT && ctx.__dynText){ ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(uy,ux)); ctx.drawImage(streakImg(p.color), -len-lw/2, -lw/2, len+lw, lw);
+        const lw2=p.w*0.45*(1-k); if(lw2>0.05) ctx.drawImage(streakImg('#ffffff'), -len*0.5-lw2/2, -lw2/2, len*0.5+lw2, lw2); }
+      else { ctx.strokeStyle=p.color; ctx.lineWidth=lw; ctx.beginPath(); ctx.moveTo(p.x-ux*len,p.y-uy*len); ctx.lineTo(p.x,p.y); ctx.stroke();
+        ctx.strokeStyle='#ffffff'; ctx.lineWidth=p.w*0.45*(1-k); ctx.beginPath(); ctx.moveTo(p.x-ux*len*0.5,p.y-uy*len*0.5); ctx.lineTo(p.x,p.y); ctx.stroke(); }
+      ctx.restore();
     } else {
       if(p.y>p.floor && p.vy>0){ p.y=p.floor; p.vy*=-p.bounce; p.vx*=0.6; p.vr*=0.5; }
       p.rot+=p.vr*dt; const a = k>1-p.fade ? (1-k)/p.fade : 1; const s=p.size*(k<0.1?0.5+5*k:1);
@@ -901,13 +925,19 @@ function drawDamage(dt){
   for(const d of DMG){ d.t+=dt; const k=d.t/0.55; if(k>=1){ d.done=true; continue; } const s=L.toScreen(d.lane,d.p);
     const pop = k<0.15 ? 0.7+2*k : 1; const sz=cs*(d.big?0.3:d.burn?0.17:0.22)*pop;
     ctx.globalAlpha = k>0.6 ? 1-(k-0.6)/0.4 : 1;
-    text(String(d.n), s.x+d.dx*cs, s.y+cs*FEET-cs*0.95-k*cs*0.45, sz, d.big?'#ffe14d':d.burn?'#ff6a3d':'#ffffff'); ctx.globalAlpha=1; }
+    const dx=s.x+d.dx*cs, dy=s.y+cs*FEET-cs*0.95-k*cs*0.45, dc=d.big?'#ffe14d':d.burn?'#ff6a3d':'#ffffff';
+    if(DYN_TEXT && ctx.__dynText) numText(d.n, dx, dy, sz/pop, dc, 'center', pop);   // 61 版：数字图只画一次，弹出缩放和上飘交给显卡
+    else text(String(d.n), dx, dy, sz, dc);
+    ctx.globalAlpha=1; }
   for(let i=DMG.length-1;i>=0;i--) if(DMG[i].done) DMG.splice(i,1);
 }
 function drawTexts(){
   const cs=L.cs;
   for(const f of G.fx){ if(f.kind!=='text') continue; const k=f.t/f.life; const s=L.toScreen(f.lane,f.p);
-    ctx.globalAlpha=1-k*k; text(f.text, s.x, s.y-cs*0.55-k*cs*0.4, Math.max(12,cs*0.2), f.color); ctx.globalAlpha=1; }
+    ctx.globalAlpha=1-k*k;
+    if(DYN_TEXT && ctx.__dynText){ ctx.save(); ctx.translate(s.x, s.y-cs*0.55-k*cs*0.4); ctx.__dynText(1); text(f.text, 0, 0, Math.max(12,cs*0.2), f.color); ctx.__dynText(0); ctx.restore(); }
+    else text(f.text, s.x, s.y-cs*0.55-k*cs*0.4, Math.max(12,cs*0.2), f.color);
+    ctx.globalAlpha=1; }
 }
 
 // ---------- 界面 ----------
@@ -949,7 +979,7 @@ function drawUI2(){
       const target=G.energy-PENDING.energy; if(DISP.energy==null||!G.started) DISP.energy=target; DISP.energy+=(target-DISP.energy)*0.18; if(Math.abs(target-DISP.energy)<0.5) DISP.energy=target;   // 数字滚动
       const sh=DENY.energy>0? Math.sin(DENY.energy*60)*4*DENY.energy/0.35 : 0; DENY.energy=Math.max(0,DENY.energy-1/60);   // 能量不够：变红抖动
       drawImgC(energyIcon(), it.x+it.h*0.42+sh, it.y+it.h/2, it.h*1.05*(1+bump));
-      text(Math.round(DISP.energy), it.x+it.h*0.85+(it.w-it.h*0.85)/2+sh, it.y+it.h/2, it.h*0.5*(1+bump*0.4), DENY.energy>0?'#ff6b6b':'#fff', 'center'); }
+      numText(Math.round(DISP.energy), it.x+it.h*0.85+(it.w-it.h*0.85)/2+sh, it.y+it.h/2, it.h*0.5, DENY.energy>0?'#ff6b6b':'#fff', 'center', 1+bump*0.4); }
     if(it.id==='card'){ const d=DATA.pets[it.key]; const okE=G.energy>=d.cost; const cd=G.cooldown[it.key]; const sel=G.selected===it.key;
       const c=CARDFX[it.key]=CARDFX[it.key]||{}; const dt1=1/60;
       if(c.prevCd>0 && cd<=0) c.ready=0.3; c.prevCd=cd;
@@ -992,11 +1022,13 @@ function drawUI2(){
 const ACT = { red:['#ffb0a8','#ff3b4e','#5a0a1c'], gold:['#fff6a8','#ffb21e','#5a2a00'], gray:['#ffffff','#a3abbd','#262b3a'] };
 function actionText(s, cx, cy, size, pal, scale){
   const [c0,c1,ol]=ACT[pal]; ctx.save(); ctx.translate(cx,cy); if(scale) ctx.scale(scale,scale);
+  const dyn = scale && scale!==1 && DYN_TEXT && ctx.__dynText; if(dyn) ctx.__dynText(scale);   // 61 版：弹出缩放期间不每帧重画大字
   ctx.font=`900 ${size}px ${FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
   ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillText(s, 0, size*0.1);                                   // 投影
   ctx.lineWidth=size*0.26; ctx.strokeStyle=ol; ctx.strokeText(s, 0, 0);                            // 外描边
   const g=ctx.createLinearGradient(0,-size*0.5,0,size*0.45); g.addColorStop(0,c0); g.addColorStop(0.55,c1); g.addColorStop(1,c1);
   ctx.fillStyle=g; ctx.fillText(s, 0, 0);
+  if(dyn) ctx.__dynText(0);
   ctx.restore();
 }
 // 大波来袭：不是结算缎带，是战斗中的警告——红色三角警示牌弹出 + 红色大字 + 屏幕边缘红光脉冲
@@ -1004,7 +1036,8 @@ function drawWaveWarning(t, life){
   const k=Math.min(1,t/0.25), pop=k<1? 1.35-0.35*(1-(1-k)*(1-k)) : 1, fade=t>life-0.4?(life-t)/0.4:1;
   ctx.save(); ctx.globalAlpha=Math.max(0,fade);
   const pulse=0.5+0.5*Math.sin(t*9);                                                                // 边缘红光
-  for(const [x0,y0,x1,y1] of [[0,0,0,H*0.18],[0,H,0,H*0.82]]){ const g=ctx.createLinearGradient(x0,y0,x1,y1); g.addColorStop(0,`rgba(255,40,60,${0.28+0.18*pulse})`); g.addColorStop(1,'rgba(255,40,60,0)'); ctx.fillStyle=g; ctx.fillRect(0,Math.min(y0,y1),W,Math.abs(y1-y0)); }
+  for(const [x0,y0,x1,y1] of [[0,0,0,H*0.18],[0,H,0,H*0.82]]){ const g=ctx.createLinearGradient(x0,y0,x1,y1); g.addColorStop(0,'rgba(255,40,60,1)'); g.addColorStop(1,'rgba(255,40,60,0)'); ctx.fillStyle=g;
+    ctx.globalAlpha=Math.max(0,fade)*(0.28+0.18*pulse); ctx.fillRect(0,Math.min(y0,y1),W,Math.abs(y1-y0)); ctx.globalAlpha=Math.max(0,fade); }   // 61 版：闪烁用整体透明度，渐变图不用每帧重画
   const cy=H*0.42, band=ctx.createLinearGradient(0,0,W,0); band.addColorStop(0,'rgba(40,0,12,0)'); band.addColorStop(0.2,'rgba(40,0,12,.55)'); band.addColorStop(0.8,'rgba(40,0,12,.55)'); band.addColorStop(1,'rgba(40,0,12,0)');
   ctx.fillStyle=band; ctx.fillRect(0, cy-36, W, 72);
   const tri=gui('Image_Warning1'), ex=gui('Image_Warning2'), ts=58*pop*(1+0.06*pulse);
@@ -1064,11 +1097,15 @@ function resumeButton(){ return {x:W/2-80, y:H*0.42-38, w:160, h:56}; }
 function quitButton(){ return {x:W/2-80, y:H*0.42+32, w:160, h:56}; }
 function soundButtons(){ const y=H*0.42+104, w=106, h=46, g=8; return [{key:'musicOff', cn:'音乐', icon:'IconMisc/Icon_Music', x:W/2-g/2-w, y, w, h}, {key:'muted', cn:'音效', icon:'IconMisc/Icon_Megaphone', x:W/2+g/2, y, w, h}]; }
 // 返回营地：结束这一局（不结算），回到局外的营地页
+function optButtons(){ const y=H*0.42+104+54, w=106, h=46, g=8; return [{key:'fps', x:W/2-g/2-w, y, w, h}, {key:'res', x:W/2+g/2, y, w, h}, {key:'aa', x:W/2-g/2-w, y:y+54, w:w*2+g, h}]; }
+function optToggle(k){ if(k==='fps') OPTS.fps = OPTS.fps===60 ? 30 : 60; else if(k==='aa') OPTS.aa = !OPTS.aa; else { OPTS.res = OPTS.res===2 ? 1.5 : 2; resize(); } optsSave(); }
+function optLabel(k){ return k==='fps' ? '帧率 '+OPTS.fps : k==='res' ? '画质 '+(OPTS.res===2?'高':'标准') : '抗锯齿 '+(OPTS.aa?'开':'关')+(OPTS.aa!==AA_LIVE?'（重开生效）':''); }
 function quitBattle(){ G.paused=false; G.started=false; if(typeof MT!=='undefined'){ MT.inBattle=false; MT.tab='camp'; } emit('ui'); }
 // 暂停时：点「继续」恢复；其他点击都不进游戏（暂停中不能偷偷布阵）
 cv.addEventListener('pointerdown', e=>{ if(!G.paused||G.over) return; const x=PX(e), y=PY(e), b=resumeButton(), pz=L.items.find(i=>i.id==='pause');
   const q=quitButton(); if(x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h){ quitBattle(); e.stopImmediatePropagation(); return; }
   for(const s of soundButtons()) if(x>=s.x&&x<=s.x+s.w&&y>=s.y&&y<=s.y+s.h){ SND[s.key]=!SND[s.key]; soundSave(); emit('ui'); e.stopImmediatePropagation(); return; }
+  for(const s of optButtons()) if(x>=s.x&&x<=s.x+s.w&&y>=s.y&&y<=s.y+s.h){ optToggle(s.key); emit('ui'); e.stopImmediatePropagation(); return; }
   if((x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h) || (pz&&x>=pz.x&&x<=pz.x+pz.w&&y>=pz.y&&y<=pz.y+pz.h)){ G.paused=false; emit('ui'); }
   e.stopImmediatePropagation(); }, {capture:true});
 function resultButton(){ return {x:W/2-90, y:H*0.2+370, w:180, h:62}; }
@@ -1168,12 +1205,13 @@ function draw(){
     ctx.restore(); return;
   }
   // 电脑上：中间一个手机大小的画面，两边纯色（竖屏版不往两边扩）
-  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#14171f'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore();
+  if(X0PX>0.01 || Y0PX>0.01 || shake.t>0){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#14171f'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); }   // 61 版：画面铺满整块画布时（手机竖屏）这层底色完全被地面盖住，不画（少画一遍整屏）；震屏时地面会挪开露边，照画
   ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
   // 方向震屏：沿打击方向来回，衰减
-  if(shake.t>0){ shake.t-=dt; const k=Math.max(0,shake.t/shake.t0), a=shake.amp*L.cs*k*k, w=Math.sin(shake.t*70);
-    if(shake.dx||shake.dy) ctx.translate(shake.dx*a*w+(Math.random()-0.5)*a*0.4, shake.dy*a*w+(Math.random()-0.5)*a*0.4);
-    else ctx.translate((Math.random()-0.5)*a*2,(Math.random()-0.5)*a*2); }
+  if(shake.t>0){ shake.t-=dt; const k=Math.max(0,shake.t/shake.t0), e=shake.hold ? (k>0.5 ? 1 : 4*k*k) : k*k, a=shake.amp*L.cs*e, w=Math.sin(shake.t*70);
+    let sx, sy; if(shake.dx||shake.dy){ sx=shake.dx*a*w+(Math.random()-0.5)*a*0.4; sy=shake.dy*a*w+(Math.random()-0.5)*a*0.4; } else { sx=(Math.random()-0.5)*a*2; sy=(Math.random()-0.5)*a*2; }
+    if(!/[?&]shake=0\b/.test(location.search)){ const q=ctx.getTransform().a||1; sx=Math.round(sx*q)/q; sy=Math.round(sy*q)/q; }   // game-test 试改：震屏偏移对齐到整数个屏幕像素（?shake=0 回到原样）
+    ctx.translate(sx, sy); }
   SCENE.drawGround(ctx); COMBO.draw(adt,'ground'); drawPreviewLanes(); drawPlacement(); drawAuras();   // 放置提示框在地面层，不盖在角色身上
   // 道具、角色、木箱按脚底 y 排序：前面的挡住后面的
   const list=[];
@@ -1197,7 +1235,7 @@ function draw(){
     // 31 版：继续 / 返回营地；46 版：音乐 / 音效开关。
     // 47 版（用户 2026-11-13：「暂停界面能换成剑与远征配色吗」）：和局外界面同一套启程配色（meta.js 的 TH_AFK / D37）——米白面板 + 深暖灰描边和厚边 + 一圈金线，
     //   主按钮启程绿、次按钮深暖灰，字不用蓝紫描边。原来是 Super Casual 的亮蓝弹窗 + 亮绿 / 亮蓝按钮。
-    const U=TH_AFK.ui, pw=Math.min(W-60,300), ph=250+64, px=W/2-pw/2, py=H*0.42-125;
+    const U=TH_AFK.ui, pw=Math.min(W-60,300), ph=250+64+54+54, px=W/2-pw/2, py=H*0.42-125;
     const pf=dBox(px, py, pw, ph, 22, U.panel, D37.sideL, D37.out, 0);
     ctx.save(); ctx.strokeStyle=D37.gold; ctx.lineWidth=1.5; rr(pf.x+6, pf.y+6, pf.w-12, pf.h-12, 17); ctx.stroke(); ctx.restore();
     text('暂停', W/2, py+44, 24, U.txt, 'center', 800, false);
@@ -1205,7 +1243,8 @@ function draw(){
     ab(resumeButton(), '继续', '#749965', '#587a4c');
     ab(quitButton(), '返回营地', '#685d5b', '#4f4548');
     for(const s of soundButtons()){ const on=!SND[s.key], f=ab(s, '', on?'#749965':'#cfc8bc', on?'#587a4c':'#b9aea8');
-      drawImgC(gui(s.icon), f.x+21, f.y+f.h/2, 22, on?1:0.5); text(s.cn+(on?' 开':' 关'), f.x+f.w/2+12, f.y+f.h/2+1, 15, on?'#fff':'#8d8485', 'center', 800, on?'#587a4c':false); } }
+      drawImgC(gui(s.icon), f.x+21, f.y+f.h/2, 22, on?1:0.5); text(s.cn+(on?' 开':' 关'), f.x+f.w/2+12, f.y+f.h/2+1, 15, on?'#fff':'#8d8485', 'center', 800, on?'#587a4c':false); }
+    for(const s of optButtons()){ const f=ab(s, '', '#685d5b', '#4f4548'); text(optLabel(s.key), f.x+f.w/2, f.y+f.h/2+1, 15, '#fff', 'center', 800, '#4f4548'); } }
   if(G.over && RSNAP.on && (G.overT||0)>1.6 && shake.t<=0 && ((G.overT||0)>4 || !(flyers.length||corpses.length||VFX.length||PARTS.length||FLASH.length||DMG.length||MONFX.length||COMBO._LIVE.length))){
     if(!RSNAP.cv) RSNAP.cv=document.createElement('canvas'); const c=RSNAP.cv; if(c.width!==cv.width||c.height!==cv.height){ c.width=cv.width; c.height=cv.height; }
     const g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation='copy'; g.drawImage(cv,0,0); g.globalCompositeOperation='source-over';
@@ -1230,10 +1269,12 @@ let lastT=performance.now(), acc=0; const STEP=1/60;
 // 35 版（用户 2026-11-13：手机发烫、宠物页卡）：营地、宠物等界面页没人操作时降到 30 帧（手游界面页的常见做法），
 //   一有触摸 / 拖动 / 滚动惯性就恢复 60 帧，0.8 秒没操作再降回去；战斗中一直 60 帧
 let LAST_INPUT=0, LAST_DRAW=0;
+const PREWARM = {done:false, on:!/[?&]pw=0\b/.test(location.search), pick:src=>/\/(combos\/img|vfx|monsters|pets|pets_hd|env1)\//.test(src)};
 for(const ev of ['pointerdown','pointermove','wheel','keydown']) window.addEventListener(ev, e=>{ if(ev!=='pointermove' || e.buttons || e.pointerType==='touch') LAST_INPUT=performance.now(); }, {capture:true, passive:true});
 function frame(now){
   const idleUI = !(typeof MT!=='undefined' && MT.inBattle) && now-LAST_INPUT>800 && !(typeof MT!=='undefined' && (MT.drag || Math.abs(MT.sv||0)>1));
-  if(idleUI && now-LAST_DRAW < 1000/30-4){ requestAnimationFrame(frame); return; }
+  if((idleUI || OPTS.fps===30) && now-LAST_DRAW < 1000/30-4){ requestAnimationFrame(frame); return; }   // 61 版：设置里选 30 帧时全程隔帧画（逻辑仍按固定步长算，速度不变）
+  if(!PREWARM.done && READY && BATTLE_READY && PREWARM.on && ctx.__prewarm){ if(!ctx.__prewarm(PREWARM.pick, 6)) PREWARM.done=true; }   // 61 版：战斗用的图下载完后，每帧抽几毫秒提前上传显卡，免得第一次用到时卡
   LAST_DRAW=now;
   acc += Math.min(0.1,(now-lastT)/1000); lastT=now;
   if(READY && G.started) while(acc>=STEP){ if(HITSTOP>1e-6){ HITSTOP-=STEP; acc-=STEP; continue; } if(!G.paused) for(let i=0;i<G.speed;i++) update(STEP); acc-=STEP; } else acc=0;
