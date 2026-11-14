@@ -277,14 +277,18 @@ const CHAPTER_MAP = (()=>{
     ctx.font=`800 ${20*u}px ${FONT}`; const tw=ctx.measureText(`第 ${ch.id} 章  ${ch.name}`).width;
     text(`${n}/${L.length}`, c.x+14*u+tw+10*u, top+65*u, 14*u, '#fff', 'left', 800, '#2c3a2a');
     // 终关奖励：宝箱按钮，点开 / 收起奖励列表
-    const bx=c.x+12*u, by=top+86*u, bw=96*u, bh=34*u;
-    ctx.save(); rr(bx,by,bw,bh,bh/2); ctx.fillStyle='rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#2a2224'; ctx.stroke(); ctx.restore();
-    drawImgC(mi('chest'), bx+16*u, by+bh/2-2*u, 38*u);
+    const bx=c.x+12*u, by=top+86*u, bw=96*u, bh=34*u, cst=chestState(), rdy=cst==='ready', tt=performance.now()/1000;
+    // 74 版（用户 2026-11-14）：终关打完后宝箱不直接给，按钮发光、宝箱晃动、右上红点，玩家自己点开领取
+    if(rdy){ const gl=img('gui/Frame/CardFrame04_Glow.png'); if(ok(gl)){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.55+0.25*Math.sin(tt*4); ctx.drawImage(gl, bx-30*u, by-34*u, 92*u, 92*u); ctx.restore(); } }
+    ctx.save(); rr(bx,by,bw,bh,bh/2); ctx.fillStyle=rdy?'rgba(120,78,30,.9)':'rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=rdy?'#ffd36b':'#2a2224'; ctx.stroke(); ctx.restore();
+    { const wig=rdy ? Math.sin(tt*18)*0.16*Math.max(0, Math.sin(tt*2.4)) : 0, hop=rdy ? Math.abs(Math.sin(tt*2.4))*3*u : 0;
+      ctx.save(); ctx.translate(bx+16*u, by+bh/2-2*u-hop); ctx.rotate(wig); drawImgC(mi('chest'), 0, 0, (rdy?44:38)*u); ctx.restore(); }
     text('终关奖励', bx+60*u, by+bh/2+1, 13*u, '#fff', 'center', 800, '#2a2224');
-    addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ S.popup=!S.popup; sfx('ui'); });
+    if(rdy){ const r=7*u, dx=bx+bw-3*u, dy=by+3*u; ctx.save(); ctx.beginPath(); ctx.arc(dx,dy,r,0,Math.PI*2); ctx.fillStyle='#ff3b4e'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.restore(); }
+    addHit({x:bx-6*u,y:by-10*u,w:bw+12*u,h:bh+16*u}, ()=>{ if(rdy){ S.popup=false; S.box={t0:performance.now(), t:0, ph:'shut', items:(ch.final||[]).map(r=>({r}))}; sfx('ui'); } else { S.popup=!S.popup; sfx('ui'); } });
     if(S.popup){ const items=ch.final||[], pw=(items.length*58+20)*u, ph=78*u, px=bx, py=by+bh+8*u;
       btnShadow(px, py, pw, ph, 12*u); ctx.save(); rr(px,py,pw,ph,12*u); ctx.fillStyle=MT_UI.panel; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=MT_UI.border||'#4f4644'; ctx.stroke(); ctx.restore();
-      text(`${L[L.length-1].id} 首次通关`, px+pw/2, py+14*u, 12*u, MT_UI.txt, 'center', 800, false);
+      text(cst==='got' ? '已领取' : `${L[L.length-1].id} 首次通关`, px+pw/2, py+14*u, 12*u, MT_UI.txt, 'center', 800, false);
       items.forEach((r,i)=>rewardIcon(r, px+(20+29+i*58)*u, py+46*u, 40*u));
       addHit({x:px,y:py,w:pw,h:ph}, ()=>{ S.popup=false; }); }
     if(typeof drawResBar==='function') drawResBar(lay);
@@ -354,9 +358,56 @@ const CHAPTER_MAP = (()=>{
     const first=!P.cleared[id]; P.cleared[id]=true; save(); if(!first) return;
     const nxt=L[i+1]; S.cam=null; P.sel=id; S.petS=null; S.petTo=null; S.follow=null; S.followOff=false;
     if(nxt) S.anim={t:0, from:id, to:nxt.id};
+    else { P.chest=P.chest||{}; if(!P.chest[chap().id]){ P.chest[chap().id]='ready'; save(); } }   // 74 版：终关首次通关 → 宝箱等玩家来点开
   }
-  function reset(){ P.cleared={}; P.sel=null; save(); S.cam=null; S.petS=null; S.petTo=null; S.anim=null; S.follow=null; S.followOff=false; }
-  function preset(n){ reset(); levels().slice(0,n).forEach(l=>P.cleared[l.id]=true); save(); }   // 测试用：前 n 关算已通关
+  // 宝箱状态：ready = 等玩家点开；got = 已领；73 版以前打完终关的存档没有这条记录，当时奖励已直接入账 → 算 got
+  function chestState(){ const ch=chap(), L=levels(), st=(P.chest||{})[ch.id]; if(st) return st; return P.cleared[L[L.length-1].id] ? 'got' : 'none'; }
+  // ---------- 74 版：开宝箱浮窗（盖在整个局外画面上，底栏也盖住）----------
+  //   shut：宝箱弹进来、一跳一跳等玩家点 → open：宝箱一抖炸开（效果组合「胜利」），奖励从宝箱里依次弹到一排 → 点「领取」
+  //   → fly：奖励图标沿弧线飞进右上资源栏，到了才加数、资源图标鼓一下 → 全部到齐关掉浮窗
+  function drawOverlay(lay, dt){
+    const B=S.box; if(!B) return; B.t=(performance.now()-B.t0)/1000; const u=S.geo?S.geo.u:1, cx=W/2, cy=H*0.42;   // 按真实时间走，掉帧时节奏不变
+    const fade=B.ph==='fly' ? Math.max(0, 1-(B.t-(B.flyT||0))*1.6) : Math.min(1, B.t/0.2);
+    ctx.save(); ctx.globalAlpha=0.72*fade; ctx.fillStyle='#0a0c1a'; ctx.fillRect(0,0,W,H); ctx.restore();
+    const gl=img('gui/Frame/CardFrame04_Glow.png'), tt=performance.now()/1000;
+    if(B.ph!=='fly' && ok(gl)){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(B.ph==='open'?0.75:0.4)*fade; ctx.translate(cx,cy); ctx.rotate(tt*0.4); ctx.drawImage(gl, -W*0.5, -W*0.5, W, W); ctx.restore(); }
+    if(B.ph==='shut'){
+      const k=Math.min(1, B.t/0.35), sc=ease.outBack(k,2.4)*(1+0.04*Math.sin(tt*6)), hop=Math.abs(Math.sin(tt*3.2))*10, wig=Math.sin(tt*20)*0.12*Math.max(0,Math.sin(tt*3.2));
+      ctx.save(); ctx.translate(cx, cy-hop); ctx.rotate(wig); ctx.scale(sc,sc); drawImgC(mi('chest'), 0, 0, 150); ctx.restore();
+      text('点一下打开', cx, cy+110, 15, '#ffe9a0', 'center', 800, '#2a2224');
+      addHit({x:0,y:0,w:W,h:H}, ()=>{ if(B.t<0.3) return; B.ph='open'; B.t0=performance.now(); B.t=0; COMBO.play('胜利', {x:cx, y:cy}, {scale:3}); });
+    } else {
+      const n=B.items.length, gap=92, x0=cx-(n-1)*gap/2, rowY=cy+20;
+      if(B.ph==='open'){ const k=Math.min(1,B.t/0.25); if(B.t<0.45){ ctx.save(); ctx.translate(cx,cy); ctx.scale(1+0.35*k, 1+0.35*k); ctx.globalAlpha=1-k; drawImgC(mi('chest'),0,0,150); ctx.restore(); }
+        text(`第 ${chap().id} 章奖励`, cx, cy-120, 22, '#ffe14d', 'center', 800, '#2a2224'); }
+      B.items.forEach((it,i)=>{
+        const tx=x0+i*gap, k=Math.min(1, Math.max(0,(B.ph==='fly'?9:B.t-0.15-i*0.12)/0.35)); if(k<=0) return;
+        if(B.ph==='open'){ if(!it.pop){ it.pop=1; sfx('star'); }
+          const x=cx+(tx-cx)*k, y=cy+(rowY-cy)*k-Math.sin(k*Math.PI)*70, s=64*ease.outBack(k,2);
+          rewardBig(it.r, x, y, s); it.x=x; it.y=y; return; }
+        // fly
+        const f=Math.min(1, Math.max(0, (B.t-(B.flyT||0)-i*0.12)/0.55)); if(it.done) return;
+        const tgt=(window.RES_POS||{})[it.r[0]==='coin'?'gold':'star']||{x:W-60, y:30}, e=f*f*(3-2*f);
+        const x=it.x+(tgt.x-it.x)*e, y=it.y+(tgt.y-it.y)*e-Math.sin(e*Math.PI)*90, s=64+(32-64)*e;
+        rewardBig(it.r, x, y, s, f>0.2);
+        if(f>=1){ it.done=1; const kk=it.r[0]==='coin'?'gold':'star'; WALLET[kk]=(WALLET[kk]||0)+it.r[1]; walletSave(); (window.RES_BUMP=window.RES_BUMP||{})[kk]=1; COMBO.play('能量-收取', null); }
+      });
+      if(B.ph==='open'){ const ready=B.t>0.4+n*0.12;
+        if(ready){ const bw=170, bh=58, bx=cx-bw/2, by=rowY+80, a=Math.min(1,(B.t-0.4-n*0.12)/0.2);
+          ctx.save(); ctx.globalAlpha=a; heroButton(true, bx, by, bw, bh, '领取'); ctx.restore(); }
+        addHit({x:0,y:0,w:W,h:H}, ()=>{ if(!ready) return; B.ph='fly'; B.flyT=B.t; sfx('ui'); }); }
+      else { if(typeof drawResBar==='function') drawResBar(lay);   // 飞的时候资源栏露在遮罩上面
+        addHit({x:0,y:0,w:W,h:H}, ()=>{});
+        if(B.items.every(it=>it.done)){ P.chest=P.chest||{}; P.chest[chap().id]='got'; save(); S.box=null; } }
+    }
+    if(typeof COMBO!=='undefined'){ COMBO.draw(Math.min(0.05,dt),'world'); }
+  }
+  function rewardBig(r, x, y, s, noNum){
+    if(r[0]==='coin') drawImgC(coinIcon(), x, y, s); else if(r[0]==='star') drawImgC(icon('Star_Altar_05_Star'), x, y, s); else shardIcon(r[1], x, y, s*1.1);
+    if(!noNum) text(`×${r[0]==='shard'?r[2]:r[1]}`, x, y+s*0.62, Math.max(12,s*0.3), '#fff', 'center', 800, '#2a2224');
+  }
+  function reset(){ P.cleared={}; P.chest={}; P.sel=null; save(); S.cam=null; S.petS=null; S.petTo=null; S.anim=null; S.follow=null; S.followOff=false; }
+  function preset(n){ reset(); levels().slice(0,n).forEach(l=>P.cleared[l.id]=true); if(n>=levels().length) P.chest={[chap().id]:'ready'}; save(); }   // 74 版：跳到全通关时宝箱等着领（测试开宝箱）   // 测试用：前 n 关算已通关
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
   // ---------- 接进游戏：战斗页换成地图；地图上的拖动、点击在 meta.js 之前拦下（营地同样做法）----------
@@ -375,7 +426,7 @@ const CHAPTER_MAP = (()=>{
     if(typeof HOOKS!=='undefined') HOOKS.push(type=>{ if(type==='win' && S.playing) markCleared(S.playing); });
   });
 
-  const API = { draw, markCleared, reset, preset, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
+  const API = { draw, drawOverlay, chestState, markCleared, reset, preset, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
     get progress(){ return JSON.parse(JSON.stringify(P)); }, S };
   return API;
 })();

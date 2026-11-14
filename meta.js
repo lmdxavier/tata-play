@@ -201,7 +201,7 @@ function mtNine4(im, x, y, w, h, bd, k){
 function mtNine4Raw(im, x, y, w, h, bd, k){
   if(!ok(im)) return; const W0=im.naturalWidth, H0=im.naturalHeight; const [l,b,r,t]=bd;
   let kx=k, ky=k; if((l+r)*kx>w) kx=w/(l+r); if((t+b)*ky>h) ky=h/(t+b);
-  const sx=[0,l,W0-r,W0], sy=[0,t,H0-b,H0], dx=[x,x+l*kx,x+w-r*kx,x+w], dy=[y,y+t*ky,y+h-b*ky,y+h];
+  const sx=[0,l,W0-r,W0], sy=[0,t,H0-b,H0], dx=snapEdges([x,x+l*kx,x+w-r*kx,x+w],1), dy=snapEdges([y,y+t*ky,y+h-b*ky,y+h],0);   // 74 版：交界对齐整物理像素（render.js snapEdges）
   // 很多 Fantasy Hero 边框图左右（或上下）边框加起来等于整张图宽，中间可拉伸部分为 0：这时取交界处 1 像素拉伸，不能留空（13 版留空导致框中间透明）
   for(let i=0;i<3;i++) for(let j=0;j<3;j++){ let ssx=sx[i], sw=sx[i+1]-sx[i], ssy=sy[j], sh=sy[j+1]-sy[j]; const dw=dx[i+1]-dx[i], dh=dy[j+1]-dy[j];
     if(dw<=0.01||dh<=0.01) continue;
@@ -858,11 +858,17 @@ function drawGrid(view, lay, live){
     const x=view.x+G2.pad+c*(G2.cw+G2.gap), y=view.y+G2.pad+rw*(G2.ch+G2.gy)-MT.gs;
     if(y>view.y+view.h || y+G2.ch+G2.gy<view.y) return;
     // 选中时轻微缩弹（用户 2026-11-12）：先缩约 5% 再回弹约 2%，0.45 秒衰减到原大小
+    const rdy=canSummon(e.key)||canStarUp(e.key); if(rdy) cardReadyGlow(x, y, G2.cw, G2.ch);   // 74 版：可召唤 / 可升星的卡亮起来
+    (MT.cardR=MT.cardR||{})[e.key]={x, y, w:G2.cw, h:G2.ch};
     const k=(performance.now()-(MT.selT0||0))/450;
     if(e.key===MT.sel && k>=0 && k<1){ const sc=1-0.07*Math.sin(Math.PI*k*3)*(1-k)*(1-k), cx=x+G2.cw/2, cy=y+G2.ch/2;
       ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc); ctx.translate(-cx,-cy); drawPetCardC(e, x, y, G2.cw, G2.ch); ctx.restore(); }
     else drawPetCardC(e, x, y, G2.cw, G2.ch);
-    if(live) addHit({x, y, w:G2.cw, h:G2.ch}, ()=>{ if(e.owned) selectPet(e.key); else sfx('deny'); }, view); });   // 30 版：未解锁的不能选中
+    if(rdy) cardDot(x+G2.cw+1, y-2);   // 放在卡角外侧，不压星星
+    // 74 版（用户 2026-11-14）：召唤、升星都在卡片界面点亮着的卡完成，不进详情；其余照旧（未解锁的不能选中，30 版）
+    if(live) addHit({x, y, w:G2.cw, h:G2.ch}, ()=>{ if(MT.show) return;
+      if(!e.owned){ if(canSummon(e.key)){ summonPet(e.key); charCheer(e.key); } else sfx('deny'); return; }
+      if(canStarUp(e.key)) starShow(e.key); else selectPet(e.key); }, view); });
 }
 // 卡片：严格照 Fantasy Hero CardFrame_Rectangle_02_<色>.prefab（卡 320×428，u = 卡宽 / 320；Unity 坐标 y 向上，下面已换成从上往下）
 //   Bg_Mask（Bg 九宫格，同时是遮罩）⊃ BgGradient（顶部，高 190）、BgDeco（放射纹）、角色
@@ -1064,16 +1070,11 @@ function statRows(e){
 function drawActionBar(e, x, y, w, live){
   const pad=14, bh=50, by=y+6;
   if(e.owned){
-    const gap=8, bw=(w-pad*2-gap*2)/3;
-    ['升级','升星','进化'].forEach((lab,i)=>{ const bx=x+pad+i*(bw+gap), up=i===1 && canStarUp(e.key);
-      if(up){ const pu=1+0.03*Math.sin(performance.now()/180); ctx.save(); ctx.translate(bx+bw/2, by+bh/2); ctx.scale(pu,pu); heroButton(true, -bw/2, -bh/2, bw, bh, lab); ctx.restore(); }
-      else heroButton(false, bx, by, bw, bh, lab);
-      if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ if(up) starUp(e.key); else { emit('deny'); toast(i===1 && starOpen(e.key) ? `还差 ${starNeed(e.key)-shardHave(e.key)} 个碎片` : '暂未开放'); } }); });
-  } else {
-    const have=shardHave(e.key), need=RAR[e.rar].need, ok2=have>=need, bw=Math.min(240, w-pad*2), bx=x+w/2-bw/2;
-    const pu = ok2 ? 1+0.03*Math.sin(performance.now()/180) : 1;   // 碎片够了：按钮轻轻跳，提示可以点
-    ctx.save(); ctx.translate(bx+bw/2, by+bh/2); ctx.scale(pu,pu); heroButton(ok2, -bw/2, -bh/2, bw, bh, '召唤'); ctx.restore();
-    if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ if(ok2) summonPet(e.key); else { emit('deny'); toast(`还差 ${need-have} 个碎片`); } });
+    // 74 版（用户 2026-11-14：召唤和升星放到卡片界面，不要在详情里）：详情只留升级、进化
+    const gap=8, bw=(w-pad*2-gap)/2;
+    ['升级','进化'].forEach((lab,i)=>{ const bx=x+pad+i*(bw+gap);
+      heroButton(false, bx, by, bw, bh, lab);
+      if(live) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ emit('deny'); toast('暂未开放'); }); });
   }
   ctx.fillStyle=TH.sep; ctx.fillRect(x+pad, y+AB-1, w-pad*2, 1);
 }
@@ -1098,10 +1099,16 @@ function drawDetail(e, view){
     lines.forEach((l,i)=>text(l, x+pad+74, y+ah/2-(lines.length-1)*9.5+i*19, 13, MT_UI.txt, 'left', 800, false));
     y+=ah+16;
     const route=STAR_ROUTE[e.key];
-    if(route){ text('升星', x+pad, y+10, 15, MT._behind?'#ffe3a6':MT_UI.gold, 'left', 800, MT_UI.stroke); y+=22;
-      route.forEach((t,i)=>{ const bh2=40, by=y+i*(bh2+8); mtBox(x+pad, by, w-pad*2, bh2);
-        for(let k=0;k<i+2;k++) drawIconSh(hero('Grade_Star'), x+pad+16+k*15, by+bh2/2, 16);
-        text(t, x+pad+16+(i+2)*15+6, by+bh2/2, 13, MT_UI.txt, 'left', 800, false); });
+    if(route){ MT.starSecY=y-y0; text('升星', x+pad, y+10, 15, MT._behind?'#ffe3a6':MT_UI.gold, 'left', 800, MT_UI.stroke); y+=22;
+      // 74 版：已达到的星级正常显示、没达到的变淡；升星演出时刚解锁的那行弹弹地放大并发金光
+      const cur=starOf(e.key), sh=MT.show&&MT.show.k===e.key&&MT.show.ph===1 ? (performance.now()-MT.show.t0)/1000-1.45 : -1;
+      route.forEach((t,i)=>{ const bh2=40, by=y+i*(bh2+8), got=i+2<=cur, fresh=i+2===cur && sh>=0 && sh<2.2;
+        let sc=1, glow=0; if(fresh){ const q=Math.min(1,sh/1.1); sc=1+0.16*Math.sin(q*Math.PI*3)*(1-q)*(1-q)+(q<0.12?0.1*q/0.12:0); glow=Math.max(0,1-sh/2.2); }
+        ctx.save(); const cx0=x+w/2, cy0=by+bh2/2; ctx.translate(cx0,cy0); ctx.scale(sc,sc); ctx.translate(-cx0,-cy0); if(!got) ctx.globalAlpha*=0.45;
+        if(glow>0){ ctx.save(); ctx.shadowColor='#ffd84a'; ctx.shadowBlur=22*DPR*glow; ctx.globalAlpha*=glow; mtNine4(heroT('BaseFrame_Basic_Rectangle_H50', '#ffd84a'), x+pad-3, by-3, w-pad*2+6, bh2+6, [25,25,25,25], 0.6); ctx.restore(); }
+        mtBox(x+pad, by, w-pad*2, bh2);
+        for(let k=0;k<i+2;k++){ const ks=fresh&&k===i+1 ? 1+0.6*Math.max(0,1-sh/0.5) : 1; drawIconSh(hero('Grade_Star'), x+pad+16+k*15, by+bh2/2, 16*ks); }
+        text(t, x+pad+16+(i+2)*15+6, by+bh2/2, 13, MT_UI.txt, 'left', 800, false); ctx.restore(); });
       y+=route.length*48+8; }
   } else {
     const have=shardHave(e.key), need=RAR[e.rar].need;
@@ -1111,12 +1118,39 @@ function drawDetail(e, view){
     hpBar(x+pad+90+(w-pad*2-110)/2, y+38, w-pad*2-110, have/need, have>=need?'yellow':'blue', 18);
     text(`${have}/${need}`, x+pad+90+(w-pad*2-110)/2, y+47, 12, '#fff');
     y+=98;
-    const lines=wrapCN(have>=need ? '碎片已集齐。点「召唤」，它就能上场。' : `集齐 ${need} 个碎片后可以召唤。`, w-pad*2, 13);
+    const lines=wrapCN(have>=need ? '碎片已集齐。在卡片界面点亮起来的卡，它就能上场。' : `集齐 ${need} 个碎片后可以召唤。`, w-pad*2, 13);
     lines.forEach((l,i)=>text(l, x+pad, y+8+i*19, 13, MT_UI.txt2, 'left', 800, false)); y+=lines.length*19+18;
   }
   MT.dmax=Math.max(0, (y-y0)+8-view.h);
 }
 
+
+// 74 版：可召唤 / 可升星的卡：卡背后一圈金色呼吸光 + 右上红点
+function cardReadyGlow(x, y, w, h){
+  const u=w/320, a=0.65+0.35*Math.sin(performance.now()/260), d=3.5;
+  ctx.save(); ctx.globalAlpha*=a; ctx.shadowColor='#ffcf3a'; ctx.shadowBlur=w*0.16*DPR;
+  for(let i=0;i<2;i++) mtNine4(cardT('CardFrame_Rectangle_02_Bg', '#ffe066'), x-d, y-d, w+d*2, h+d*2, [28,30,28,30], u);   // 叠两次：外发光更亮、金边更清楚
+  ctx.restore();
+}
+function cardDot(x, y){ const r=6+0.8*Math.sin(performance.now()/200);
+  ctx.save(); ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle='#ff3b4e'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.restore(); }
+// 角色欢呼：先攻击一下，再表演（Spine 宠物的 Busking），回到待机；怪物形态的宠物只有攻击
+function charCheer(k){ const e=entry(k); if(!e) return; const v=charInst(e);
+  if(v.kind==='spine'){ v.st.setAnimation(0,'Attack',false); v.st.addAnimation(0,'Busking',false,0); v.st.addAnimation(0,'Idle',true,0); }
+  else if(v.m) v.m.play('Attack',{restart:true, onEnd:()=>v.m.play('Idle')}); }
+// 74 版升星演出（用户 2026-11-14：升星没有任何效果展示强化了什么）：
+//   点亮着的卡 → 升星（光柱 + 音效）+ 角色欢呼 → 1 秒后面板自动拉下进详情 → 滚到「升星」那节 → 刚解锁的那一行弹弹地放大、发金光
+function starShow(k){
+  selectPet(k); if(!starUp(k)) return; MT.toast=null; charCheer(k);
+  MT.show={k, t0:performance.now(), ph:0};
+}
+function starShowTick(){
+  const S=MT.show; if(!S) return; const t=(performance.now()-S.t0)/1000;
+  if(MT.sel!==S.k || MT.tab!=='pets'){ MT.show=null; return; }
+  if(S.ph===0 && t>1.0){ S.ph=1; enterDetail(); }
+  if(S.ph===1 && MT.starSecY!=null){ const tgt=Math.max(0, Math.min(MT.dmax||0, MT.starSecY-8)); MT.ds+=(tgt-MT.ds)*0.14; MT.sv=0; }
+  if(t>3.6) MT.show=null;
+}
 // ---------- 动作 ----------
 function selectPet(k){ MT.selT0=performance.now(); if(MT.sel!==k){ MT.prevSel=MT.sel; MT.sel=k; MT.swapT=0.3; } emit('ui'); if(MT.lay && !MT.lay.land && MT.snap==='full') MT.snap='mid'; }
 function enterDetail(){ MT.detail=true; MT.ds=0; MT.sv=0; if(MT.lay && !MT.lay.land) MT.snap='mid'; emit('ui'); }
@@ -1125,7 +1159,7 @@ function stepPet(d){ let list=filtered().filter(e=>e.owned); if(!list.some(e=>e.
   const i=list.findIndex(e=>e.key===MT.sel); MT.prevSel=MT.sel; MT.selT0=performance.now(); MT.stepDir=d; MT.sel=list[(i+d+list.length)%list.length].key; MT.swapT=0.3; MT.ds=0; emit('ui'); }
 function mtToggleBg(){ MT.bgMode = MT.bgMode==='grad'?'scene':'grad'; try{ localStorage.setItem('tata_petbg29', MT.bgMode); }catch(e){} emit('ui'); }
 let BATTLE_ID = '1-1';
-function goSummon(k){ MT.tab='pets'; ROSTER=null; roster(); MT.sel=k; MT.guide=k; enterDetail(); }
+function goSummon(k){ MT.tab='pets'; ROSTER=null; roster(); MT.guide=k; if(MT.detail) exitDetail(); MT.gs=0; if(MT.lay && !MT.lay.land) MT.snap='mid'; }   // 74 版：去卡片界面，那张卡亮着等玩家点（不再进详情）
 function startBattle(id){ if(id) BATTLE_ID=id;
   if(!(window.LEVELS||{})[BATTLE_ID] || (LEVELS[BATTLE_ID].wip && !/[?&]wip=1\b/.test(location.search) && !window.NIGHT_DEMO)){ emit('deny'); toast('暂未开放'); return; }   // 70 版：wip 的关只在网址带 ?wip=1 时能进（测试用）
   { const k=PET_ORDER.find(canSummon); if(k){ goSummon(k); toast(DATA.pets[k].cn+'的碎片已集齐，先召唤它'); return; } }   // 有宠物可以召唤：先去召唤，下一关要用
@@ -1243,7 +1277,8 @@ function drawResBar(lay){
   for(let i=RES_ITEMS.length-1;i>=0;i--){ const [k,n]=RES_ITEMS[i], x=right-w, y=top;
     // 40 版（用户 2026-11-13：图标已经很凸了，背景就不要凸了）：胶囊去掉投影和顶部高光线，只留平的深色底 + 描边
     ctx.save(); rr(x, y, w, h, h/2); ctx.fillStyle='rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#2a2224'; ctx.stroke(); ctx.restore();
-    drawImgC(k==='gold'?coinIcon():icon(n), x+3, y+h/2, ic);   // 41 版：金币读 COIN_ICON
+    const RB=(window.RES_BUMP=window.RES_BUMP||{}); if(RB[k]>0) RB[k]=Math.max(0,RB[k]-1/60*4); (window.RES_POS=window.RES_POS||{})[k]={x:x+3, y:y+h/2};   // 74 版：开宝箱时奖励飞到这里，到账鼓一下
+    drawImgC(k==='gold'?coinIcon():icon(n), x+3, y+h/2, ic*(1+0.35*Math.sin(Math.PI*(RB[k]||0))));   // 41 版：金币读 COIN_ICON
     const v=Math.max(0, Math.floor((typeof WALLET!=='undefined' && WALLET[k])||0)).toLocaleString('en-US');
     text(v, x+w-11, y+h/2+1, 15, '#fff', 'right', 800, '#2a2224');
     right = x - gap; }
@@ -1268,11 +1303,13 @@ function drawMeta(){
     // 惯性滚动
     if(md!=='scroll'){ const k=MT.detail?'ds':'gs', mx=MT.detail?MT.dmax:MT.gmax; MT[k]+=MT.sv*dt; MT.sv*=Math.pow(0.04,dt);
       if(MT[k]<0){ MT[k]*=Math.max(0,1-dt*14); MT.sv=0; } if(MT[k]>mx){ MT[k]=mx+(MT[k]-mx)*Math.max(0,1-dt*14); MT.sv=0; } }
+    starShowTick();
     drawCharArea(lay, dt);   // 59 版（用户 2026-11-13）：面板拉满时刘海那一条也画原本的场景背景，不留黑底
     drawPanel(lay, dt);
   } else if(MT.tab==='battle') drawBattleEntry(lay); else { drawCamp(lay); drawResBar(lay); }
   if(MT.tab!=='camp' && CAMP.S.drag){ CAMP.cancel(); if(MT.drag && MT.drag.camp) MT.drag=null; }   // 32 版：离开营地时手里的食物放回去
   drawNav(lay);
+  if(MT.tab==='battle' && typeof CHAPTER_MAP!=='undefined' && CHAPTER_MAP.drawOverlay) CHAPTER_MAP.drawOverlay(lay, dt);   // 74 版：开宝箱浮窗盖在底栏上面
   if(MT.toast){ MT.toast.t-=dt; const a=Math.min(1,MT.toast.t*3); if(a<=0) MT.toast=null; else { ctx.globalAlpha=a; ctx.font=`800 14px ${FONT}`; const tw=ctx.measureText(MT.toast.s).width+44; pill(W/2-tw/2, H*0.5-18, tw, 36); text(MT.toast.s, W/2, H*0.5, 14, '#fff', 'center', 800, false); ctx.globalAlpha=1; } }
   ctx.restore();
 }
@@ -1287,10 +1324,11 @@ function drawPetGuide(){
   const arrow=tinted('gui/IconMisc/Icon_Arrow_Next2.png','#ffe9a0');
   const flow=(x,y0,y1)=>{ if(!arrow) return; const n=3, dy=y1-y0; for(let i=0;i<n;i++){ const k=((i+(tt*1.4)%1)/n), al=Math.sin(k*Math.PI), h=20, w=h*arrow.width/arrow.height;
       ctx.save(); ctx.globalAlpha=0.95*al; ctx.translate(x, y0+dy*k); ctx.rotate(dy<0?-Math.PI/2:Math.PI/2); ctx.drawImage(arrow, -w/2, -h/2, w, h); ctx.restore(); } };
-  if(MT.guide && MT.sel===MT.guide && canSummon(MT.guide) && !PROFILE.tipSummon && MT.detail){
-    tutBubble('战斗中有概率获得碎片。集满后点「召唤」，它就成为你的宠物。', W/2, H*0.66, 'center'); return; }
-  if(MT.guide && MT.sel===MT.guide && canStarUp(MT.guide) && !PROFILE.tipStar && MT.detail){
-    tutBubble('碎片集齐后，点「升星」。'+DATA.pets[MT.guide].cn+'升到 '+(starOf(MT.guide)+1)+' 星：'+(STAR_ROUTE[MT.guide]?STAR_ROUTE[MT.guide][starOf(MT.guide)-1]:'')+'。', W/2, H*0.66, 'center'); return; }
+  const gr=MT.guide && (MT.cardR||{})[MT.guide], gy=gr ? gr.y+gr.h+46 : H*0.66;   // 74 版：气泡放在亮着的那张卡下面
+  if(MT.guide && canSummon(MT.guide) && !PROFILE.tipSummon && !MT.detail){
+    tutBubble('战斗中有概率获得碎片。碎片集满，卡片会亮起来，点它就能召唤。', W/2, gy, 'center'); return; }
+  if(MT.guide && canStarUp(MT.guide) && !PROFILE.tipStar && !MT.detail){
+    tutBubble('碎片集齐了，点亮起来的卡片升星。'+DATA.pets[MT.guide].cn+'升到 '+(starOf(MT.guide)+1)+' 星：'+(STAR_ROUTE[MT.guide]?STAR_ROUTE[MT.guide][starOf(MT.guide)-1]:'')+'。', W/2, gy, 'center'); return; }
   if(!MT.ptut || now<MT.ptutT) return;
   if(MT.ptut===1 && MT.detail){ exitDetail(); return; }   // 先回到显示全部宠物的样子
   const py=MT.panelY!=null ? MT.panelY : lay.snaps.mid;

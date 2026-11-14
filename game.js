@@ -621,9 +621,9 @@ function finish(){
   // 65 版：每关首次通关只给一样东西（关卡设计.md）：宠物碎片（数量固定）或一个新机制
   const rw = DATA.level.first ? DATA.level.reward : null; let unlock=null;
   if(rw && rw.shard) G.shards[rw.shard[0]]=(G.shards[rw.shard[0]]||0)+rw.shard[1];
-  let bonus=0, starBonus=0; if(rw && rw.chest){ bonus=rw.chest.coin||0; starBonus=rw.chest.star||0; }   // 70 版：章节终关宝箱（地图「终关奖励」）
+  const chest=!!(rw && rw.chest);   // 74 版（用户 2026-11-14）：章节终关宝箱不再直接并进结算金币，回地图点「终关奖励」自己打开领取（map.js）
   if(rw && rw.unlock && !PROFILE.unlock[rw.unlock]){ PROFILE.unlock[rw.unlock]=1; profileSave(); unlock=rw.unlock; }
-  G.over={win:true, stars, exp, coins:coins+bonus, starGain:starBonus, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
+  G.over={win:true, stars, exp, coins, starGain:0, chest, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
 }
 
 // ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------

@@ -692,10 +692,15 @@ function nine(im, x, y, w, h, b, db){
   if(nineCached(im, 'n|'+b+'|'+(Math.min(dbv,w/2)*kx).toFixed(3)+'|'+(Math.min(dbv,h/2)*ky).toFixed(3), x, y, w, h, ()=>nineRaw(im, 0, 0, w, h, b, db))) return;
   nineRaw(im, x, y, w, h, b, db);
 }
+// 74 版（用户 2026-11-14：朋友的安卓手机上按钮、奖励格、教学气泡、底栏都有横线竖线；iPhone 上没有）：
+//   九宫格 9 块的交界落在半个物理像素上时，有的安卓浏览器内核会给每块的边做抗锯齿，交界处两块都半透明 → 露出一条浅缝。
+//   把每块的边界换算到当前变换下的物理像素、取整再换回来，相邻两块正好在整像素处接上（离屏拼图和直接画两条路都用）。
+function snapEdges(a, isX){ const m=ctx.getTransform(); if(m.b||m.c) return a; const k=isX?m.a:m.d, e=isX?m.e:m.f; if(!(k>0)) return a;
+  return a.map(v=>(Math.round(k*v+e)-e)/k); }
 function nineRaw(im, x, y, w, h, b, db){
   if(!ok(im)) return; const W0=im.naturalWidth, H0=im.naturalHeight; const bx=Math.min(b,W0/2-0.5), by=Math.min(b,H0/2-0.5);
   db = db==null ? b : db; const dbx=Math.min(db*bx/b,w/2), dby=Math.min(db*by/b,h/2);
-  const sx=[0,bx,W0-bx,W0], sy=[0,by,H0-by,H0], dx=[x,x+dbx,x+w-dbx,x+w], dy=[y,y+dby,y+h-dby,y+h];
+  const sx=[0,bx,W0-bx,W0], sy=[0,by,H0-by,H0], dx=snapEdges([x,x+dbx,x+w-dbx,x+w],1), dy=snapEdges([y,y+dby,y+h-dby,y+h],0);
   for(let i=0;i<3;i++) for(let j=0;j<3;j++){ const sw=sx[i+1]-sx[i], sh=sy[j+1]-sy[j], dw=dx[i+1]-dx[i], dh=dy[j+1]-dy[j];
     if(sw>0&&sh>0&&dw>0&&dh>0) ctx.drawImage(im, sx[i],sy[j],sw,sh, dx[i],dy[j],dw,dh); }
 }
@@ -1120,7 +1125,7 @@ function drawUI2(){
   for(let i=0;i<sN;i++) drawImgC(gui(i<G.swaps?'Slider/Slider_StageHorizontal_Icon_s_Yellow':'Slider/Slider_StageHorizontal_Icon_s_White1'), sb.x+56+i*19, sb.y+sb.h/2, 18, i<G.swaps?1:0.35);
   // 波次：「第 N/4 波」+ 进度条（走过的波次点亮）；精英 / Boss 出场后，这条换成它的血条
   const wb=L.waveBar, dur=DATA.level.duration; const clock=`${Math.floor(G.t/60)}:${String(Math.floor(G.t%60)).padStart(2,'0')}`;
-  const nWave=WAVE_MARKS.filter(m=>G.t>=m).length, boss=G.enemies.find(e=>e.def.role==='elite'&&!e.dead);
+  const nWave=(G.over&&G.over.win)?WAVE_MARKS.length:WAVE_MARKS.filter(m=>G.t>=m).length, boss=G.enemies.find(e=>e.def.role==='elite'&&!e.dead);
   numText(clock, W/2, 30+(L.hudTop||0), 22, '#fff', 'center');   // 61d：计时每秒变一次，按字符贴图，不再每秒重画一张
   if(boss){
     text(shardName(boss.key), W/2, wb.y-7, 12, '#ffd36b', 'center', 800, false);
@@ -1128,8 +1133,9 @@ function drawUI2(){
     drawImgC(gui('UI_Etc/ResourceBar_Single_Icon_Monster'), wb.x+wb.w, wb.y+7, 24);
   } else {
     text(nWave===0?'准备':`第 ${nWave}/${WAVE_MARKS.length} 波`, W/2, wb.y-7, 12, '#cfe3ff', 'center', 800, false);
-    hpBar(wb.x+wb.w/2, wb.y, wb.w, G.t/dur, 'green', 14);
-    WAVE_MARKS.forEach((m,i)=>{ const x=wb.x+wb.w*m/dur, last=i===WAVE_MARKS.length-1, on=G.t>=m;
+    { const tgt=(G.over&&G.over.win)?1:Math.min(1,G.t/dur); G._wbp=(!G.over||G._wbp==null)?tgt:G._wbp+(tgt-G._wbp)*0.12;   // 74 版（用户 2026-11-14：打完了进度条还没走完）：进度按时间走，提前打完时胜利后 0.5 秒内补满
+      hpBar(wb.x+wb.w/2, wb.y, wb.w, G._wbp, 'green', 14); }
+    WAVE_MARKS.forEach((m,i)=>{ const x=wb.x+wb.w*m/dur, last=i===WAVE_MARKS.length-1, on=G.t>=m||!!(G.over&&G.over.win);
       drawImgC(gui(last?'UI_Etc/ResourceBar_Single_Icon_Monster':(on?'Slider/Slider_StageHorizontal_Icon_s_Yellow':'Slider/Slider_StageHorizontal_Icon_s_White1')), x, wb.y+7, last?24:14, on?1:0.8); });
   }
   const total=Object.values(G.shards).reduce((a,b)=>a+b,0);
@@ -1180,6 +1186,7 @@ function drawResult2(){
   const f = o.win ? 1 : Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration));
   const rewards=[['COIN', o.win && o.coins ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow'], ['IconMisc/Icon_Star_On', Math.round(400*f), 'Blue']];   // 70 版：通关时金币按实际入账（含章节宝箱）
   if(o.win && o.starGain) rewards.push(['STAR', o.starGain, 'Purple', null, null, 'star']);
+  if(o.win && o.chest) rewards.push(['CHEST', 1, 'Purple', null, null, 'chest']);   // 74 版：章节宝箱，回地图打开
   for(const [k,n] of Object.entries(G.shards)) rewards.push([null, n, null, null, k]);
   const UL = o.win && o.unlock && window.UNLOCK_CN ? UNLOCK_CN[o.unlock] : null;
   text('奖励', cx, top+226, 14, '#cfe3ff', 'center', 800, false);
@@ -1188,7 +1195,7 @@ function drawResult2(){
   rewards.forEach(([ic,n,col,nm,mk,kd],i)=>{ const x=rx0+i*(rs+10), y=top+246; REWARD_RECTS.push({x,y,w:rs,h:rs+20,kind:mk?'shard':kd||(i===0?'coin':'exp'),key:mk,n});
     const k=clamp01((G.overT-1.3-i*0.1)/0.25); if(k<=0) return; ctx.save(); const sc=ease.outBack(k,2); ctx.translate(x+rs/2,y+rs/2); ctx.scale(sc,sc); ctx.translate(-(x+rs/2),-(y+rs/2));
     if(mk) shardCard(mk, n, x, y, rs);
-    else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():ic==='STAR'?icon('Star_Altar_05_Star'):gui(ic), x+rs/2, y+rs*0.44, rs*0.56);
+    else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():ic==='STAR'?icon('Star_Altar_05_Star'):ic==='CHEST'?img('map/chest.png'):gui(ic), x+rs/2, y+rs*0.44, rs*(ic==='CHEST'?0.7:0.56));
       text(String(n), x+rs/2, y+rs*0.84, rs*(String(n).length>4?0.17:0.24), '#fff'); }
     ctx.restore(); });
   if(UL){ const k=clamp01((G.overT-1.6)/0.25), y=top+246+rs+22; if(k>0){ ctx.globalAlpha=k; if(!o._ul){ o._ul=1; sfx('sparkle'); }
@@ -1205,7 +1212,8 @@ cv.addEventListener('pointerdown', e=>{ if(!G.over) return; const x=PX(e), y=PY(
 function drawRewardTip(){
   if(!RTIP) return; const q=REWARD_RECTS.find(z=>z.kind===RTIP.kind&&z.key===RTIP.key); if(!q){ RTIP=null; return; }
   let title, rows;
-  if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
+  if(q.kind==='chest'){ title='章节宝箱'; rows=['回到地图，点「终关奖励」打开']; }
+  else if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
     title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, PROFILE.owned[q.key] ? (!starOpen(q.key)?`已收集 ${have} 片，升星暂未开放`:have>=rr0.need?'已经可以升星':`再收集 ${rr0.need-have} 片可升星`) : (have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`)]; }
   else if(q.kind==='coin'){ title='金币'; rows=['用来购买道具和进化宠物']; }
   else if(q.kind==='star'){ title='星星'; rows=['本章全部通关的奖励']; }
