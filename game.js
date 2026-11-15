@@ -24,7 +24,7 @@ const BEATS = {fire:'grass', grass:'water', water:'fire', light:'dark', dark:'li
 const DATA = {
   pets: {
     flower:  {cn:'聚能花', desc:'每 14 秒产出 25 能量。放在花丛格上产量 +20%。', rarity:'common', name:'Flower',  short:'花', el:'grass', shape:'producer', cost:50,  cd:5,  hp:300,  prod:25, prodInt:14, windup:0.17},
-    goldfish:{cn:'泡泡鱼', desc:'向本路前方吐水弹，命中第一个敌人。水系连成 3 只时，水弹让敌人减速 15%，持续 2 秒。', rarity:'common', name:'Goldfish',short:'鱼', el:'water', shape:'shooter',  cost:100, cd:5,  hp:300,  dmg:20, int:1.4, projSpeed:6, windup:0.17},
+    goldfish:{cn:'泡泡鱼', desc:'向本路前方吐水弹，命中第一个敌人。水系连成 3 只时，水弹让敌人减速 15%，持续 2 秒。上下左右 4 格都被普通宠物链接时可以进化。', rarity:'rare', evo:{spine:'GoldfishEvo', cn:'花冠泡泡鱼', dmgMul:1.5, ring:{n:12, rounds:2, round:2, dmg:60, speed:5}}, name:'Goldfish',short:'鱼', el:'water', shape:'shooter',  cost:100, cd:5,  hp:300,  dmg:20, int:1.4, projSpeed:6, windup:0.17},
     pug:     {cn:'火牙犬', desc:'咬前方 1 格内的所有敌人。火系连成 3 只时，攻击附带灼烧：每秒 4 点，持续 3 秒。', rarity:'common', name:'Pug',     short:'巴哥',el:'fire', shape:'melee',    cost:75,  cd:5,  hp:450,  dmg:40, int:1.0, reach:1, windup:0.36}   /* 出手 = Attack 动画里身体顶到最高点（0.367s），不是 Spine 自带的 0.167s 事件（那是蓄力开始） */,
     pumpkin: {cn:'硬壳南瓜', desc:'生命 2000，不攻击。挡住敌人，让后排继续输出。', rarity:'common', name:'Pumpkin', short:'南瓜',el:'grass', shape:'wall',    cost:50,  cd:20, hp:2000, windup:0.17},
     bomb:    {cn:'波姆', desc:'放下 3 秒后就绪。敌人走到它面前时爆炸，对周围 3×3 格造成 600 伤害。', rarity:'rare', name:'Bomb',    short:'雷', el:'fire',  shape:'mine',     cost:125, cd:30, hp:1,    dmg:600, arm:3, windup:0.17},
@@ -244,9 +244,9 @@ function newGame(){
   if(typeof BANKED!=='undefined') BANKED=false;
   if(typeof RTIP!=='undefined') RTIP=null;
   G = {
-    t:0, speed:1, paused:false, over:null,
+    t:0, speed:1, tscale:1, paused:false, over:null,   // 87 版：tscale = 进化演出期间战场减速 50%（render.js frame 里乘上）
     energy: DATA.level.startEnergy,
-    pets:[], enemies:[], projs:[], orbs:[], fx:[], shardsFx:[],
+    pets:[], enemies:[], projs:[], rprojs:[], orbs:[], fx:[], shardsFx:[],
     cells: DATA.level.cells.map(c=>{ const h=c.type==='crate'?(c.hp||PROPS[c.kind].hp):c.hp; return {...c, hp:h, hpNow:h}; }),
     cooldown: Object.fromEntries(DATA.level.loadout.map(k=>[k,0])),
     spawns: buildSpawns(), spawnIdx:0,
@@ -412,10 +412,23 @@ function killEnemy(e, silent){
 // 近战覆盖「前方 reach 格」：按怪物身体边缘判断，体型大的怪站得远也打得到
 function meleeHits(pet){ const lo=pet.col+0.3, pr=propAhead(pet.lane,pet.col+1,pet.col+pet.def.reach), hi=pr ? pr.col+0.2 : pet.col+1+pet.def.reach;   // 道具挡住：道具后面的怪打不到
   return G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>=lo&&e.p-e.def.r<=hi); }
+// ---------- 87 版：进化后的全屏环射（用户 2026-11-15）----------
+// 绕自己一周，从正上方开始顺时针一发一发打（屏幕上的方向），round 秒一圈，共 rounds 圈；水弹穿透，每只怪只打一次
+function ringStart(pet){ const R=pet.def.evo.ring; pet.ring={t:-0.35, i:0, R}; pet.faceL=false; emit('ringStart',{pet, lead:0.35, per:R.round/R.n}); }
+function ringTick(pet, dt){ const B=pet.ring, R=B.R, per=R.round/R.n, total=R.n*R.rounds; B.t+=dt;
+  while(B.i<total && B.t>=B.i*per){ ringShot(pet, B.i%R.n, B.i); B.i++; }
+  if(B.i>=total && B.t>=total*per+0.2){ pet.ring=null; pet.faceL=false; pet.timer=0.4; emit('ringEnd',{pet}); } }
+function ringShot(pet, k, idx){ const R=pet.def.evo.ring, a=-Math.PI/2 + k/R.n*Math.PI*2;   // 屏幕角度：-90° = 正上方，角度变大 = 顺时针
+  const sx=Math.cos(a), sy=Math.sin(a), o=L.toScreen(0,0), ul=L.toScreen(1,0), up=L.toScreen(0,1);
+  const lx=ul.x-o.x, ly=ul.y-o.y, px=up.x-o.x, py=up.y-o.y, det=lx*py-ly*px;   // 屏幕方向 = vl·(lane 方向) + vp·(p 方向)
+  const vl=(sx*py-sy*px)/det, vp=(lx*sy-ly*sx)/det, n=Math.hypot(vl,vp)||1;
+  pet.faceL = sx < -0.01 || (Math.abs(sx)<=0.01 && k>R.n/2);   // 打左半圈时转过身朝左
+  G.rprojs.push({lane:pet.lane, p:pet.col+0.5, vl:vl/n*R.speed, vp:vp/n*R.speed, dmg:R.dmg*atkMul(pet), el:pet.def.el, src:pet, t:0, ang:a, hit:new Set()});
+  emit('ringShot',{pet, ang:a, k, idx}); }
 function petRelease(pet){
   const d=pet.def;
   if(d.shape==='shooter'){
-    G.projs.push({lane:pet.lane,p:pet.col+0.8,speed:d.projSpeed,dmg:d.dmg*atkMul(pet),el:d.el,src:pet,
+    G.projs.push({lane:pet.lane,p:pet.col+0.8,speed:d.projSpeed,dmg:d.dmg*atkMul(pet)*(pet.evo&&d.evo?d.evo.dmgMul:1),el:d.el,src:pet,
                   slow: pet.group&&pet.group.el==='water'&&pet.group.size>=3 ? 2 : 0}); emit('shoot',{pet});
     if(pet.key==='goldfish' && pet.star>=2 && !pet.second) pet.again=0.22;   // 2 星：每次连发 2 颗水弹（vfx-design.md 9.1）
     pet.second=false;
@@ -498,6 +511,8 @@ function update(dt){
     pet.flash=Math.max(0,pet.flash-dt);
     if(pet.poison){ pet.poison.t-=dt; pet.hp-=pet.poison.dps*dt; if(pet.poison.t<=0) pet.poison=null;   // 73 版：翠颈蛇的毒
       if(pet.hp<=0 && !pet.dead){ pet.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet}); G.fx.push({kind:'pop',lane:pet.lane,p:pet.col+0.5,t:0,life:0.4,color:'#ccc'}); continue; } }
+    if(pet.evoBusy){ pet.windup=0; pet.again=0; continue; }   // 87 版：进化演出中（飞到画面中间去了）不攻击
+    if(pet.ring){ ringTick(pet, dt); continue; }   // 87 版：进化后的全屏环射期间不做普通攻击
     if(pet.stun>0){ pet.stun-=dt; pet.windup=0; pet.again=0; continue; }
     const d=pet.def;
     if(pet.again>0){ pet.again-=dt; if(pet.again<=0){ pet.second=true; petRelease(pet); } }
@@ -548,6 +563,15 @@ function update(dt){
     if(e){ emit('projhit',{pr,e}); hitEnemy(e,pr.dmg,pr.el,{slow:pr.slow,src:pr.src}); pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color}); }
     if(pr.p>COLS+0.6) pr.dead=true;
   }
+  // 87 版：进化环射的水弹（格坐标里朝任意方向飞，穿透，每只怪 / 木箱只打一次）
+  for(const r of G.rprojs){
+    r.lane+=r.vl*dt; r.p+=r.vp*dt; r.t+=dt;
+    for(const e of G.enemies){ if(e.dead||r.hit.has(e)) continue;
+      if(Math.abs(e.lane-r.lane)<0.42 && Math.abs(e.p-r.p)<e.def.r+0.18){ r.hit.add(e); emit('projhit',{pr:r,e}); hitEnemy(e,r.dmg,r.el,{src:r.src}); } }
+    for(const c of G.cells){ if(!propAlive(c)||r.hit.has(c)) continue; if(Math.abs(r.lane-c.lane)<0.4 && r.p>=c.col+0.15 && r.p<=c.col+0.85){ r.hit.add(c); damageProp(c, r.dmg, true); } }
+    if(r.lane<-0.8||r.lane>LANES-0.2||r.p<-0.8||r.p>COLS+0.8) r.dead=true;
+  }
+  G.rprojs=G.rprojs.filter(r=>!r.dead);
   // 怪物
   for(const e of G.enemies){
     if(e.dead) continue;
@@ -574,7 +598,7 @@ function update(dt){
       // 先起手（播攻击动画），到出手那一帧才扣血
       if(e.windup>0){ e.windup-=dt;
         if(e.windup<=0){ const bt=e.biteTarget, alive=bt && (bt.type==='crate' ? propAlive(bt) : !bt.dead), t=alive?bt:tgt;
-          const hurt = q => { q.hp-=e.def.atk; q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };
+          const hurt = q => { if(q.evoBusy) return; q.hp-=e.def.atk; q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };
           if(t.type==='crate'){ e.bite=0.15; emit(e.def.range?'breath':'propBite',{e,c:t,pets:[]}); damageProp(t, e.def.atk, false); }
           else if(e.def.range){ const wall=pb?pb.col:-1, hits=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col>wall&&inReach(p.col));   // 喷火：范围内的宠物都烧到；道具后面的烧不到
             e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt); }
@@ -707,6 +731,7 @@ function orbScreen(o){ const s=L.toScreen(o.lane,o.p); const off = o.fall*o.fall
 function onDown(e){
   const x=PX(e),y=PY(e); pointer={x,y,down:true};
   if(!G.started){ G.started=true; emit('start'); return; }
+  if(window.EVO && EVO.busy() && !G.over) return;   // 87 版：进化演出中不接受操作
   if(G.over){ const b=resultAgainRect(); if(b && x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){ emit('ui'); setLevel(DATA.level.id); newGame(); G.started=true; emit('start'); } return; }
   const ts=tutCur();
   if(ts && ts.kind==='info'){ if(G.tut.t>0.7){ ts.ok=true; emit('ui'); } return; }   // 说明浮窗：点任意位置继续
@@ -743,6 +768,7 @@ function onUp(e){
   const moved = Math.hypot(PX(e)-dr.sx,PY(e)-dr.sy)>12;
   const {lane,col}=L.toCell(PX(e),PY(e));
   if(dr.kind==='card' && moved){ placePet(dr.key,lane,col); G.selected=null; }   // 拖动后松手：放没放成都取消选中（轻点才是选中）
+  if(dr.kind==='pet' && !moved && dr.pet.evoReady && window.EVO){ EVO.start(dr.pet); return; }   // 87 版：点一下可以进化的宠物 → 开始进化
   if(dr.kind==='pet' && moved){
     // 拖到底部卡槽区松手 = 卖掉（返还一半能量）
     if(PY(e) >= L.bar.y - 8){ if(!tutCur()){ shovel(dr.pet.lane, dr.pet.col); emit('sell',{pet:dr.pet}); } }

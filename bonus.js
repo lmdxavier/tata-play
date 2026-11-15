@@ -125,6 +125,10 @@ const BONUS = (()=>{
       const k=idOf(hi)+'>'+idOf(lo); if(!links.has(k) && !(pending.has(k) && pending.get(k)>clock) && !(hi.move||lo.move)) whip(hi,lo,k); } }
     for(const k of [...links.keys()]) if(!want.has(k)) links.delete(k);
     for(const lk of links.values()){ lk.t+=dt; if(!lk.hit && lk.t>=TE){ lk.hit=true; impact(lk); } }   // 79 版：伸出 0.3 秒碰到对方 → 啪
+    // 87 版（用户 2026-11-15）：高稀有度宠物每锁上一条链子，脚下属性光亮一档；第一次满 4 条 → 可以进化（evo.js）
+    for(const p of G.pets){ const s=st(p); let n=0; for(const lk of links.values()) if(lk.hi===p && lk.hit) n++;
+      if(n>(s.lc||0)) s.lcBump=1; s.lc=n; if(s.lcBump>0) s.lcBump=Math.max(0, s.lcBump-dt*1.4);
+      if(n>=4 && p.def.evo && !p.evo && !p.evoReady && !p.evoUsed){ p.evoReady=true; emit('evoReady',{pet:p}); } }
   }
   function impact(lk){ const P=bodyPos(lk.lo,HB), B=bodyPos(lk.hi,HB), d=Math.hypot(P.x-B.x,P.y-B.y)||1, u={x:(P.x-B.x)/d, y:(P.y-B.y)/d};
     const lv=visOf(lk.lo,true), hv=visOf(lk.hi,true); lv.squash=0.12; lv.hitFlash=0.08;
@@ -136,6 +140,13 @@ const BONUS = (()=>{
 
   // ---------- 画：地面光圈（drawAuras 位置） ----------
   function drawGround(){ const cs=L.cs;
+    for(const p of G.pets){ const s=S.get(p); if(!s || !((s.lc||0)>0 || s.lcBump>0 || p.evoReady)) continue;   // 87 版：链接数越多越亮（1～4 条），刚锁上那一下再冲亮
+      const t=tinted('gui/Frame/ItemFrame00~03_BgGlow.png', EL_HEX[p.def.el]); if(!t) continue;
+      const n=Math.min(4, s.lc||0), b=eOut(s.lcBump||0), rd=p.evoReady ? 0.5+0.5*Math.sin(clock*Math.PI*2*1.6) : 0;
+      const a=Math.min(1, 0.2+0.2*n+0.5*b+0.15*rd), f=ftOf(p), sz=cs*(1.25+0.12*n+0.3*b+0.12*rd);   // 1 条 0.4 → 4 条 1.0，范围也一条比一条大
+      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=a; ctx.translate(f.x, f.y-cs*0.05); ctx.scale(1, 0.42); ctx.drawImage(t, -sz/2, -sz/2, sz, sz);
+      ctx.globalAlpha=Math.min(1, 0.22*n+0.4*b); ctx.drawImage(t, -sz*0.36, -sz*0.36, sz*0.72, sz*0.72);   // 中心再叠一层更亮的核，条数越多越亮
+      ctx.restore(); }
     for(const p of G.pets){ const s=S.get(p); if(!s || !(s.lit || s.glow>0)) continue;
       const t=tinted('gui/Frame/ItemFrame00~03_BgGlow.png', EL_HEX[p.def.el]); if(!t) continue;
       const g=eOut(s.glow), f=ftOf(p), sz=cs*1.24*(1+0.3*g);

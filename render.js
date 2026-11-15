@@ -73,6 +73,7 @@ async function loadAll(){
   try {
     for(const name of Object.values(PET_SPINE)){ SPINE[name] = await buildSpine(name,'pets/'); SPINE[name].orig = await buildSpine(name,'pets/orig/');
       if(window.PET_DATA_HD && window.PET_DATA_HD[name]) SPINE[name].hd = await buildSpine(name,'pets_hd/',window.PET_DATA_HD); }   // 12 版：Real-ESRGAN 放大 4 倍的图集（tools/upscale_atlas.py）
+    for(const n of Object.keys(window.PET_DATA_EVO||{})){ const sd=await buildSpine(n,'pets_hd/',window.PET_DATA_EVO); sd.hd=sd; sd.orig=sd; SPINE[n]=sd; }   // 87 版：进化形态（_dev\进化 的拼装结果，只有高清图集）
     SPR = new spine.SkeletonRenderer(ctx); SPR.triangleRendering = true;
     // 只加载本关用到的怪物；ink 版贴图 = 换色线 + 饱和 +15%（离线处理好的 atlas_final）
     const used = [...Object.values(ENEMY_MON), ...Object.values(PET_MON)];
@@ -267,7 +268,7 @@ const FIT = { pet:[0.84,0.94], mine:[0.6,0.7], enemy:[0.84,0.94], elite:[1.06,1.
 function visOf(ent, isPet){
   let v = VIS.get(ent); if(v) return v;
   const orig = LOOK==='orig';
-  if(isPet){ v = PET_SPINE[ent.key] ? newSpine(PET_SPINE[ent.key], orig) : newMon(PET_MON[ent.key],'Idle', orig); v.fit = ent.def.shape==='mine' ? FIT.mine : FIT.pet; }
+  if(isPet){ v = ent.evo && ent.def.evo && SPINE[ent.def.evo.spine] ? newSpine(ent.def.evo.spine, orig) : PET_SPINE[ent.key] ? newSpine(PET_SPINE[ent.key], orig) : newMon(PET_MON[ent.key],'Idle', orig); v.fit = ent.def.shape==='mine' ? FIT.mine : FIT.pet; }
   else { v = newMon(ENEMY_MON[ent.key],'Walk', orig); v.state='Walk'; v.fit = ent.def.boss ? FIT.boss : ent.def.role==='elite' ? FIT.elite : FIT.enemy; }
   v.hpGhost = 1; v.id = (VIS_ID++); VIS.set(ent, v); return v;
 }
@@ -521,6 +522,13 @@ HOOKS.push((type, d)=>{
       COMBO.play('卖出', {x:f.x, y:f.y-L.cs*0.25}); break; }
     case 'attackStart': petPlay(d.pet,'Attack','Idle'); break;   // 起手：只播动画
     case 'shoot': FX.shoot(d.pet); break;   // 出手那一帧
+    // 87 版：进化
+    case 'evoReady': { const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('提示', {x:f.x, y:f.y}); const v=visOf(d.pet,true); v.pop=0.25; break; }
+    case 'ringStart': { const v=visOf(d.pet,true); if(v.kind==='spine'){ const per=d.per, ts=0.5/per, e=v.st.setAnimation(0,'Attack',true); e.timeScale=ts; e.mixDuration=0.08;   // 攻击动作循环：一个循环 = 一发，出手那一帧（0.17 秒）对上每一发
+        e.trackTime=(((0.17-ts*d.lead)%0.5)+0.5)%0.5; } break; }
+    case 'ringShot': { const p=d.pet, f=feet(p.lane,p.col+0.5), cs=L.cs, dir={x:Math.cos(d.ang), y:Math.sin(d.ang)}, v=visOf(p,true);
+      COMBO.play('水弹-出手-T1', {x:f.x+dir.x*cs*0.3, y:f.y-cs*0.38+dir.y*cs*0.3, dir}, {vol:0.8}); v.squash=Math.max(v.squash||0,0.06); break; }
+    case 'ringEnd': petPlay(d.pet,'Idle'); break;
     case 'melee': {
       const p=d.pet; const v=visOf(p,true); v.lunge=0.15;   // 动画已在起手时开始，这里是出手那一帧
       if(p.key==='lizard') FX.fire(p, d.hits);
@@ -758,6 +766,7 @@ function drawPet(pet, dt){
   if(pet.move){ const a=feet(pet.move.fl,pet.move.fc+0.5), k=Math.min(1,pet.move.t/0.4), e=1-(1-k)*(1-k);
     f = {x:a.x+(f.x-a.x)*e, y:a.y+(f.y-a.y)*e - Math.sin(k*Math.PI)*cs*0.3}; }
   if(G.drag && G.drag.kind==='pet' && G.drag.pet===pet && Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8) return;   // 正在被拖走
+  if(EVO.hides(pet)){ if(v.kind==='spine'){ v.st.update(dt); v.st.apply(v.sk); } return; }   // 87 版：进化演出中，宠物在画面中间
   if(v.lunge){ v.lunge=Math.max(0,v.lunge-dt); const k=Math.sin(v.lunge/0.15*Math.PI)*cs*0.12; f={x:f.x+L.forward.x*k, y:f.y+L.forward.y*k}; }
   const ground=feet(pet.lane,pet.col+0.5);
   groundShadow(f.x, pet.move?ground.y+(f.y-ground.y)*0.3+cs*0.0:f.y, cs*(pet.def.shape==='mine'?0.5:0.68));
@@ -768,7 +777,8 @@ function drawPet(pet, dt){
     if(v.drop<=0){ v.squash=0.12; v.pop=0.25; COMBO.play('放置', {x:f.x, y:f.y-cs*0.1}); } }
   v.hitFlash=Math.max(0,(v.hitFlash||0)-dt);
   ctx.save(); if(v.squash){ v.squash=Math.max(0,v.squash-dt); const k=v.squash/0.12; ctx.translate(f.x,f.y); ctx.scale(1+0.12*k,1-0.14*k); ctx.translate(-f.x,-f.y); }
-  v.dh = drawV(v, f.x, f.y, {alpha, flip:v.kind==='mon', mul, flash:v.hitFlash>0?0.75:0, cache:!pet.move&&!v.pop&&!v.lunge&&!pet.poison, fc:true, tint: pet.poison ? `rgba(120,200,80,${0.18+0.08*Math.sin(G.t*9)})` : null});   // 73 版：中毒时身上泛绿
+  const evoF = pet.evoReady ? 0.08+0.3*(0.5+0.5*Math.sin(ENV_T*Math.PI*2*1.6)) : 0;   // 87 版：可以进化 → 高亮闪烁
+  v.dh = drawV(v, f.x, f.y, {alpha, flip:v.kind==='mon' ? true : !!pet.faceL, mul, flash:v.hitFlash>0?0.75:evoF, cache:!pet.move&&!v.pop&&!v.lunge&&!pet.poison, fc:true, tint: pet.poison ? `rgba(120,200,80,${0.18+0.08*Math.sin(G.t*9)})` : null});   // 73 版：中毒时身上泛绿
   ctx.restore();
   const hpF=pet.hp/pet.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   if(hpF<1 && pet.def.shape!=='mine') hpBar(f.x, f.y-cs*0.06, cs*0.5, hpF, 'green', 7);   // 宠物血条在脚下，和怪物头顶的血条分开
@@ -1373,7 +1383,7 @@ const rsnapKey = () => cv.width+'x'+cv.height+'|'+W+'|'+H;
 let lastDraw = performance.now(); let LAST_ADT = 0;   // 75 版：bonus.js 用本帧的游戏时间步长
 function draw(){
   const now=performance.now(); let dt=Math.min(0.05,(now-lastDraw)/1000); lastDraw=now;
-  const adt = !G.started ? dt : G.paused||G.over ? (G.over?dt:0) : HITSTOP>1e-6 ? 0 : dt*G.speed; LAST_ADT=adt;
+  const adt = !G.started ? dt : G.paused||G.over ? (G.over?dt:0) : HITSTOP>1e-6 ? 0 : dt*G.speed*(G.tscale||1); LAST_ADT=adt;
   if(!READY){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#2b3a2a'; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); text(LOADMSG+(LOAD_N?(' '+LOAD_N[0]+'/'+LOAD_N[1]):''),W/2,H/2,18,'#fff'); return; }
   audioPump();
   SCENE.ensure(G.cells);
@@ -1406,13 +1416,13 @@ function draw(){
   list.push([L.toScreen(0,-0.45).y+L.cs*0.25, drawBells]);
   list.sort((a,b)=>a[0]-b[0]);
   for(const [,fn] of list) fn();
-  BONUS.drawAir();   // 75 版：属性小弹、3 连传导、稀有度触手 / 链子（在角色上面）
+  BONUS.drawAir(); EVO.drawWorld();   // 87 版：待进化提示、环射水弹；75 版：属性小弹、3 连传导、稀有度触手 / 链子（在角色上面）
   drawCorpses(adt); drawMonFx(adt);
   SCENE.drawFx(ctx, ENV_T, dt, icon('Misc_Leaf_01_Green'));
   drawNight(dt);
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();
   if(G.started && !G.over) watchEvents();
-  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt);   // 拖着的宠物画在卖出区上面，不被挡住
+  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt); EVO.drawOverlay(dt);   // 87 版：进化演出画在最上面；拖着的宠物画在卖出区上面，不被挡住
   const bn=[...G.fx.filter(f=>f.kind==='banner'), ...EVENTS.filter(ev=>G.t>=ev.t&&G.t<ev.until&&ev.text).map(ev=>({text:ev.text,big:ev.kind==='banner'}))];
   /* 65 版：教学提示出现时，同一位置的预告文字先不画，免得叠在一起 */
   if(!G.over && !G.paused && !tutCur()) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
@@ -1463,7 +1473,7 @@ function frame(now){
   if(!PREWARM.done && READY && BATTLE_READY && PREWARM.on && ctx.__prewarm){ if(!ctx.__prewarm(PREWARM.pick, 6)) PREWARM.done=true; }   // 61 版：战斗用的图下载完后，每帧抽几毫秒提前上传显卡，免得第一次用到时卡
   LAST_DRAW=now;
   acc += Math.min(0.1,(now-lastT)/1000); lastT=now;
-  if(READY && G.started) while(acc>=STEP){ if(HITSTOP>1e-6){ HITSTOP-=STEP; acc-=STEP; continue; } if(!G.paused) for(let i=0;i<G.speed;i++) update(STEP); acc-=STEP; } else acc=0;
+  if(READY && G.started) while(acc>=STEP){ if(HITSTOP>1e-6){ HITSTOP-=STEP; acc-=STEP; continue; } if(!G.paused) for(let i=0;i<G.speed;i++) update(STEP*(G.tscale||1)); acc-=STEP; } else acc=0;   // 87 版：tscale = 进化演出时 0.5
   const PT0=performance.now(); if(ctx.__begin) ctx.__begin(); draw(); if(ctx.__end) ctx.__end();   // 57 版：一帧的绘制结束后统一交给 WebGL
   if(window.PERF_HUD) PERF_HUD.frame(performance.now()-PT0);
   requestAnimationFrame(frame);
