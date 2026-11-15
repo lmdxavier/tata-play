@@ -113,7 +113,7 @@ const BONUS = (()=>{
     for(const k of [...links.keys()]) if(!want.has(k)) links.delete(k);
     for(const lk of links.values()){ lk.t+=dt; if(!lk.hit && lk.t>=T.up+T.strike){ lk.hit=true; impact(lk); } }
   }
-  function impact(lk){ const P=bodyPos(lk.lo,0.2), B=bodyPos(lk.hi,0.24), d=Math.hypot(P.x-B.x,P.y-B.y)||1, u={x:(P.x-B.x)/d, y:(P.y-B.y)/d};
+  function impact(lk){ const P=bodyPos(lk.lo,HB), B=bodyPos(lk.hi,HB), d=Math.hypot(P.x-B.x,P.y-B.y)||1, u={x:(P.x-B.x)/d, y:(P.y-B.y)/d};
     const lv=visOf(lk.lo,true), hv=visOf(lk.hi,true); lv.squash=0.12; lv.hitFlash=0.08;
     try{ COMBO.play('触手-抽打', {x:P.x, y:P.y}, {freeze:[lv, hv]}); }catch(e){}
     flashAt(P.x, P.y, 0.8, 0.12); vfxXY('ring_shockwave_white', P.x, P.y, 0.8); sparks(P.x, P.y, 7, u, 2.4, 4.2, '#ffffff', 0.3); shakeDir(0.02, 0.12, u); }
@@ -160,11 +160,11 @@ const BONUS = (()=>{
   }
   function drawPulse(p){
     const k=Math.min(1,p.t/T.hop), A=ftOf(p.a), B=ftOf(p.b), cs=L.cs, e=k*k*(3-2*k);
-    const x=A.x+(B.x-A.x)*e, y=A.y+(B.y-A.y)*e-cs*0.06, g=glowImg(ELC[p.el]);
+    const x=A.x+(B.x-A.x)*e, y=A.y+(B.y-A.y)*e-cs*0.06, g=softImg(ELC[p.el]);
     ctx.save(); ctx.globalCompositeOperation='lighter';
     const tx=A.x+(B.x-A.x)*Math.max(0,e-0.35), ty=A.y+(B.y-A.y)*Math.max(0,e-0.35)-cs*0.06;
     ctx.globalAlpha=0.9; seg(capImg(ELC[p.el]), {x:tx,y:ty}, {x,y}, cs*0.12);
-    if(g){ ctx.globalAlpha=1; drawImgC(g, x, y, cs*0.7); }
+    ctx.globalAlpha=0.9; soft(g, x, y, cs*0.45);
     ctx.restore();
   }
   // 触手 / 链子：沿二次曲线取点，用胶囊小图逐段摆
@@ -172,15 +172,15 @@ const BONUS = (()=>{
   //   一根被链接方属性色的柔光带（宽淡辉光 / 主色 / 细亮芯，预先烘成一张贴图，每段只贴一次），
   //   整条持续轻微波动：一道平缓的波从低稀有度传向高稀有度（竖着连 = 左右摆，横着连 = 上下摆），两端固定、收细；
   //   画在宠物下面（和守山门一样从身体后面穿出来），光团从低稀有度流向高稀有度。
-  const N=20, NB=16;
+  const N=20, NB=32, HB=0.33;   // HB：链子两端挂在身体正中（脚下往上 0.33 格）
   const qb=(P0,C,P2,s)=>{ const a=1-s; return {x:a*a*P0.x+2*a*s*C.x+s*s*P2.x, y:a*a*P0.y+2*a*s*C.y+s*s*P2.y}; };
   function geo(lk){
-    const cs=L.cs, B=bodyPos(lk.hi,0.24), E=bodyPos(lk.lo,0.2), dx=E.x-B.x, dy=E.y-B.y, D=Math.hypot(dx,dy)||1, ux=dx/D, uy=dy/D;
+    const cs=L.cs, B=bodyPos(lk.hi,HB), E=bodyPos(lk.lo,HB), dx=E.x-B.x, dy=E.y-B.y, D=Math.hypot(dx,dy)||1, ux=dx/D, uy=dy/D;
     let nx=-uy, ny=ux; if(ny>0.05 || (Math.abs(ny)<=0.05 && nx>0)){ nx=-nx; ny=-ny; }   // 法线取朝上（朝画面里侧）那一边
     const M={x:(B.x+E.x)/2, y:(B.y+E.y)/2};
     const rise={P2:{x:B.x-ux*D*0.25+nx*cs*0.9, y:B.y-uy*D*0.25+ny*cs*0.9-cs*0.6}, C:{x:B.x+nx*cs*0.7, y:B.y+ny*cs*0.7-cs*0.3}};
     const imp={P2:E, C:{x:M.x+nx*cs*0.5, y:M.y+ny*cs*0.5-cs*0.25}};
-    const rest={P2:E, C:{x:M.x+nx*cs*0.42, y:M.y+ny*cs*0.42+cs*0.1}};   // 往一侧弯出去，不从宠物脸上直穿
+    const rest={P2:E, C:M};   // 78 版：收成两只宠物正中之间的直线（用户：上下排列时没在人物中间）
     const t=lk.t-T.up-T.strike, u=t<0?0:Math.min(1,t/T.settle), sp=1-Math.cos(u*Math.PI*2.5)*Math.exp(-5*u);
     const C=t<0?imp.C:{x:imp.C.x+(rest.C.x-imp.C.x)*sp, y:imp.C.y+(rest.C.y-imp.C.y)*sp};
     return {cs,B,E,nx,ny,D,rise,imp,C,wk:t<0?0:eOut(u)};
@@ -209,38 +209,55 @@ const BONUS = (()=>{
     ctx.restore();
     if(wk>0) drawAbsorb(lk, g, wk);
   }
-  function drawAbsorb(lk, g, k){   // 高稀有度身上一团吸收光（在角色上面）
-    const gl=glowImg(ELC[lk.lo.def.el]); if(!gl) return;
-    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(0.3+0.2*Math.sin(clock*5.3))*k; drawImgC(gl, g.B.x, g.B.y, g.cs*0.62); ctx.restore();
+  // ---------- 78 版：守山门式羁绊光带（用户 2026-11-15 11:44） ----------
+  // 用户：「没有守山门那种半透明渐变的感觉，一节一节的」「波动像蚯蚓」「能量没有实体，应该用特效做，不是找贴图」。
+  // 照守山门 drawLinkLine：一根细的半透明柔光线（宽淡辉光 / 主色 / 细亮芯，截面是平滑渐变），两端淡进身体；
+  // 轻微波动（振幅约 0.035 格，相位速度 1.4，约 1.1 个波长，两端固定、中轴两侧来回摆）；
+  // 能量 = 一段沿线流动的亮光（光带自己被点亮，前沿亮、后面拖一段渐暗）+ 前沿一颗程序生成的柔光点，
+  // 到达高稀有度时它身上的柔光鼓一下。全部是程序烘一次的渐变小图，不用素材贴图。
+  const XS=new Map(), SOFT=new Map();
+  const rgbOf = c => { const n=parseInt(c.slice(1),16); return [n>>16,(n>>8)&255,n&255]; };
+  const mixW = (c,k) => c.map(v=>Math.round(v+(255-v)*k));
+  function xsImg(color){ let c=XS.get(color); if(c) return c;   // 截面：纵向 64px 平滑渐变（近似高斯，17 个色标），横向 4px；每种颜色只烘一次（不读写像素）
+    c=document.createElement('canvas'); c.width=4; c.height=64; const g=c.getContext('2d'), C=rgbOf(color), Lt=mixW(C,0.6), gr=g.createLinearGradient(0,0,0,64);
+    for(let q=0;q<=16;q++){ const d=Math.abs(q/16*2-1), glow=0.32*Math.exp(-d*d*5), main=0.75*Math.exp(-d*d*38), core=0.95*Math.exp(-d*d*160);
+      const al=1-(1-glow)*(1-main)*(1-core), wC=core/(glow+main+core+1e-6), rgb=C.map((v,j)=>Math.round(v+(Lt[j]-v)*wC));
+      gr.addColorStop(q/16, `rgba(${rgb},${al.toFixed(3)})`); }
+    g.fillStyle=gr; g.fillRect(0,0,4,64); XS.set(color,c); return c; }
+  function softImg(color){ let c=SOFT.get(color); if(c) return c;   // 柔光点：中心偏白 → 属性色 → 透明
+    c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'), C=rgbOf(color), W=mixW(C,0.75), gr=g.createRadialGradient(32,32,0,32,32,32);
+    gr.addColorStop(0,`rgba(${W},1)`); gr.addColorStop(0.22,`rgba(${W},0.85)`); gr.addColorStop(0.5,`rgba(${C},0.35)`); gr.addColorStop(1,`rgba(${C},0)`);
+    g.fillStyle=gr; g.fillRect(0,0,64,64); SOFT.set(color,c); return c; }
+  function strip(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, 0, -w/2, len, w); ctx.restore(); }   // 首尾正好相接，不重叠（重叠处会叠出一节节的深色）
+  function soft(im, x, y, sz){ ctx.drawImage(im, x-sz/2, y-sz/2, sz, sz); }
+  function drawAbsorb(lk, g, k){   // 高稀有度身上：平时很淡的一团柔光，每颗能量到达时鼓一下
+    const im=softImg(ELC[lk.lo.def.el]), h=lk.gt==null?0:Math.exp(-(clock-lk.gt)*4);
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(0.14+0.42*h)*k; soft(im, g.B.x, g.B.y, g.cs*(0.5+0.22*h)); ctx.restore();
   }
-  // 光带贴图：横向是长度（两头不收，逐段首尾相接），纵向是 辉光 / 主色 / 亮芯 三层的截面；每种颜色只烘一次
-  const BAND=new Map();
-  function bandImg(color){ let c=BAND.get(color); if(c) return c;
-    c=document.createElement('canvas'); c.width=16; c.height=64; const g=c.getContext('2d'), H=64, m=H/2;
-    const lay=(half, col, a)=>{ const gr=g.createLinearGradient(0,m-half,0,m+half), z=col.replace('rgb(','rgba(').replace(')',',0)'); gr.addColorStop(0,z); gr.addColorStop(0.5,col); gr.addColorStop(1,z); g.globalAlpha=a; g.fillStyle=gr; g.fillRect(0,m-half,16,half*2); };
-    const n=parseInt(color.slice(1),16), r=n>>16, gg=(n>>8)&255, b=n&255, cc=`rgb(${r},${gg},${b})`, lt=`rgb(${(r+255*1.2)/2.2|0},${(gg+255*1.2)/2.2|0},${(b+255*1.2)/2.2|0})`;   // 渐变两头用同色透明，避免发黑的边
-    lay(32, cc, 0.3);    // 宽淡辉光
-    lay(12, cc, 1);         // 主色
-    lay(6, lt, 1);          // 细亮芯
-    lay(2.6, 'rgb(255,255,255)', 1);
-    BAND.set(color, c); return c; }
-  function band(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, -0.25, -w/2, len+0.5, w); ctx.restore(); }
-  function drawBand(lk){   // 光带（drawAir 里，在角色上面：tata 的格子很挤，画在下面几乎全被挡住）
+  function drawBand(lk){   // drawAir 里，在角色上面（tata 格子挤，画在下面几乎全被挡住）
     const g=geo(lk); if(g.wk<=0) return;
-    const {cs,B,E,C,D}=g, k=g.wk, col=ELC[lk.lo.def.el], im=bandImg(col), ax=[];
-    const A=cs*0.075*Math.min(1, D/cs), ph=clock*2.2+lk.id*1.7;
+    const {cs,B,E,C,D}=g, k=g.wk, col=ELC[lk.lo.def.el], im=xsImg(col), ax=[];
+    const A=cs*0.035*Math.min(1, D/cs), ph=clock*1.4+lk.id*1.7;
     for(let i=0;i<=NB;i++){ const s=i/NB, p=qb(B,C,E,s), a=1-s;
       let tx=2*a*(C.x-B.x)+2*s*(E.x-C.x), ty=2*a*(C.y-B.y)+2*s*(E.y-C.y); const tl=Math.hypot(tx,ty)||1;
-      const env=Math.sin(Math.PI*s), w=A*env*Math.sin(s*Math.PI*2.2+ph);   // 波从低稀有度（s=1）传向高稀有度（s=0）
-      ax.push({x:p.x-ty/tl*w, y:p.y+tx/tl*w, e:env}); }
-    const W=cs*0.34;
+      const env=Math.sin(Math.PI*s), w=A*env*Math.sin(s*Math.PI*2.2+ph);   // 波从低稀有度（s=1）传向高稀有度（s=0），在中轴两侧来回摆
+      ax.push({x:p.x-ty/tl*w, y:p.y+tx/tl*w, s}); }
+    const fade = s => Math.min(1, Math.min(s, 1-s)/0.28);   // 两端淡进身体，不在脸上堆一团
+    // 能量：两段亮光沿线从低稀有度流向高稀有度（前沿亮、后面拖尾）
+    const per=0.5, P=[];
+    for(let j=0;j<2;j++){ const pos=1.12-((clock*per+lk.id*0.37+j*0.5)%1)*1.24; P.push(pos); }
+    const lit = s => { let v=0; for(const pos of P){ const d=s-pos; v+=Math.exp(-(d*d)/(d>0? 0.016 : 0.0016)); } return Math.min(1,v); };
+    const W=cs*0.17;
     ctx.save();
-    for(let i=0;i<NB;i++){ const e=(ax[i].e+ax[i+1].e)/2; ctx.globalAlpha=k*Math.min(1,e*1.7); band(im, ax[i], ax[i+1], W*(0.4+0.6*e)); }   // 两端淡出：接进身体里，不在脸上堆一团   // 光带本身用正常混合：草地很亮，叠加会洗成白色看不出属性色
-    const gl=glowImg(col); ctx.globalCompositeOperation='lighter';
-    if(gl){ for(let j=0;j<2;j++){ const pos=1-((clock*0.55+lk.id*0.37+j*0.5)%1), f=pos*NB, i0=Math.min(NB-1,f|0), fr=f-i0, e=Math.sin(Math.PI*pos);
-        const x=ax[i0].x+(ax[i0+1].x-ax[i0].x)*fr, y=ax[i0].y+(ax[i0+1].y-ax[i0].y)*fr;
-        ctx.globalAlpha=0.85*k*e; drawImgC(gl, x, y, cs*0.42*(0.6+0.6*e)); } }   // 光团：低稀有度 → 高稀有度
+    for(let i=0;i<NB;i++){ const sm=(ax[i].s+ax[i+1].s)/2; ctx.globalAlpha=0.8*k*fade(sm); strip(im, ax[i], ax[i+1], W); }
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<NB;i++){ const sm=(ax[i].s+ax[i+1].s)/2, v=lit(sm)*fade(sm); if(v<0.03) continue; ctx.globalAlpha=0.7*k*v; strip(im, ax[i], ax[i+1], W*(1+0.5*v)); }   // 光带被能量点亮的那一段
+    const sp=softImg(col);
+    for(const pos of P){ if(pos<0 || pos>1) continue; const f=pos*NB, i0=Math.min(NB-1,f|0), fr=f-i0, x=ax[i0].x+(ax[i0+1].x-ax[i0].x)*fr, y=ax[i0].y+(ax[i0+1].y-ax[i0].y)*fr;
+      ctx.globalAlpha=0.75*k*fade(pos); soft(sp, x, y, cs*0.26); }   // 前沿的柔光点
     ctx.restore();
+    // 到达：高稀有度身上的柔光鼓一下
+    if(P.some(pos=>pos<0.02 && pos>-0.08) && !(lk.gt!=null && clock-lk.gt<0.3)) lk.gt=clock;
   }
 
   HOOKS.push((type, d)=>{
