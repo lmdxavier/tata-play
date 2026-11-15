@@ -92,7 +92,7 @@ const BONUS = (()=>{
       at(t0+d*T.hop, ()=>light(m, d)); }
     return maxD ? maxD*T.hop+T.hold : 0;
   }
-  // 84 版（用户 2026-11-15）：3 连沿连线每点亮一只「叮」一下（S_UI_BT_COMMON 后半段的叮），和点亮同一帧；
+  // 84 版（用户 2026-11-15）：3 连沿连线每点亮一只响一下（85 版换回 SFX_Object_Place_Shiny_2，升调、变响幅度保持 84），和点亮同一帧；
   // 升调、变响要明显：第 n 只升 n 个全音（最多 7 级 = 高 14 个半音），音量从 -3dB 起每只 +2dB（最多 +6dB）；solo = 不和前一声分摊音量
   function light(m, n){ const s=st(m); s.wait=Math.max(0,s.wait-1); if(!alive(m)) return; s.lit=true; s.glow=1; n=n||0;
     const k=Math.min(n,7); snd('三连-传导', ftOf(m), {rate:Math.pow(2, 2*k/12), vol:Math.pow(10, Math.min(6, -3+2*k)/20), fixed:true, solo:true});
