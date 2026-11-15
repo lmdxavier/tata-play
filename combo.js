@@ -127,7 +127,7 @@ const COMBO = (()=>{
     const vr=s['变体'][st.vi++ % s['变体'].length], buf=A.bufs[vr['文件']]; if(!buf) return;
     const rates=s['播放速度']&&s['播放速度'].length?s['播放速度']:[1];
     let rate=rates[st.ri++ % rates.length];
-    if(c['类']!=='界面') rate*=1+(Math.random()*2-1)*(rates.length>1?0.01:0.03);   // 8 版：每个角色固定一个声音，只做 ±3% 轻微变调（旧组合的速度表轮换时只再抖 ±1%）
+    if(c['类']!=='界面' && !opt.fixed) rate*=1+(Math.random()*2-1)*(rates.length>1?0.01:0.03);   // 8 版：每个角色固定一个声音，只做 ±3% 轻微变调（旧组合的速度表轮换时只再抖 ±1%）
     if(opt.rate) rate*=opt.rate;   // 80 版：连续落下的加成音逐个升调
     let db=vr['音量dB'];
     const lt=s['档']||c['强度'];   // 只有 T 档的音效层跟着改档（界面、拾取层不动）

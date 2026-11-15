@@ -69,7 +69,8 @@ const BONUS = (()=>{
   }
   function launch(a, b){
     if(!alive(a)||!alive(b)){ const sb=S.get(b); if(sb) sb.inbound=Math.max(0,sb.inbound-1); return; }
-    const A=bodyPos(a,HB); snd('加成-弹出', A);   // 79 版：从角色身体正中弹出，起点不再有加成条反应
+    const A=bodyPos(a,HB); snd('加成-弹出', A, {fixed:true});   // 81 版：S_UI_BT_COMMON 原版，固定音调
+      // 79 版：从角色身体正中弹出，起点不再有加成条反应
     const va=visOf(a,true); va.squash=Math.max(va.squash||0, 0.09); burst(A.x, A.y, bcol(a.def.el), 0.25);   // 80 版：发射那一下身体一缩、身上亮一圈
     bolts.push({a, b, el:a.def.el, t:0, A, Bp:labelPos(b), landed:false, id0:idOf(a)*0.37+clock});
   }
@@ -80,7 +81,7 @@ const BONUS = (()=>{
     if(to!==s.shown){ s.roll={from:s.shown, to, t:0}; s.shown=to; }
     s.hit=clock; bt.Bp=B;   // 79 版：加成条白闪、鼓起再弹两下、迸火花（drawLabel / drawHit）
     if(clock-landLast<0.7) landRun=Math.min(landRun+1, 7); else landRun=0; landLast=clock;
-    snd('加成-落下', B, {rate:Math.pow(2, landRun*2/12)});   // 80 版：连续落下每次升一个全音（最多 7 级）
+    snd('加成-落下', B, {rate:Math.pow(2, landRun*2/12), fixed:true});   // 81 版：SFX_Object_Place_Shiny_2，只按次数升调、不再随机抖   // 80 版：连续落下每次升一个全音（最多 7 级）
     burst(B.x, B.y, bcol(b.def.el), 0.35+0.05*landRun); freezeV(visOf(b,true), 0.05);
   }
   // 从新宠物 P 经邻居 n 往外依次点亮（不回头经过 P）；返回这一段用的时间
@@ -144,7 +145,7 @@ const BONUS = (()=>{
     if(s.roll){ from=s.roll.from; to=s.roll.to; k=Math.min(1, s.roll.t/T.roll); }
     if(from<=0 && to<=0) return;
     const cs=L.cs, w=cs*0.5, h=cs*0.2, cy=f.y+cs*0.06+h/2, lab=gui('Label/Label_Parallelogram_'+PARA[pet.def.el]);
-    const ht=s.hit==null?9:clock-s.hit, a = from<=0 ? Math.min(1,k*3) : to<=0 ? 1-k : 1, pop = ht<0.6 ? 1+0.38*Math.exp(-ht/0.09)*Math.cos(ht*2*Math.PI*3.2) : 1;   // 79 版：被能量球砸中时鼓起 1.38 倍、来回弹两下
+    const ht=s.hit==null?9:clock-s.hit, a = from<=0 ? Math.min(1,k*3) : to<=0 ? 1-k : 1, pop = ht<1.2 ? 1+0.38*Math.exp(-ht/0.18)*Math.cos(ht*2*Math.PI*1.6) : 1;   /* 81 版：用户「加成条变大太快了，放慢一倍」→ 时间全部 ×2 */   // 79 版：被能量球砸中时鼓起 1.38 倍、来回弹两下
     ctx.save(); ctx.globalAlpha*=a; if(pop!==1){ ctx.translate(f.x,cy); ctx.scale(pop,pop); ctx.translate(-f.x,-cy); }
     nine(lab, f.x-w/2, cy-h/2, w, h, 18, h*0.45);
     if(!s.roll) text('+'+to*8+'%', f.x, cy, cs*0.13, '#fff');
@@ -188,7 +189,7 @@ const BONUS = (()=>{
   // ---------- 79 版：同系加成弹射 = 程序画的能量球（演示页 drawBolt 样子 B + 路径 2） ----------
   // 角色身体正中 → 对方加成条；水平匀速、高度抛物线（真 3D：高度朝屏幕外，主要表现为变大，0.3 的比例在屏幕上往上），影子留在地面原处；
   // 拖尾按 3D 路程取固定长度再投影；落下 0.12 秒内压扁、下沉、变透明融进「+%」；加成条白闪、鼓起、迸 12 颗火花。
-  const BB={bs:0.10, tl:1.45, sp:2.5, q:1.05, ti:0.30, pf:2.9, bh:1.05}, MELT=0.12;   // 球直径 / 拖尾（3D 格）/ 转速（圈/秒）/ Q 弹 / 镜头倾斜 / 镜头距离 / 最高
+  const BB={bs:0.13, tl:1.45, sp:2.5, q:1.05, ti:0.30, pf:2.9, bh:1.05}, MELT=0.12;   // 球直径 / 拖尾（3D 格）/ 转速（圈/秒）/ Q 弹 / 镜头倾斜 / 镜头距离 / 最高
   const BCOL={fire:'#ffa23a', water:'#3fb4ff', grass:'#6be05a'}, TCOL={fire:'#ff5a14', water:'#1f8fe0', grass:'#3cb83a'};   // 火系球用金橙（#ff7a3d 画成球偏棕）
   const bcol = el => BCOL[el]||ELC[el]||ELC.none, tcol = el => TCOL[el]||hexOf(darkC(bcol(el),0.15));
   const EN=new Map(); let SHW=null, STAR=null; const SPK=new Map();
@@ -210,7 +211,7 @@ const BONUS = (()=>{
   const backOut = k => { const c=1.9; return 1+(c+1)*Math.pow(k-1,3)+c*Math.pow(k-1,2); };
   const jel = (tau,A) => tau<0?0:A*Math.exp(-tau/0.13)*Math.sin(tau*2*Math.PI*6.5);   // 果冻回弹：先猛后收
   function drawHit(L0, tau, col){   // 加成条收到能量：白闪 + 12 颗火花（鼓起在 drawLabel 里）
-    if(tau<0||tau>0.6) return; const cs=L.cs, ht=1+0.38*Math.exp(-tau/0.09)*Math.cos(tau*2*Math.PI*3.2), fs=cs*0.9*ht;
+    if(tau<0||tau>0.6) return; const cs=L.cs, ht=1+0.38*Math.exp(-tau/0.18)*Math.cos(tau*2*Math.PI*1.6), fs=cs*0.9*ht;
     ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.9*Math.exp(-tau/0.07); ctx.drawImage(softImg('#ffffff'), L0.x-fs/2, L0.y-fs*0.35, fs, fs*0.7);
     const SP=sparkImg(col), S=starImg();
     for(let i=0;i<12;i++){ const rnd=k2=>{ const x=Math.sin((i+1)*12.9898+k2*78.233)*43758.5453; return x-Math.floor(x); };   // 每颗火花固定种子的方向、速度、寿命
@@ -265,7 +266,7 @@ const BONUS = (()=>{
   // 伸出 / 剧烈时整条加宽发光（圆形柔光点沿路径盖章）+ 末端光头；平静后是细柔光带 + 沿线流动的能量（低稀有度 → 高稀有度）。
   // 所有渐变只烘一次成小图，每帧只做平移 / 缩放 / 旋转。
   const NB=32, HB=0.33, TE=0.3, TC=1.0, DLY=0.32;   // HB：两端挂在身体正中（脚下往上 0.33 格）；TE：伸到对方用时；TC：剧烈 → 平静
-  const LK={cw:0.035, xw:1.0, gw:1.5, gb:0.14, hd:0.28, wa:0.19, ew:1.3, el:0.34};   // 实心宽 / 伸出时实心加粗 / 光晕宽 / 光晕亮度 / 末端光头 / 甩动幅度 / 能量宽（倍）/ 能量长（格）
+  const LK={cw:0.060, xw:1.0, gw:1.5, gb:0.14, hd:0.28, wa:0.19, ew:1.25, el:0.48};   // 81 版：用户 2026-11-15 16:39 在演示页定：实心 0.035→0.060、能量宽 1.3→1.25、能量长 0.34→0.48、球直径 0.10→0.13   // 实心宽 / 伸出时实心加粗 / 光晕宽 / 光晕亮度 / 末端光头 / 甩动幅度 / 能量宽（倍）/ 能量长（格）
   const XS=new Map(), SOFT=new Map();
   const rgbOf = c => { const n=parseInt(c.slice(1),16); return [n>>16,(n>>8)&255,n&255]; };
   const mixW = (c,k) => c.map(v=>Math.round(v+(255-v)*k));
