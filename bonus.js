@@ -6,6 +6,8 @@
    ② 同属性 3 连：从新宠物开始沿连线依次点亮脚下光圈（亮起明显 → 淡到很淡常驻）；只有 2 只时不再画脚下光。
    ③ 稀有度链接：高稀有度宠物旁边有低稀有度宠物（同稀有度不连，炸弹类不算）时，高稀有度伸出触手扬起 → 啪地抽下 → 收成持续波动的柔光带（77 版，照守山门），
       被链接方（低稀有度）属性颜色的能量源源不断地从低稀有度流向高稀有度。只是表现，数值效果待定。
+   79 版（用户 2026-11-15 在演示页 _dev\链子对比\链接特效设计.html 定稿）：链子从高稀有度身上伸出（力从发出端传到末端、整条甩动后平静），
+      弹射改成程序画的 3D 能量球（角色身上 → 对方加成条，抛物线 + 斜镜头透视、拖尾、落下融化），加成条白闪鼓起 + 火花。参数见 docs/vfx-design.md「78 版」节末。
    顺序：新宠物和每个邻居是一条「轨道」，各轨道同时开始；轨道内部 弹出 → 弹回 → 3 连传导 → 触手链接 一步一步来。
    画法全部是贴图（属性弹序列帧、胶囊 / 圆点小图旋转拉伸），不画会变形的路径——不增加每帧的光栅重画和贴图上传。
    ===================================================================== */
@@ -13,8 +15,7 @@ const BONUS = (()=>{
   const RANK = {common:0, rare:1, epic:2, legend:3};
   const rankOf = p => RANK[p.def.rarity||'common']||0;
   const ELC = {fire:'#ff7a3d', water:'#3fb4ff', grass:'#6be05a', light:'#ffd84a', dark:'#b07cff', none:'#e6e6e6'};
-  const BOLT = {fire:{n:8,w:200,h:86}, water:{n:8,w:200,h:104}, grass:{n:8,w:200,h:86}};
-  const T = {land:0.2, fly:0.5, gap:0.14, hop:0.2, hold:0.3, up:0.3, strike:0.1, settle:0.34, roll:0.32};
+  const T = {land:0.2, fly:0.40, gap:0.14, hop:0.2, hold:0.3, up:0.3, strike:0.1, settle:0.34, roll:0.32};
   const S = new WeakMap();
   const st = p => { let s=S.get(p); if(!s){ s={shown:p.nSame||0, inbound:0, roll:null, pop:0, glow:0, lit:false, wait:0}; S.set(p,s); } return s; };
   const ids = new WeakMap(); let nid=1; const idOf = p => { let i=ids.get(p); if(!i){ i=nid++; ids.set(p,i); } return i; };
@@ -34,11 +35,9 @@ const BONUS = (()=>{
   const snd = (name, p) => { try{ COMBO.play(name, {x:p.x, y:p.y}); }catch(e){} };
 
   // ---------- 小图：胶囊、圆点（每种颜色只画一次） ----------
-  const CAP=new Map(), DOT=new Map();
+  const CAP=new Map();
   function capImg(color){ let c=CAP.get(color); if(!c){ c=document.createElement('canvas'); c.width=64; c.height=16; const g=c.getContext('2d'); g.strokeStyle=color; g.lineCap='round'; g.lineWidth=14; g.beginPath(); g.moveTo(8,8); g.lineTo(56,8); g.stroke(); CAP.set(color,c); } return c; }
-  function dotImg(color){ let c=DOT.get(color); if(!c){ c=document.createElement('canvas'); c.width=c.height=32; const g=c.getContext('2d'); g.fillStyle=color; g.beginPath(); g.arc(16,16,14,0,7); g.fill(); DOT.set(color,c); } return c; }
   function seg(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, -w/2, -w/2, len+w, w); ctx.restore(); }
-  const glowImg = color => tinted('gui/Image_Effect_Light02.png', color);
 
   // ---------- 序列 ----------
   function startSeq(P, delay){
@@ -65,15 +64,15 @@ const BONUS = (()=>{
   }
   function launch(a, b){
     if(!alive(a)||!alive(b)){ const sb=S.get(b); if(sb) sb.inbound=Math.max(0,sb.inbound-1); return; }
-    const A=labelPos(a); st(a).pop=0.3; flashAt(A.x, A.y, 0.4, 0.12, undefined, ELC[a.def.el]); snd('加成-弹出', A);
-    bolts.push({a, b, el:BOLT[a.def.el]?a.def.el:'fire', t:0});
+    const A=bodyPos(a,HB); snd('加成-弹出', A);   // 79 版：从角色身体正中弹出，起点不再有加成条反应
+    bolts.push({a, b, el:a.def.el, t:0, A, Bp:labelPos(b), landed:false, id0:idOf(a)*0.37+clock});
   }
   function land(bt){
     const b=bt.b, s=st(b); s.inbound=Math.max(0,s.inbound-1);
     if(!alive(b)) return;
     const B=labelPos(b), to=Math.min(b.nSame||0, s.shown+1);
     if(to!==s.shown){ s.roll={from:s.shown, to, t:0}; s.shown=to; }
-    s.pop=0.3; flashAt(B.x, B.y, 0.75, 0.16, undefined, ELC[bt.el]); sparks(B.x, B.y, 6, {x:0,y:-1}, 2.6, 3.2, ELC[bt.el], 0.32);
+    s.hit=clock; bt.Bp=B;   // 79 版：加成条白闪、鼓起再弹两下、迸火花（drawLabel / drawHit）
     snd('加成-落下', B);
   }
   // 从新宠物 P 经邻居 n 往外依次点亮（不回头经过 P）；返回这一段用的时间
@@ -104,14 +103,14 @@ const BONUS = (()=>{
       if(s.pop>0) s.pop=Math.max(0,s.pop-dt);
       if(s.glow>0) s.glow=Math.max(0,s.glow-dt*1.25);
       const big=p.group&&p.group.size>=3&&!mine(p); if(!big) s.lit=false; else if(!s.lit && s.wait===0) s.lit=true; }
-    for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i]; b.t+=dt; if(b.t>=T.fly){ bolts.splice(i,1); land(b); } }
+    for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i]; b.t+=dt; if(!b.landed && b.t>=T.fly){ b.landed=true; land(b); } if(b.t>=T.fly+0.6) bolts.splice(i,1); }   // 落下后再留 0.6 秒画融化和火花
     for(let i=pulses.length-1;i>=0;i--){ pulses[i].t+=dt; if(pulses[i].t>=T.hop) pulses.splice(i,1); }
     // 链接：和当前相邻关系对齐（铲掉 / 移开就断；其他原因出现的新相邻直接抽一次）
     const want=new Set();
     for(const p of G.pets){ if(mine(p)) continue; for(const o of [petAt(p.lane+1,p.col), petAt(p.lane,p.col+1)]) if(o && linkable(p,o)){ const hi=rankOf(p)>rankOf(o)?p:o, lo=hi===p?o:p; want.add(idOf(hi)+'>'+idOf(lo));
       const k=idOf(hi)+'>'+idOf(lo); if(!links.has(k) && !(pending.has(k) && pending.get(k)>clock) && !(hi.move||lo.move)) whip(hi,lo,k); } }
     for(const k of [...links.keys()]) if(!want.has(k)) links.delete(k);
-    for(const lk of links.values()){ lk.t+=dt; if(!lk.hit && lk.t>=T.up+T.strike){ lk.hit=true; impact(lk); } }
+    for(const lk of links.values()){ lk.t+=dt; if(!lk.hit && lk.t>=TE){ lk.hit=true; impact(lk); } }   // 79 版：伸出 0.3 秒碰到对方 → 啪
   }
   function impact(lk){ const P=bodyPos(lk.lo,HB), B=bodyPos(lk.hi,HB), d=Math.hypot(P.x-B.x,P.y-B.y)||1, u={x:(P.x-B.x)/d, y:(P.y-B.y)/d};
     const lv=visOf(lk.lo,true), hv=visOf(lk.hi,true); lv.squash=0.12; lv.hitFlash=0.08;
@@ -132,7 +131,7 @@ const BONUS = (()=>{
     if(s.roll){ from=s.roll.from; to=s.roll.to; k=Math.min(1, s.roll.t/T.roll); }
     if(from<=0 && to<=0) return;
     const cs=L.cs, w=cs*0.5, h=cs*0.2, cy=f.y+cs*0.06+h/2, lab=gui('Label/Label_Parallelogram_'+PARA[pet.def.el]);
-    const a = from<=0 ? Math.min(1,k*3) : to<=0 ? 1-k : 1, pop = s.pop>0 ? 1+0.3*Math.sin((1-s.pop/0.3)*Math.PI) : 1;
+    const ht=s.hit==null?9:clock-s.hit, a = from<=0 ? Math.min(1,k*3) : to<=0 ? 1-k : 1, pop = ht<0.6 ? 1+0.38*Math.exp(-ht/0.09)*Math.cos(ht*2*Math.PI*3.2) : 1;   // 79 版：被能量球砸中时鼓起 1.38 倍、来回弹两下
     ctx.save(); ctx.globalAlpha*=a; if(pop!==1){ ctx.translate(f.x,cy); ctx.scale(pop,pop); ctx.translate(-f.x,-cy); }
     nine(lab, f.x-w/2, cy-h/2, w, h, 18, h*0.45);
     if(!s.roll) text('+'+to*8+'%', f.x, cy, cs*0.13, '#fff');
@@ -143,20 +142,74 @@ const BONUS = (()=>{
   }
   // ---------- 画：空中（角色之后） ----------
   function drawAir(){
-    for(const lk of links.values()){ drawBand(lk); drawLink(lk); }   // 77 版：光带 + 触手
+    for(const lk of links.values()) drawLink(lk);   // 79 版：伸出 → 甩动 → 平静的柔光链子 + 能量
     for(const p of pulses) drawPulse(p);
     for(const b of bolts) drawBolt(b);
   }
-  function drawBolt(b){
-    const cs=L.cs, k=Math.min(1,b.t/T.fly), A=labelPos(b.a), B=labelPos(b.b);
-    const D=Math.hypot(B.x-A.x,B.y-A.y), Hh=cs*0.9+D*0.35, z=4*Hh*k*(1-k), zn=z/Hh;
-    const gx=A.x+(B.x-A.x)*k, gy=A.y+(B.y-A.y)*k;
-    groundShadow(gx, gy, cs*(0.34-0.16*zn), 0.85-0.45*zn);   // 影子留在地面，越高越小越淡
-    const vx=B.x-A.x, vy=(B.y-A.y)-4*Hh*(1-2*k), sp=Math.hypot(vx,vy);
-    const m=BOLT[b.el], im=img('bonus/bolt_'+b.el+'.png'); if(!ok(im)) return;
-    const fi=Math.floor(b.t*16)%m.n, wd=cs*(0.78+0.42*zn), ht=wd*m.h/m.w, st2=1+Math.min(0.25, sp/(cs*40));   // 越高越大（离镜头近）；快的时候略拉长
-    ctx.save(); ctx.translate(gx, gy-z); ctx.rotate(Math.atan2(vy,vx)+Math.PI); ctx.scale(st2, 1/st2);   // 贴图头朝左 → 转到速度方向：升空时头朝上，落下时尾朝上
-    ctx.drawImage(im, fi*m.w, 0, m.w, m.h, -wd*0.2, -ht/2, wd, ht); ctx.restore();
+  // ---------- 79 版：同系加成弹射 = 程序画的能量球（演示页 drawBolt 样子 B + 路径 2） ----------
+  // 角色身体正中 → 对方加成条；水平匀速、高度抛物线（真 3D：高度朝屏幕外，主要表现为变大，0.3 的比例在屏幕上往上），影子留在地面原处；
+  // 拖尾按 3D 路程取固定长度再投影；落下 0.12 秒内压扁、下沉、变透明融进「+%」；加成条白闪、鼓起、迸 12 颗火花。
+  const BB={bs:0.10, tl:1.45, sp:2.5, q:1.05, ti:0.30, pf:2.9, bh:1.05}, MELT=0.12;   // 球直径 / 拖尾（3D 格）/ 转速（圈/秒）/ Q 弹 / 镜头倾斜 / 镜头距离 / 最高
+  const BCOL={fire:'#ffa23a', water:'#3fb4ff', grass:'#6be05a'}, TCOL={fire:'#ff5a14', water:'#1f8fe0', grass:'#3cb83a'};   // 火系球用金橙（#ff7a3d 画成球偏棕）
+  const bcol = el => BCOL[el]||ELC[el]||ELC.none, tcol = el => TCOL[el]||hexOf(darkC(bcol(el),0.15));
+  const EN=new Map(); let SHW=null, STAR=null; const SPK=new Map();
+  function energyImgs(col){ let r=EN.get(col); if(r) return r; const S=128, m=S/2, C=rgbOf(col), Lt=mixW(C,0.55), Wt=mixW(C,0.85), mk=()=>{ const c=document.createElement('canvas'); c.width=c.height=S; return c; };
+    const body=mk(), g1=body.getContext('2d'), gr=g1.createRadialGradient(m,m,0,m,m,60);   // 能量体：中心近白 → 浅色 → 本色 → 一圈亮边 → 透明
+    gr.addColorStop(0,`rgba(${Wt},1)`); gr.addColorStop(0.3,`rgba(${Lt},0.95)`); gr.addColorStop(0.68,`rgba(${C},0.75)`); gr.addColorStop(0.86,`rgba(${Lt},0.9)`); gr.addColorStop(0.93,`rgba(${C},0.5)`); gr.addColorStop(1,`rgba(${C},0)`);
+    g1.fillStyle=gr; g1.fillRect(0,0,S,S);
+    const sw=mk(), g2=sw.getContext('2d'); g2.lineCap='round';   // 里面流动的光纹
+    for(const [rr,a0,a1,w,al] of [[34,0.2,2.0,7,0.75],[24,3.3,4.9,5,0.6],[42,3.6,5.2,4,0.45]]){ g2.strokeStyle=`rgba(${Wt},${al})`; g2.lineWidth=w; g2.beginPath(); g2.arc(m,m,rr,a0,a1); g2.stroke(); }
+    const hi=mk(), g3=hi.getContext('2d'); g3.fillStyle='rgba(255,255,255,0.7)'; g3.beginPath(); g3.ellipse(m-17,m-21,11,6,-0.6,0,7); g3.fill();
+    r={body, sw, hi}; EN.set(col,r); return r; }
+  function shadowImg(){ if(SHW) return SHW; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'), gr=g.createRadialGradient(32,32,0,32,32,32);
+    gr.addColorStop(0,'rgba(10,20,30,0.36)'); gr.addColorStop(0.6,'rgba(10,20,30,0.16)'); gr.addColorStop(1,'rgba(10,20,30,0)'); g.fillStyle=gr; g.fillRect(0,0,64,64); return SHW=c; }
+  function starImg(){ if(STAR) return STAR; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'), m=32;   // 四角小星
+    g.beginPath(); for(let i=0;i<8;i++){ const r=i%2?9:30, a=i*Math.PI/4-Math.PI/2; g[i?'lineTo':'moveTo'](m+Math.cos(a)*r, m+Math.sin(a)*r); } g.closePath();
+    g.fillStyle='#fff6c8'; g.fill(); g.lineJoin='round'; g.lineWidth=3; g.strokeStyle='rgba(255,200,80,0.9)'; g.stroke(); return STAR=c; }
+  function sparkImg(col){ let c=SPK.get(col); if(c) return c; c=document.createElement('canvas'); c.width=64; c.height=16; const g=c.getContext('2d'), C=rgbOf(col), gr=g.createLinearGradient(0,0,64,0);   // 火花：属性色尾 → 近白亮头
+    gr.addColorStop(0,`rgba(${C},0)`); gr.addColorStop(0.55,`rgba(${C},0.95)`); gr.addColorStop(0.85,`rgba(${mixW(C,0.6)},1)`); gr.addColorStop(1,'rgba(255,255,235,1)'); g.fillStyle=gr; g.beginPath(); g.ellipse(32,8,31,6,0,0,7); g.fill(); SPK.set(col,c); return c; }
+  const backOut = k => { const c=1.9; return 1+(c+1)*Math.pow(k-1,3)+c*Math.pow(k-1,2); };
+  const jel = (tau,A) => tau<0?0:A*Math.exp(-tau/0.13)*Math.sin(tau*2*Math.PI*6.5);   // 果冻回弹：先猛后收
+  function drawHit(L0, tau, col){   // 加成条收到能量：白闪 + 12 颗火花（鼓起在 drawLabel 里）
+    if(tau<0||tau>0.6) return; const cs=L.cs, ht=1+0.38*Math.exp(-tau/0.09)*Math.cos(tau*2*Math.PI*3.2), fs=cs*0.9*ht;
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.9*Math.exp(-tau/0.07); ctx.drawImage(softImg('#ffffff'), L0.x-fs/2, L0.y-fs*0.35, fs, fs*0.7);
+    const SP=sparkImg(col), S=starImg();
+    for(let i=0;i<12;i++){ const rnd=k2=>{ const x=Math.sin((i+1)*12.9898+k2*78.233)*43758.5453; return x-Math.floor(x); };   // 每颗火花固定种子的方向、速度、寿命
+      const a=(i+rnd(1)*0.7)/12*Math.PI*2, v0=cs*(0.9+1.1*rnd(2)), life=0.3+0.22*rnd(3), q=tau/life; if(q>=1) continue;
+      const dd=v0*life*(1-Math.pow(1-q,2.2))/2.2, vx=Math.cos(a)*1.7, vy=Math.sin(a)*0.75;   // 迸出后很快减速；加成条是横的，横向散得开
+      const x=L0.x+vx*dd, y=L0.y+vy*dd+cs*0.12*q*q, sp=Math.pow(1-q,2.2), len=cs*(0.05+0.16*sp), wd=cs*0.05*(1-q*0.6);
+      ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=Math.pow(1-q,1.2); ctx.save(); ctx.translate(x,y); ctx.rotate(Math.atan2(vy*sp+0.12*q, vx*sp)); ctx.drawImage(SP,-len,-wd/2,len,wd); ctx.restore();   // 越慢越短，最后缩成小点淡出（普通混合，亮草地上不被冲白）
+      if(i<4){ ctx.globalCompositeOperation='lighter'; const r=cs*0.045*(1-q); ctx.save(); ctx.translate(x,y); ctx.rotate(tau*8+i); ctx.drawImage(S,-r,-r,r*2,r*2); ctx.restore(); } }
+    ctx.restore(); }
+  function drawBolt(bt){
+    const cs=L.cs, FLY=T.fly, t=bt.t, col=bcol(bt.el), A=bt.A, Bp=bt.landed?bt.Bp:labelPos(bt.b), H=cs*BB.bh, F=cs*BB.pf, TI=BB.ti, R0=cs*BB.bs/2, Q=BB.q;
+    if(bt.landed) drawHit(Bp, t-FLY, col);
+    if(t>FLY+MELT) return;
+    const ux=Bp.x-A.x, uy=Bp.y-A.y, ang=Math.atan2(uy,ux);
+    const stp = tt => { if(tt<=FLY){ const k=Math.max(0,tt/FLY); return {x:A.x+ux*k, y:A.y+uy*k, z:4*H*k*(1-k)}; } return {x:Bp.x, y:Bp.y, z:0}; };
+    const P0=stp(t), sc=F/(F-P0.z), zn=P0.z/H, P={x:P0.x, y:P0.y-P0.z*TI};   // 斜镜头：高度主要表现为变大，另有 TI 的比例在屏幕上往上
+    const shw=R0*2.1*(1-0.3*Math.min(1,zn)); ctx.save(); ctx.globalAlpha=Math.max(0.15,0.8-0.5*zn); ctx.drawImage(shadowImg(), P0.x-shw/2, P0.y-shw*0.13+R0*0.4, shw, shw*0.26); ctx.restore();   // 影子留在地面原处
+    { const Lt=cs*BB.tl, tr=[{x:P.x,y:P.y,s:sc,f:0}]; let acc=0, prev=P0;   // 拖尾：按 3D 路程取固定长度再投影，粗细按各点高度
+      for(let tt=Math.min(t,FLY)-0.004; tt>=0 && acc<Lt; tt-=0.004){ const q=stp(tt), d=Math.hypot(q.x-prev.x,q.y-prev.y,q.z-prev.z); acc+=d; prev=q; tr.push({x:q.x, y:q.y-q.z*TI, s:F/(F-q.z), f:Math.min(1,acc/Lt)}); }
+      const fo=t>FLY? 1-(t-FLY)/MELT : 1, tb=xsImg(tcol(bt.el),PTRAIL,'t'), step=Math.max(1,Math.floor(tr.length/18));
+      ctx.save();
+      for(let i=0;i+step<tr.length;i+=step){ const p=tr[i], q=tr[i+step], f=(p.f+q.f)/2; if(Math.hypot(q.x-p.x,q.y-p.y)<0.5) continue;
+        ctx.globalAlpha=0.9*Math.pow(1-f,0.8)*fo; strip(tb, p, q, R0*1.8*p.s*Math.pow(1-f,0.9)); }
+      ctx.globalCompositeOperation='lighter'; const spw=softImg(hexOf(mixW(rgbOf(col),0.7)));
+      for(let j=0;j<8;j++){ const b0=Math.floor(t/0.035)*0.035-j*0.035, age=t-b0; if(b0<0||b0>FLY||age>0.3) continue;   // 路上掉的小星点
+        const q=stp(b0), hh=Math.sin(b0*91.7+bt.id0*13), vv=Math.cos(b0*57.3+bt.id0*7), a2=1-age/0.3, r=cs*0.035*(F/(F-q.z))*a2;
+        ctx.globalAlpha=0.85*a2*fo; ctx.drawImage(spw, q.x+hh*cs*0.12*age/0.3-r, q.y-q.z*TI+vv*cs*0.12*age/0.3+cs*0.1*age-r, r*2, r*2); }
+      ctx.restore(); }
+    const appear=t<0.12? Math.max(0,backOut(t/0.12)) : 1, J=Q*jel(t,0.22), m=t>FLY? Math.min(1,(t-FLY)/MELT) : 0, out=1-m;   // 弹出回弹过头；果冻晃；融化进度
+    const R=R0*sc*appear; if(out<=0.01 || R<=0.1) return;
+    const spin=t*BB.sp*2*Math.PI, so=softImg(col), d0=R*2*128/124, E=energyImgs(col);
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.55*out; ctx.drawImage(so, P.x-R*2.3, P.y-R*2.3, R*4.6, R*4.6); ctx.restore();   // 外晕
+    ctx.save(); ctx.translate(P.x, P.y+R*0.6*m); ctx.scale(1+0.6*m*Q, 1-0.85*m); ctx.rotate(ang); ctx.scale(1+J, 1-J*0.8); ctx.rotate(-ang);   // 拉伸 / 压扁 / 融化
+    ctx.globalAlpha=0.9*out; ctx.drawImage(E.body, -d0*0.62, -d0*0.62, d0*1.24, d0*1.24);
+    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.55*out; ctx.drawImage(E.body, -d0*0.5, -d0*0.5, d0, d0);
+    ctx.save(); ctx.rotate(spin); ctx.globalAlpha=0.9*out; ctx.drawImage(E.sw, -d0/2, -d0/2, d0, d0); ctx.restore();
+    ctx.save(); ctx.rotate(-spin*0.6); ctx.globalAlpha=0.5*out; ctx.drawImage(E.sw, -d0*0.4, -d0*0.4, d0*0.8, d0*0.8); ctx.restore();
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=0.8*out; ctx.drawImage(E.hi, -d0/2, -d0/2, d0, d0); ctx.restore();
   }
   function drawPulse(p){
     const k=Math.min(1,p.t/T.hop), A=ftOf(p.a), B=ftOf(p.b), cs=L.cs, e=k*k*(3-2*k);
@@ -167,97 +220,69 @@ const BONUS = (()=>{
     ctx.globalAlpha=0.9; soft(g, x, y, cs*0.45);
     ctx.restore();
   }
-  // 触手 / 链子：沿二次曲线取点，用胶囊小图逐段摆
-  // 77 版（用户 2026-11-15「去看守山门那个链子」）：抽下以后不再是白色粗绳，改成守山门的羁绊连线——
-  //   一根被链接方属性色的柔光带（宽淡辉光 / 主色 / 细亮芯，预先烘成一张贴图，每段只贴一次），
-  //   整条持续轻微波动：一道平缓的波从低稀有度传向高稀有度（竖着连 = 左右摆，横着连 = 上下摆），两端固定、收细；
-  //   画在宠物下面（和守山门一样从身体后面穿出来），光团从低稀有度流向高稀有度。
-  const N=20, NB=32, HB=0.33;   // HB：链子两端挂在身体正中（脚下往上 0.33 格）
-  const qb=(P0,C,P2,s)=>{ const a=1-s; return {x:a*a*P0.x+2*a*s*C.x+s*s*P2.x, y:a*a*P0.y+2*a*s*C.y+s*s*P2.y}; };
-  function geo(lk){
-    const cs=L.cs, B=bodyPos(lk.hi,HB), E=bodyPos(lk.lo,HB), dx=E.x-B.x, dy=E.y-B.y, D=Math.hypot(dx,dy)||1, ux=dx/D, uy=dy/D;
-    let nx=-uy, ny=ux; if(ny>0.05 || (Math.abs(ny)<=0.05 && nx>0)){ nx=-nx; ny=-ny; }   // 法线取朝上（朝画面里侧）那一边
-    const M={x:(B.x+E.x)/2, y:(B.y+E.y)/2};
-    const rise={P2:{x:B.x-ux*D*0.25+nx*cs*0.9, y:B.y-uy*D*0.25+ny*cs*0.9-cs*0.6}, C:{x:B.x+nx*cs*0.7, y:B.y+ny*cs*0.7-cs*0.3}};
-    const imp={P2:E, C:{x:M.x+nx*cs*0.5, y:M.y+ny*cs*0.5-cs*0.25}};
-    const rest={P2:E, C:M};   // 78 版：收成两只宠物正中之间的直线（用户：上下排列时没在人物中间）
-    const t=lk.t-T.up-T.strike, u=t<0?0:Math.min(1,t/T.settle), sp=1-Math.cos(u*Math.PI*2.5)*Math.exp(-5*u);
-    const C=t<0?imp.C:{x:imp.C.x+(rest.C.x-imp.C.x)*sp, y:imp.C.y+(rest.C.y-imp.C.y)*sp};
-    return {cs,B,E,nx,ny,D,rise,imp,C,wk:t<0?0:eOut(u)};
-  }
-  function drawLink(lk){   // 触手（扬起 → 甩下 → 弹性收回时淡出），在角色上面
-    const g=geo(lk), {cs,B,E,nx,ny,rise,imp}=g, t=lk.t, pts=[], wk=g.wk;
-    if(wk>=1){ drawAbsorb(lk, g, 1); return; }
-    if(t<T.up){ const e=eOut(t/T.up), wob=Math.sin(t*28)*cs*0.06*(1-e);
-      const P2={x:B.x+(rise.P2.x-B.x)*e+wob, y:B.y+(rise.P2.y-B.y)*e}, C={x:B.x+(rise.C.x-B.x)*e, y:B.y+(rise.C.y-B.y)*e};
-      for(let i=0;i<=N;i++) pts.push(qb(B,C,P2,i/N)); }
-    else if(t<T.up+T.strike){ const u=(t-T.up)/T.strike;
-      for(let i=0;i<=N;i++){ const s=i/N, ks=Math.max(0,Math.min(1,u*1.5-s*0.5)), q=ks*ks;   // 根部先动、梢后到：鞭梢甩出去
-        const p0=qb(B,rise.C,rise.P2,s), p1=qb(B,imp.C,imp.P2,s), r0=Math.hypot(p0.x-B.x,p0.y-B.y), r1=Math.hypot(p1.x-B.x,p1.y-B.y);
-        const a0=Math.atan2(p0.y-B.y,p0.x-B.x); let da=Math.atan2(p1.y-B.y,p1.x-B.x)-a0; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI;
-        const a=a0+da*q, r=r0+(r1-r0)*q; pts.push({x:B.x+Math.cos(a)*r, y:B.y+Math.sin(a)*r}); } }
-    else for(let i=0;i<=N;i++) pts.push(qb(B,g.C,E,i/N));
-    const wOf=s=>cs*(0.2-0.14*s)*(1-0.5*wk);
-    const OUT=capImg('#4a2a6e'), BODY=capImg('#b77cf0'), HI=capImg('#ecd9ff');   // 触手：紫色、深紫描边、浅色高光、粉色吸盘
-    const fa=1-wk;   // 收回时淡出，换成下面的光带
-    ctx.save(); ctx.globalAlpha=fa;
-    for(let i=0;i<N;i++) seg(OUT, pts[i], pts[i+1], wOf(i/N)+cs*0.03);
-    for(let i=0;i<N;i++) seg(BODY, pts[i], pts[i+1], wOf(i/N));
-    ctx.globalAlpha=0.8*fa;
-    for(let i=0;i<N-2;i++){ const w=wOf(i/N); seg(HI, {x:pts[i].x+nx*w*0.2, y:pts[i].y+ny*w*0.2}, {x:pts[i+1].x+nx*w*0.2, y:pts[i+1].y+ny*w*0.2}, w*0.3); }
-    const dot=dotImg('#ffd3ea'); for(let i=2;i<N-3;i+=3){ const w=wOf(i/N); ctx.drawImage(dot, pts[i].x-nx*w*0.25-w*0.17, pts[i].y-ny*w*0.25-w*0.17, w*0.34, w*0.34); }   // 吸盘
-    ctx.restore();
-    if(wk>0) drawAbsorb(lk, g, wk);
-  }
-  // ---------- 78 版：守山门式羁绊光带（用户 2026-11-15 11:44） ----------
-  // 用户：「没有守山门那种半透明渐变的感觉，一节一节的」「波动像蚯蚓」「能量没有实体，应该用特效做，不是找贴图」。
-  // 照守山门 drawLinkLine：一根细的半透明柔光线（宽淡辉光 / 主色 / 细亮芯，截面是平滑渐变），两端淡进身体；
-  // 轻微波动（振幅约 0.035 格，相位速度 1.4，约 1.1 个波长，两端固定、中轴两侧来回摆）；
-  // 能量 = 一段沿线流动的亮光（光带自己被点亮，前沿亮、后面拖一段渐暗）+ 前沿一颗程序生成的柔光点，
-  // 到达高稀有度时它身上的柔光鼓一下。全部是程序烘一次的渐变小图，不用素材贴图。
+  // ---------- 79 版：稀有度链子（演示页 drawLink 原样搬过来，参数 = 用户 13:20 定稿） ----------
+  // 伸出：从高稀有度身体正中朝对方伸出（0.3 秒碰到 → 啪），梢一直自由、跟着整条甩，约 1 秒平静下来才贴到对方身上；
+  // 力的传导：链子上每一点取发出端「早 0.32×位置」秒的状态，波从发出端传到末端，停也从发出端先停；
+  // 伸出 / 剧烈时整条加宽发光（圆形柔光点沿路径盖章）+ 末端光头；平静后是细柔光带 + 沿线流动的能量（低稀有度 → 高稀有度）。
+  // 所有渐变只烘一次成小图，每帧只做平移 / 缩放 / 旋转。
+  const NB=32, HB=0.33, TE=0.3, TC=1.0, DLY=0.32;   // HB：两端挂在身体正中（脚下往上 0.33 格）；TE：伸到对方用时；TC：剧烈 → 平静
+  const LK={cw:0.035, xw:1.0, gw:1.5, gb:0.14, hd:0.28, wa:0.19, ew:1.3, el:0.34};   // 实心宽 / 伸出时实心加粗 / 光晕宽 / 光晕亮度 / 末端光头 / 甩动幅度 / 能量宽（倍）/ 能量长（格）
   const XS=new Map(), SOFT=new Map();
   const rgbOf = c => { const n=parseInt(c.slice(1),16); return [n>>16,(n>>8)&255,n&255]; };
   const mixW = (c,k) => c.map(v=>Math.round(v+(255-v)*k));
-  function xsImg(color){ let c=XS.get(color); if(c) return c;   // 截面：纵向 64px 平滑渐变（近似高斯，17 个色标），横向 4px；每种颜色只烘一次（不读写像素）
+  const darkC = (c,k) => rgbOf(c).map(v=>Math.round(v*(1-k)));
+  const hexOf = a => '#'+a.map(v=>v.toString(16).padStart(2,'0')).join('');
+  const sm01 = x => x<=0?0:x>=1?1:x*x*(3-2*x);
+  const fade01 = s => Math.min(1, Math.min(s,1-s)/0.28);
+  const PBAND = d=>[0.45*Math.exp(-d*d*4), 0.85*Math.exp(-Math.pow(d/0.3,4)), 0.9*Math.exp(-Math.pow(d/0.09,2))];   // 链子截面：实心约占总宽 29%
+  const PEN = d=>[0, 0.95*Math.exp(-Math.pow(d/0.62,4)), 1*Math.exp(-Math.pow(d/0.3,2))];   // 能量截面：实心约占 62%
+  const PTRAIL = d=>[0.55*Math.exp(-d*d*3), 0.95*Math.exp(-Math.pow(d/0.5,4)), 0.9*Math.exp(-Math.pow(d/0.18,2))];   // 弹射拖尾截面
+  function xsImg(color, prof, key){ const kk=key+color; let c=XS.get(kk); if(c) return c;   // 截面：纵向 64px 平滑渐变（33 个色标），横向 4px
     c=document.createElement('canvas'); c.width=4; c.height=64; const g=c.getContext('2d'), C=rgbOf(color), Lt=mixW(C,0.6), gr=g.createLinearGradient(0,0,0,64);
-    for(let q=0;q<=16;q++){ const d=Math.abs(q/16*2-1), glow=0.32*Math.exp(-d*d*5), main=0.75*Math.exp(-d*d*38), core=0.95*Math.exp(-d*d*160);
-      const al=1-(1-glow)*(1-main)*(1-core), wC=core/(glow+main+core+1e-6), rgb=C.map((v,j)=>Math.round(v+(Lt[j]-v)*wC));
-      gr.addColorStop(q/16, `rgba(${rgb},${al.toFixed(3)})`); }
-    g.fillStyle=gr; g.fillRect(0,0,4,64); XS.set(color,c); return c; }
+    for(let q=0;q<=32;q++){ const d=Math.abs(q/32*2-1), [glow,main,core]=prof(d), al=1-(1-glow)*(1-main)*(1-core), wC=core/(glow+main+core+1e-6), rgb=C.map((v,j)=>Math.round(v+(Lt[j]-v)*wC));
+      gr.addColorStop(q/32, `rgba(${rgb},${al.toFixed(3)})`); }
+    g.fillStyle=gr; g.fillRect(0,0,4,64); XS.set(kk,c); return c; }
   function softImg(color){ let c=SOFT.get(color); if(c) return c;   // 柔光点：中心偏白 → 属性色 → 透明
     c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'), C=rgbOf(color), W=mixW(C,0.75), gr=g.createRadialGradient(32,32,0,32,32,32);
     gr.addColorStop(0,`rgba(${W},1)`); gr.addColorStop(0.22,`rgba(${W},0.85)`); gr.addColorStop(0.5,`rgba(${C},0.35)`); gr.addColorStop(1,`rgba(${C},0)`);
     g.fillStyle=gr; g.fillRect(0,0,64,64); SOFT.set(color,c); return c; }
-  function strip(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, 0, -w/2, len, w); ctx.restore(); }   // 首尾正好相接，不重叠（重叠处会叠出一节节的深色）
+  function strip(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, 0, -w/2, len, w); ctx.restore(); }   // 首尾正好相接，不重叠
   function soft(im, x, y, sz){ ctx.drawImage(im, x-sz/2, y-sz/2, sz, sz); }
-  function drawAbsorb(lk, g, k){   // 高稀有度身上：平时很淡的一团柔光，每颗能量到达时鼓一下
-    const im=softImg(ELC[lk.lo.def.el]), h=lk.gt==null?0:Math.exp(-(clock-lk.gt)*4);
-    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(0.14+0.42*h)*k; soft(im, g.B.x, g.B.y, g.cs*(0.5+0.22*h)); ctx.restore();
-  }
-  function drawBand(lk){   // drawAir 里，在角色上面（tata 格子挤，画在下面几乎全被挡住）
-    const g=geo(lk); if(g.wk<=0) return;
-    const {cs,B,E,C,D}=g, k=g.wk, col=ELC[lk.lo.def.el], im=xsImg(col), ax=[];
-    const A=cs*0.035*Math.min(1, D/cs), ph=clock*1.4+lk.id*1.7;
-    for(let i=0;i<=NB;i++){ const s=i/NB, p=qb(B,C,E,s), a=1-s;
-      let tx=2*a*(C.x-B.x)+2*s*(E.x-C.x), ty=2*a*(C.y-B.y)+2*s*(E.y-C.y); const tl=Math.hypot(tx,ty)||1;
-      const env=Math.sin(Math.PI*s), w=A*env*Math.sin(s*Math.PI*2.2+ph);   // 波从低稀有度（s=1）传向高稀有度（s=0），在中轴两侧来回摆
-      ax.push({x:p.x-ty/tl*w, y:p.y+tx/tl*w, s}); }
-    const fade = s => Math.min(1, Math.min(s, 1-s)/0.28);   // 两端淡进身体，不在脸上堆一团
-    // 能量：两段亮光沿线从低稀有度流向高稀有度（前沿亮、后面拖尾）
-    const per=0.5, P=[];
-    for(let j=0;j<2;j++){ const pos=1.12-((clock*per+lk.id*0.37+j*0.5)%1)*1.24; P.push(pos); }
-    const lit = s => { let v=0; for(const pos of P){ const d=s-pos; v+=Math.exp(-(d*d)/(d>0? 0.016 : 0.0016)); } return Math.min(1,v); };
-    const W=cs*0.17;
+  const calmAt = tau => tau<0?0:1-Math.pow(Math.min(1,tau/TC),2);   // 剧烈程度：1 → 0，越来越快地平静
+  const phAt = tau => { const u=Math.min(1,Math.max(0,tau)/TC); return 1.4*tau+16*TC*(1-Math.pow(1-u,3))/3; };   // 一开始摆得快，慢慢降到 1.4
+  function drawLink(lk){
+    const cs=L.cs, t=lk.t, col=ELC[lk.lo.def.el]||ELC.none, B=bodyPos(lk.hi,HB), E=bodyPos(lk.lo,HB), dx=E.x-B.x, dy=E.y-B.y, D=Math.hypot(dx,dy)||1, tx=dx/D, ty=dy/D;
+    const Lx=eOut(Math.min(1,t/TE)), bnd=sm01(Math.pow(Math.min(1,t/TC),1.3)), calm=calmAt(t), pts=[];   // Lx：伸出进度（先快后慢）；bnd：梢贴到对方的程度
+    for(let i=0;i<=NB;i++){ const s=i/NB, sl=s*Lx, tau=t-sl*DLY, c=calmAt(tau);
+      const env=(1-bnd)*Math.sin(Math.PI/2*s)+bnd*Math.sin(Math.PI*s);
+      const A=tau<0?0:cs*(0.035+LK.wa*c), ph=phAt(tau)+lk.id*1.7-sl*Math.PI*2.2*(1-c);   // 平静后保留约 1.1 个波长的轻微波动
+      const sw=tau<0?0:cs*LK.wa*0.84*c*Math.sin(tau*2*Math.PI*3.2);   // 整条甩动，也是从发出端传过去
+      const w=env*(A*Math.sin(ph)+sw);
+      pts.push({x:B.x+dx*sl-ty*w, y:B.y+dy*sl+tx*w, s, c}); }
+    const W=cs*LK.cw/0.29, band=xsImg(col,PBAND,'b'), so=softImg(col);
+    const fa = s => { const f0=Math.min(1,s/0.28), f1=Math.min(1,(1-s)/0.28); return Math.min(f0, 1-bnd*(1-f1)); };   // 伸出时梢是亮的，贴上后两端都淡进身体
     ctx.save();
-    for(let i=0;i<NB;i++){ const sm=(ax[i].s+ax[i+1].s)/2; ctx.globalAlpha=0.8*k*fade(sm); strip(im, ax[i], ax[i+1], W); }
+    for(let i=0;i<NB;i++){ const sm=(pts[i].s+pts[i+1].s)/2, e=Math.max((pts[i].c+pts[i+1].c)/2, t<TE?1:0); ctx.globalAlpha=0.9*fa(sm); strip(band, pts[i], pts[i+1], W*(1+(LK.xw-1)*e)); }
     ctx.globalCompositeOperation='lighter';
-    for(let i=0;i<NB;i++){ const sm=(ax[i].s+ax[i+1].s)/2, v=lit(sm)*fade(sm); if(v<0.03) continue; ctx.globalAlpha=0.7*k*v; strip(im, ax[i], ax[i+1], W*(1+0.5*v)); }   // 光带被能量点亮的那一段
-    const sp=softImg(col);
-    for(const pos of P){ if(pos<0 || pos>1) continue; const f=pos*NB, i0=Math.min(NB-1,f|0), fr=f-i0, x=ax[i0].x+(ax[i0+1].x-ax[i0].x)*fr, y=ax[i0].y+(ax[i0+1].y-ax[i0].y)*fr;
-      ctx.globalAlpha=0.75*k*fade(pos); soft(sp, x, y, cs*0.26); }   // 前沿的柔光点
+    for(let i=0;i<NB;i++){ const p=pts[i], q=pts[i+1], e=Math.max((p.c+q.c)/2, t<TE?1:0); if(e<0.03) continue; const sm=(p.s+q.s)/2;   // 剧烈时的宽光晕：圆形柔光点沿路径密集盖章（分段宽条急弯处会散成尖刺）
+      const sz=W*(1+(LK.gw-1)*e)*(1+(LK.xw-1)*e), sg=Math.hypot(q.x-p.x,q.y-p.y), n=Math.max(1,Math.ceil(sg/(sz*0.25)));
+      ctx.globalAlpha=LK.gb*e*Math.min(1,sm/0.15+0.2);
+      for(let j=0;j<n;j++){ const f=j/n; ctx.drawImage(so, p.x+(q.x-p.x)*f-sz/2, p.y+(q.y-p.y)*f-sz/2, sz, sz); } }
+    { const tip=pts[NB], e=Math.max(calm,1-bnd), hs=cs*LK.hd/2*(0.45+0.55*e);   // 末端光头
+      if(e>0.03 && hs>0.5){ ctx.globalAlpha=0.9*e; soft(so, tip.x, tip.y, hs*2); ctx.globalAlpha=0.7*e; soft(softImg('#ffffff'), tip.x, tip.y, hs*0.9); } }
+    const on=sm01((t-TC*0.8)/0.4);   // 能量：平静下来后才开始流
+    if(on>0){
+      const en=xsImg(col,PEN,'e'), EW=cs*LK.cw*LK.ew/0.62, len=LK.el/(D/cs), ef=s=>Math.pow(fade01(s),1.6);   // 能量靠近两端身体比链子淡得快
+      const P=[0,1].map(j=>1.12-((clock*0.5+lk.id*0.37+j*0.5)%1)*1.24);
+      for(const pos of P){
+        for(let i=0;i<NB;i++){ const sm=(pts[i].s+pts[i+1].s)/2, d=sm-pos; if(d<-0.02||d>len) continue;
+          const v=(d<0? Math.max(0,1+d/0.02) : Math.pow(1-d/len,1.6))*ef(sm)*on; if(v<0.02) continue; ctx.globalAlpha=0.95*v; strip(en, pts[i], pts[i+1], EW*(0.75+0.25*v)); }
+        if(pos>0 && pos<1){ const f=pos*NB, i0=Math.min(NB-1,f|0), fr=f-i0, x=pts[i0].x+(pts[i0+1].x-pts[i0].x)*fr, y=pts[i0].y+(pts[i0+1].y-pts[i0].y)*fr, hs=cs*LK.cw*LK.ew*1.15;
+          ctx.globalAlpha=0.9*ef(pos)*on; soft(so, x, y, hs*2); } }
+      if(P.some(p=>p<0.02&&p>-0.08) && !(lk.gt!=null && clock-lk.gt<0.3)) lk.gt=clock;   // 到达：高稀有度身上轻轻亮一下
+      const h=lk.gt==null?0:Math.exp(-(clock-lk.gt)*4);
+      ctx.globalAlpha=(0.12+0.36*h)*on; soft(so, B.x, B.y, cs*(0.4+0.1*h)); }
     ctx.restore();
-    // 到达：高稀有度身上的柔光鼓一下
-    if(P.some(pos=>pos<0.02 && pos>-0.08) && !(lk.gt!=null && clock-lk.gt<0.3)) lk.gt=clock;
   }
 
   HOOKS.push((type, d)=>{
