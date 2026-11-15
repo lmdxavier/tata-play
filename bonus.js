@@ -57,7 +57,7 @@ const BONUS = (()=>{
         at(t, ()=>launch(n,P)); t+=T.fly+T.gap;
         if(grp && grp.members.includes(n)){
           const t0=t, d=chain(P, n, grp, t0, done);
-          if(d>0){ if(!chainSound){ chainSound=true; at(t0, ()=>snd('三连-传导', ftOf(P))); } t+=d; }
+          if(d>0) t+=d;   // 83 版：不再整段只响一下，改成 light() 里每点亮一只响一下
         }
       }
       if(linkable(P,n)){
@@ -82,7 +82,7 @@ const BONUS = (()=>{
     s.hit=clock; bt.Bp=B;   // 79 版：加成条白闪、鼓起再弹两下、迸火花（drawLabel / drawHit）
     if(clock-landLast<0.7) landRun=Math.min(landRun+1, 7); else landRun=0; landLast=clock;
     snd('加成-落下', B, {rate:Math.pow(2, landRun*2/12), fixed:true});   // 81 版：SFX_Object_Place_Shiny_2，只按次数升调、不再随机抖   // 80 版：连续落下每次升一个全音（最多 7 级）
-    burst(B.x, B.y, bcol(b.def.el), 0.35+0.05*landRun); freezeV(visOf(b,true), 0.05);
+    // 83 版：用户「弹射落下的效果恢复成最开始的花火样子」→ 去掉 80 版加的爆光和顿帧，只留 79 版的白闪 + 12 颗火花（drawHit）
   }
   // 从新宠物 P 经邻居 n 往外依次点亮（不回头经过 P）；返回这一段用的时间
   function chain(P, n, grp, t0, done){
@@ -90,13 +90,15 @@ const BONUS = (()=>{
     for(let i=0;i<order.length;i++){ const [a]=order[i];
       for(const o of nbrs(a)) if(!seen.has(o) && grp.members.includes(o)){ seen.add(o); depth.set(o, depth.get(a)+1); order.push([o,a]); } }
     let maxD=0;
-    if(!done.has(P)){ done.add(P); st(P).wait++; at(t0, ()=>light(P)); }
+    if(!done.has(P)){ done.add(P); st(P).wait++; at(t0, ()=>light(P, 0)); }
     for(const [m,from] of order){ if(done.has(m)) continue; done.add(m); const d=depth.get(m); maxD=Math.max(maxD,d); st(m).wait++;
       at(t0+(d-1)*T.hop, ()=>{ if(alive(m)&&alive(from)) pulses.push({a:from, b:m, el:m.def.el, t:0}); });
-      at(t0+d*T.hop, ()=>light(m)); }
+      at(t0+d*T.hop, ()=>light(m, d)); }
     return maxD ? maxD*T.hop+T.hold : 0;
   }
-  function light(m){ const s=st(m); s.wait=Math.max(0,s.wait-1); if(!alive(m)) return; s.lit=true; s.glow=1;
+  // 83 版（用户 2026-11-15）：3 连沿连线每点亮一只「叮」一下（SFX_Object_Place_Shiny_2），和点亮同一帧；第 n 只升 n 个半音、音量每只 +6%（最多 +40%）
+  function light(m, n){ const s=st(m); s.wait=Math.max(0,s.wait-1); if(!alive(m)) return; s.lit=true; s.glow=1; n=n||0;
+    snd('三连-传导', ftOf(m), {rate:Math.pow(2, Math.min(n,12)/12), vol:Math.min(1.4, 1+0.06*n), fixed:true});
     const f=ftOf(m); flashAt(f.x, f.y-L.cs*0.05, 1.1, 0.2, undefined, ELC[m.def.el]); sparks(f.x, f.y-L.cs*0.1, 12, {x:0,y:-1}, 1.6, 3.6, ELC[m.def.el], 0.45);   // 80 版：火花 5 → 12
     const bp=bodyPos(m,HB); burst(bp.x, bp.y, ELC[m.def.el], 0.6);
     const v=visOf(m,true); v.pop=0.25; }
