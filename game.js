@@ -259,7 +259,7 @@ function newGame(){
     groups: [], links: [],
     fire3Seen: false,
     kills: 0,
-    shards: {}, pity: {},
+    shards: {}, pity: {}, loot: {gold:0, star:0},   // 88 版：打怪掉落的金币 / 星星（胜利时并进结算）
     stats: {placed:0, moved:0},
     started: false,
     tut: (DATA.level.demo || (DATA.level.tut && DATA.level.first)) ? {steps:(DATA.level.demo||DATA.level.tut).map(s=>({...s})), i:0, cur:null, t:0, gap:0} : null,
@@ -388,6 +388,7 @@ function hitEnemy(e, dmg, el, opts){
   if(opts && opts.slow){ e.slow = Math.max(e.slow||0, opts.slow); }
   if(e.hp<=0) killEnemy(e);
 }
+const LOOT_P = {gold:0.15, star:0.03, goldV:10};   // 88 版：每只怪死亡时的掉落概率；一枚金币 = 10 金币
 function killEnemy(e, silent){
   if(e.dead) return; e.dead=true; G.kills++; if(e.def.boss) G.bossWarn=null; emit('death',{e,silent});
   G.fx.push({kind:'pop',lane:e.lane,p:e.p,t:0,life:0.4,color:EL[e.def.el].color});
@@ -396,6 +397,8 @@ function killEnemy(e, silent){
     const n = G.enemies.filter(o=>!o.dead&&Math.abs(o.lane-e.lane)<=1&&Math.abs(o.p-e.p)<1.2)[0];
     if(n) n.burn={dps:e.burn.dps,t:3};
   }
+  if(!silent && !G.demo){ const r=Math.random(), kind = r<LOOT_P.star ? 'star' : r<LOOT_P.star+LOOT_P.gold ? 'gold' : null;   // 88 版（用户 2026-11-15）：金币 15%、星星 3%
+    if(kind){ const v = kind==='gold' ? LOOT_P.goldV : 1; G.loot[kind]+=v; emit('loot',{e, kind, v}); } }
   if(silent || !e.def.drop || !DATA.pets[e.key]) return;   // 65 版：只有能收服成宠物的怪才掉碎片
   // 碎片掉落：看本关角色（drop），带保底 N = 2/p
   const k=e.key, p=e.def.drop, N=Math.round(2/p);
@@ -647,7 +650,7 @@ function finish(){
   if(rw && rw.shard) G.shards[rw.shard[0]]=(G.shards[rw.shard[0]]||0)+rw.shard[1];
   const chest=!!(rw && rw.chest);   // 74 版（用户 2026-11-14）：章节终关宝箱不再直接并进结算金币，回地图点「终关奖励」自己打开领取（map.js）
   if(rw && rw.unlock && !PROFILE.unlock[rw.unlock]){ PROFILE.unlock[rw.unlock]=1; profileSave(); unlock=rw.unlock; }
-  G.over={win:true, stars, exp, coins, starGain:0, chest, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
+  G.over={win:true, stars, exp, coins: coins+(G.loot.gold||0), starGain:(G.loot.star||0), chest, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
 }
 
 // ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------

@@ -563,6 +563,9 @@ HOOKS.push((type, d)=>{
       if(d.broken){ vfxXY('puff',s.x,y,1.1); sparks(s.x,y,9,{x:0,y:-1},4,4.5,'#d89a55',0.4); sfx('crateBreak'); shakeDir(0.03,0.15); }
       else { flashAt(s.x,y,0.6,0.08); sparks(s.x,y,3,{x:0,y:-1},2.5,3,'#d89a55',0.25); sfx('crate'); } break; }
     case 'collect': { const o=d.o, s=orbVisual(o); flyers.push({from:{x:s.x,y:s.y}, t:-0.08, life:0.5, to:'energy', value:o.value, side:Math.random()<0.5?-1:1}); PENDING.energy+=o.value; COMBO.play('能量-收取', {x:s.x, y:s.y}); break; }
+    case 'loot': { const p=hitPoint(d.e), f=feet(d.e.lane, d.e.p), cs=L.cs;   // 88 版：掉落从怪身上弹出 → 落地小弹 → 停一下 → 飞进上方计数
+      LOOT.items.push({kind:d.kind, v:d.v, x0:p.x, y0:p.y, gx:f.x+(Math.random()-0.5)*cs*0.6, gy:f.y-cs*0.08, t:0, side:Math.random()<0.5?-1:1});
+      LOOT.shown[d.kind]=1; if(d.kind==='star') COMBO.play('掉落-星星', {x:p.x, y:p.y}, {noFx:true}); break; }
     case 'shard': { const p=hitPoint(d.e); COMBO.play('碎片-获得', {x:p.x, y:p.y}); flyers.push({from:p, t:-0.25, life:0.7, to:'shard', key:d.e.key}); LASTSHARD=d.e.key; break; }
     case 'produce': { petPlay(d.pet,'Busking','Idle'); const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('能量-产出', {x:f.x, y:f.y-L.cs*0.45}); break; }
     case 'sky': SKYLAND.push(...G.orbs.filter(o=>o.fall>0)); break;
@@ -979,7 +982,41 @@ function drawOrbs(){
 }
 const PENDING = { energy:0 };   // 已经收了、还在飞的能量：飞到了才加到显示的数字上
 const DISP = { energy:null };
-function flyTarget(kind){ const it=L.items.find(i=>i.id==='energy'); if(kind==='energy') return {x:it.x+it.h*0.5, y:it.y+it.h/2}; return {x:L.shardPos.x-30, y:L.shardPos.y}; }
+function flyTarget(kind){ const it=L.items.find(i=>i.id==='energy'); if(kind==='energy') return {x:it.x+it.h*0.5, y:it.y+it.h/2}; const s=lootRow().shard; return {x:s.ix, y:s.y}; }
+// ---------- 88 版：打怪掉落（金币 15% / 星星 3%，用户 2026-11-15：克制一点）----------
+// 上方一排计数：碎片 / 金币 / 星星，有了才出现；新的一格出现时整排平滑移到居中，不跳
+const LOOT = {g:null, items:[], shown:{gold:0, star:0}, disp:{gold:0, star:0}, bump:{gold:0, star:0}, rx:{}};
+const LOOT_W = {shard:68, gold:66, star:52};
+function lootReset(){ if(LOOT.g===G) return; LOOT.g=G; LOOT.items.length=0; LOOT.shown={gold:0, star:0}; LOOT.disp={gold:0, star:0}; LOOT.bump={gold:0, star:0}; LOOT.rx={}; }
+function lootRow(){ lootReset(); const base=L.shardPos||{x:W/2, y:86+SAFE.t}, gap=6;
+  const ks=[]; if(Object.values(G.shards).some(n=>n>0) || flyers.some(f=>f.to==='shard')) ks.push('shard'); if(LOOT.shown.gold) ks.push('gold'); if(LOOT.shown.star) ks.push('star');
+  const tw=ks.reduce((a,k)=>a+LOOT_W[k],0)+gap*Math.max(0,ks.length-1); let x=base.x-tw/2; const row={};
+  let lo=4, hi=W-4; for(const r of [L.swapBox, ...L.items.filter(i=>i.id==='energy'||i.id==='pause'||i.id==='speed')]){ if(!r || r.y>base.y+13 || r.y+r.h<base.y-13) continue;   // 不和同一高度的换位框、暂停 / 加速键重叠
+    if(r.x+r.w/2<base.x) lo=Math.max(lo, r.x+r.w+8); else hi=Math.min(hi, r.x-8); }
+  x=Math.max(lo, Math.min(x, hi-tw));
+  for(const k of ks){ const w=LOOT_W[k], cx=(LOOT.rx[k]==null ? x : LOOT.rx[k]); row[k]={x:cx, w, y:base.y, ix:cx+(k==='shard'?12:15), tx:cx+w/2+10, goal:x}; x+=w+gap; }
+  if(!row.shard) row.shard={x:base.x-34, w:68, y:base.y, ix:base.x-22, tx:base.x+10};   // 第一块碎片飞来时的落点
+  return row; }
+function lootIcon(kind){ return kind==='gold' ? coinIcon() : icon('Star_Altar_05_Star'); }
+function drawLoot(dt){ lootReset(); if(!LOOT.items.length) return; const cs=L.cs, row=lootRow();
+  const T1=0.42, T2=0.6, T3=0.85, T4=1.4;   // 弹出落地 / 落地小弹 / 停一下 / 飞向计数
+  for(const it of LOOT.items){ it.t+=dt; const t=it.t, st=it.kind==='star', S=cs*(st?0.4:0.32);
+    let x, y, s=S, h=0, sq=1;
+    if(t<T1){ const k=t/T1; x=it.x0+(it.gx-it.x0)*k; const gy=it.y0+(it.gy-it.y0)*k; h=Math.sin(Math.PI*k)*cs*0.55; y=gy-h; s=S*(0.55+0.45*Math.min(1,k*2.2)); }
+    else if(t<T3){ const k=Math.min(1,(t-T1)/(T2-T1)); h=t<T2 ? Math.sin(Math.PI*k)*cs*0.12 : 0; x=it.gx; y=it.gy-h; if(t<T1+0.07) sq=1-0.22*Math.sin(Math.PI*(t-T1)/0.07); }
+    else { const tgt=row[it.kind]||{ix:W/2, y:86}, k=Math.min(1,(t-T3)/(T4-T3)), e=ease.inQuad(k), bend=Math.sin(k*Math.PI)*cs*0.9;
+      x=it.gx+(tgt.ix-it.gx)*e + it.side*bend*0.5; y=it.gy+(tgt.y-it.gy)*e - bend*0.4; s=S+(22-S)*k;
+      if(k>=1){ it.done=true; LOOT.disp[it.kind]+=it.v; LOOT.bump[it.kind]=0.25; if(it.kind==='gold') COMBO.play('掉落-金币', {x:tgt.ix, y:tgt.y}, {noFx:true}); continue; } }
+    if(t<T3){ const sh=Math.max(0.35, 1-h/(cs*0.8)); ctx.save(); ctx.globalAlpha=0.28*sh; ctx.fillStyle='#1b1420'; ctx.beginPath(); ctx.ellipse(x, it.gy+S*0.36, S*0.36*sh, S*0.12*sh, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); }   // 影子留在地上：不飘
+    if(st){ const pu=0.8+0.2*Math.sin(t*9), r=s*1.05*pu; ctx.save(); ctx.globalCompositeOperation='lighter'; const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,'rgba(255,236,150,0.55)'); g.addColorStop(0.45,'rgba(255,200,90,0.22)'); g.addColorStop(1,'rgba(255,190,80,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore(); }   // 星星：程序柔光（规则：能量 / 光用柔光，不贴图）
+    const im=lootIcon(it.kind); if(im && im.width){ ctx.save(); ctx.translate(x,y); if(st) ctx.rotate(Math.sin(t*5)*0.12); ctx.scale(1/sq, sq); drawImgC(im, 0, 0, s); ctx.restore(); } }
+  for(let i=LOOT.items.length-1;i>=0;i--) if(LOOT.items[i].done) LOOT.items.splice(i,1);
+}
+function drawLootRow(){ const row=lootRow();
+  for(const k in row){ const r=row[k]; if(r.goal==null) continue; LOOT.rx[k] = LOOT.rx[k]==null ? r.goal : LOOT.rx[k]+(r.goal-LOOT.rx[k])*0.2; if(Math.abs(r.goal-LOOT.rx[k])<0.3) LOOT.rx[k]=r.goal; }   // 新的一格出现时整排滑到居中
+  for(const k of ['gold','star']){ const r=row[k]; if(!r) continue; const fly=LOOT.items.some(it=>it.kind===k && it.t>0.85); if(!LOOT.disp[k] && !fly) continue;   // 第一个飞来时才出现，不先摆个 0
+    if(!LOOT.disp[k]){ ctx.save(); ctx.globalAlpha=0.6; pill(r.x, r.y-11, r.w, 22); ctx.restore(); continue; } LOOT.bump[k]=Math.max(0,LOOT.bump[k]-1/60); pill(r.x, r.y-11, r.w, 22);
+    drawImgC(lootIcon(k), r.ix, r.y, (k==='gold'?22:22)*(1+LOOT.bump[k])); text(String(LOOT.disp[k]), r.tx, r.y, 13, '#fff'); } }
 function drawFlyers(dt){
   for(const f of flyers){ f.t+=dt; const to=flyTarget(f.to);
     if(f.t<0){ if(f.to==='energy'){ const pre=1+0.35*Math.sin((f.t/0.08+1)*Math.PI); drawImgC(energyIcon(), f.from.x, f.from.y, L.cs*0.54*pre); } continue; }   // 点中：先鼓一下
@@ -1150,7 +1187,8 @@ function drawUI2(){
       drawImgC(gui(last?'UI_Etc/ResourceBar_Single_Icon_Monster':(on?'Slider/Slider_StageHorizontal_Icon_s_Yellow':'Slider/Slider_StageHorizontal_Icon_s_White1')), x, wb.y+7, last?24:14, on?1:0.8); });
   }
   const total=Object.values(G.shards).reduce((a,b)=>a+b,0);
-  if(total>0){ pill(L.shardPos.x-34, L.shardPos.y-11, 68, 22); BUMP.shard=Math.max(0,BUMP.shard-1/60); shardIcon(LASTSHARD||Object.keys(G.shards)[0], L.shardPos.x-22, L.shardPos.y, 24*(1+BUMP.shard)); text(total, L.shardPos.x+10, L.shardPos.y, 13, '#fff'); }
+  if(total>0){ const r=lootRow().shard; pill(r.x, r.y-11, r.w, 22); BUMP.shard=Math.max(0,BUMP.shard-1/60); shardIcon(LASTSHARD||Object.keys(G.shards)[0], r.ix, r.y, 24*(1+BUMP.shard)); text(total, r.tx, r.y, 13, '#fff'); }
+  drawLootRow();   // 88 版
 }
 const ACT = { red:['#ffb0a8','#ff3b4e','#5a0a1c'], gold:['#fff6a8','#ffb21e','#5a2a00'], gray:['#ffffff','#a3abbd','#262b3a'] };
 function actionText(s, cx, cy, size, pal, scale){
@@ -1393,7 +1431,7 @@ function draw(){
   if(G.over && RSNAP.cv && RSNAP.over===G.over && RSNAP.key===rsnapKey()){
     ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(RSNAP.cv,0,0); ctx.restore();
     ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
-    COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawFlyers(dt);
+    COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawFlyers(dt); drawLoot(dt);
     drawResult2(); drawTooltip();
     ctx.restore(); return;
   }
@@ -1422,7 +1460,7 @@ function draw(){
   drawNight(dt);
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();
   if(G.started && !G.over) watchEvents();
-  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt); EVO.drawOverlay(dt);   // 87 版：进化演出画在最上面；拖着的宠物画在卖出区上面，不被挡住
+  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt); drawLoot(dt); EVO.drawOverlay(dt);   // 87 版：进化演出画在最上面；拖着的宠物画在卖出区上面，不被挡住
   const bn=[...G.fx.filter(f=>f.kind==='banner'), ...EVENTS.filter(ev=>G.t>=ev.t&&G.t<ev.until&&ev.text).map(ev=>({text:ev.text,big:ev.kind==='banner'}))];
   /* 65 版：教学提示出现时，同一位置的预告文字先不画，免得叠在一起 */
   if(!G.over && !G.paused && !tutCur()) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
@@ -1441,7 +1479,7 @@ function draw(){
     for(const s of soundButtons()){ const on=!SND[s.key], f=ab(s, '', on?'#749965':'#cfc8bc', on?'#587a4c':'#b9aea8');
       drawImgC(gui(s.icon), f.x+21, f.y+f.h/2, 22, on?1:0.5); text(s.cn+(on?' 开':' 关'), f.x+f.w/2+12, f.y+f.h/2+1, 15, on?'#fff':'#8d8485', 'center', 800, on?'#587a4c':false); }
     for(const s of optButtons()){ const f=ab(s, '', '#685d5b', '#4f4548'); text(optLabel(s.key), f.x+f.w/2, f.y+f.h/2+1, 15, '#fff', 'center', 800, '#4f4548'); } }
-  if(G.over && RSNAP.on && (G.overT||0)>1.6 && shake.t<=0 && ((G.overT||0)>4 || !(flyers.length||corpses.length||VFX.length||PARTS.length||FLASH.length||DMG.length||MONFX.length||COMBO._LIVE.length))){
+  if(G.over && RSNAP.on && (G.overT||0)>1.6 && shake.t<=0 && ((G.overT||0)>4 || !(flyers.length||LOOT.items.length||corpses.length||VFX.length||PARTS.length||FLASH.length||DMG.length||MONFX.length||COMBO._LIVE.length))){
     if(!RSNAP.cv) RSNAP.cv=document.createElement('canvas'); const c=RSNAP.cv; if(c.width!==cv.width||c.height!==cv.height){ c.width=cv.width; c.height=cv.height; }
     const g=c.getContext('2d'); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation='copy'; g.drawImage(cv,0,0); g.globalCompositeOperation='source-over';
     RSNAP.over=G.over; RSNAP.key=rsnapKey();
