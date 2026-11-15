@@ -128,6 +128,7 @@ const COMBO = (()=>{
     const rates=s['播放速度']&&s['播放速度'].length?s['播放速度']:[1];
     let rate=rates[st.ri++ % rates.length];
     if(c['类']!=='界面') rate*=1+(Math.random()*2-1)*(rates.length>1?0.01:0.03);   // 8 版：每个角色固定一个声音，只做 ±3% 轻微变调（旧组合的速度表轮换时只再抖 ±1%）
+    if(opt.rate) rate*=opt.rate;   // 80 版：连续落下的加成音逐个升调
     let db=vr['音量dB'];
     const lt=s['档']||c['强度'];   // 只有 T 档的音效层跟着改档（界面、拾取层不动）
     if(opt.tier && /^T\d$/.test(lt) && TARGET_DB[opt.tier]!=null && TARGET_DB[lt]!=null) db+=TARGET_DB[opt.tier]-TARGET_DB[lt];
@@ -147,7 +148,7 @@ const COMBO = (()=>{
 
   // ---------- 对外 ----------
   // at: {x,y} 事件位置；gx,gy 地面点；target2 第二个位置；dir 前进方向；screen 画在界面层
-  // opt: {freeze:[可视对象...] 局部顿帧对象, tier 改档（如精英死亡 T2→T4）, scale, vol, silent, noFx}
+  // opt: {freeze:[可视对象...] 局部顿帧对象, tier 改档（如精英死亡 T2→T4）, scale, vol, rate 音高倍数（80 版）, silent, noFx}
   function play(name, at, opt){
     opt=opt||{}; const c=BY[name]; if(!c){ console.warn('没有这个组合', name); return; }
     if(!opt.noFx && at) spawnLayers(c, at, opt);

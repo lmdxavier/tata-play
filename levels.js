@@ -129,6 +129,21 @@
              {t:134, kind:'banner', text:'格鲁姆从中路过来', until:140} ],
     reward:{chest:{coin:500, star:10}} };   // 73 版：1-8、1-9 做完，一起开放
 
+  // 80 版（用户 2026-11-15「一大波数量太少、横幅太长、等半天看不到」）：横幅只留 2 秒，横幅一消失怪就开始涌进来；
+  // 最后一波原有的怪整体提前到横幅结束、间隔压到 0.7 倍；另加原数量 0.8 倍的小怪（有绿莱姆用绿莱姆，没有用本关最常见的怪），每 0.45 秒一只、各路轮流。合计约 1.8 倍。
+  for(const lv of Object.values(L)){ const ev=(lv.events||[]).find(e=>e.kind==='banner'); if(!ev || !lv.spawns) continue;
+    const t0=ev.t, go=t0+2; ev.until=go;
+    const fin=lv.spawns.filter(s=>s[0]>=t0); if(!fin.length) continue;
+    const f0=Math.min(...fin.map(s=>s[0])), cnt={};
+    for(const s of lv.spawns) cnt[s[1]]=(cnt[s[1]]||0)+1;
+    const weak = cnt.slime ? 'slime' : Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0], lanes=lv.lanes, ord=[2,0,4,1,3].filter(l=>lanes.includes(l)), n=Math.round(fin.length*0.8);
+    const rest=lv.spawns.filter(s=>s[0]<t0), moved=fin.map(([t,ty,ln])=>[go+(t-f0)*0.7, ty, ln]), extra=[];
+    for(let i=0;i<n;i++) extra.push([go+0.2+i*0.45, weak, ord[i%ord.length]]);
+    lv.spawns=[...rest, ...moved, ...extra].sort((a,b)=>a[0]-b[0]);
+    const last=lv.spawns[lv.spawns.length-1][0]; if(lv.duration<last+6) lv.duration=Math.ceil(last+6);
+    if(lv.marks && lv.marks.length && lv.marks[lv.marks.length-1]>=t0) lv.marks[lv.marks.length-1]=go; }   // 进度条「第 4/4 波」在横幅结束时就跳
+
+
   window.LEVELS = L;
   window.UNLOCK_CN = { swap:{name:'战斗中换位', desc:'拖动场上的宠物换格子。有 2 次，用掉后每 20 秒恢复 1 次'}, swap3:{name:'换位次数 +1', desc:'换位次数上限从 2 次变成 3 次'} };
 })();

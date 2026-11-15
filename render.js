@@ -436,6 +436,7 @@ function audioPump(){
   catch(e){ console.warn('音效', k, e.message); }
 }
 function sfx(k, vol, tries){
+  if(k==='ui' && !tries && window.HAPTIC) HAPTIC.tap();   // 80 版：点按钮时手机「哒」一下
   const cn = SFX_COMBO[k];
   if(cn){   // 组合音效：开场那一下点击时音频还在解码，等解码好再补放（最多等 1 秒）
     if(!SND.ac || SND.muted) return;

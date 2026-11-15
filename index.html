@@ -26,7 +26,7 @@
   html.ios-sa canvas{position:absolute}
 </style>
 <script>/* 61 版起：版本自检——网页被手机缓存住时自动换成最新的（build.txt 不走缓存）；双击打开不检查 */
-window.__BUILD='79';
+window.__BUILD='80';
 if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{ t=t.trim(); if(!t||t===window.__BUILD) return;
   const q=new URLSearchParams(location.search); if(q.get('b')===t) return; q.set('b',t); location.replace(location.pathname+'?'+q.toString()); }).catch(()=>{});
 </script>
@@ -41,11 +41,21 @@ if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store
 <body>
 <canvas id="c"></canvas>
 <!-- 素材数据（全部用 script 加载，双击 file:// 打开也能用） -->
+<script>/* 80 版：手机体感震动（用户 2026-11-15：只做统一的点击震动，不单独做安卓）。
+   iPhone（iOS 17.4+ Safari）没有网页震动接口，借用系统开关控件 <input type="checkbox" switch> 被点击时自带的触感「哒」；
+   只在玩家手指操作的那一刻有效（放宠物、换位、点按钮），自动发生的事件触发不了。其他手机 / 电脑上这个控件没有触感，等于什么都不做。 */
+window.HAPTIC=(()=>{ let lab=null, last=0;
+  function el(){ if(lab) return lab; lab=document.createElement('label'); lab.setAttribute('aria-hidden','true');
+    lab.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;';
+    const i=document.createElement('input'); i.type='checkbox'; i.setAttribute('switch',''); i.tabIndex=-1; lab.appendChild(i); document.body.appendChild(lab); return lab; }
+  function tap(){ const t=performance.now(); if(t-last<80) return; last=t; try{ el().click(); }catch(e){} }
+  return {tap};
+})();</script>
 <script src="assets/vendor/net-retry.js"></script>   <!-- 54 版：图片失败自动重试 -->
 <script src="assets/vendor/filepack.js"></script>   <!-- 57 版：双击打开（file://）时图片走数据包，WebGL 才能用 -->
 <!-- 57 版：PixiJS 8（WebGL）绘制整个游戏；pixi-ctx.js 把原来的 Canvas 2D 绘制调用转成 Pixi 显示对象。网址加 ?gl=0 回到 Canvas 2D 对比，?perf=1 性能面板 -->
 <script src="assets/vendor/pixi.min.js"></script>
-<script src="assets/vendor/pixi-ctx.js?v=79"></script>
+<script src="assets/vendor/pixi-ctx.js?v=80"></script>
 <script src="assets/vendor/perf-hud.js"></script>
 <script src="assets/vendor/spine-canvas.min.js"></script>
 <script src="assets/vendor/spine-seamfix.js"></script>
@@ -65,25 +75,25 @@ if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store
 <script>window.SFX2V2 = window.SFX2;   // rhythm 项目的扩展音效类型注册在 SFX2V2 上</script>
 <script src="assets/sfx/sfx2_ext.js"></script>
 <!-- 效果组合（tools/build_combos.py 从 素材库\效果组合 打包）-->
-<script src="assets/combos/combos.js?v=79"></script>
-<script src="assets/combos/crops.js?v=79"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
+<script src="assets/combos/combos.js?v=80"></script>
+<script src="assets/combos/crops.js?v=80"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
 <!-- 55 版：音效数据 assets/combos/audio.js、音乐 assets/bgm/bgm.js 改为进游戏后后台加载（render.js loadLater），不再挡住开场 -->
 <!-- 逻辑层（同灰盒 1）+ 画面层 -->
-<script src="game.js?v=79"></script>
-<script src="levels.js?v=79"></script>
+<script src="game.js?v=80"></script>
+<script src="levels.js?v=80"></script>
 <script src="assets/env1/env1.js"></script>
-<script src="scene.js?v=79"></script>
-<script src="combo.js?v=79"></script>
-<script src="render.js?v=79"></script>
-<script src="bonus.js?v=79"></script>   <!-- 75 版：相邻加成弹射 / 3 连依次点亮 / 稀有度触手链接 -->
+<script src="scene.js?v=80"></script>
+<script src="combo.js?v=80"></script>
+<script src="render.js?v=80"></script>
+<script src="bonus.js?v=80"></script>   <!-- 75 版：相邻加成弹射 / 3 连依次点亮 / 稀有度触手链接 -->
 <!-- 局外界面：底部切换 战斗 / 宠物 / 营地（11 版） -->
-<script src="map_data.js?v=79"></script>
-<script src="map.js?v=79"></script>
-<script src="card_bbox.js?v=79"></script>
-<script src="meta.js?v=79"></script>
+<script src="map_data.js?v=80"></script>
+<script src="map.js?v=80"></script>
+<script src="card_bbox.js?v=80"></script>
+<script src="meta.js?v=80"></script>
 <!-- 32 版：营地（宠物自由活动 + 投喂） -->
-<script src="camp.js?v=79"></script>
+<script src="camp.js?v=80"></script>
 <!-- 29 版：背景音乐（局外 main / 战斗 battle）-->
-<script src="music.js?v=79"></script>
+<script src="music.js?v=80"></script>
 </body>
 </html>

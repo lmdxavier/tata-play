@@ -19,7 +19,8 @@ const BONUS = (()=>{
   const S = new WeakMap();
   const st = p => { let s=S.get(p); if(!s){ s={shown:p.nSame||0, inbound:0, roll:null, pop:0, glow:0, lit:false, wait:0}; S.set(p,s); } return s; };
   const ids = new WeakMap(); let nid=1; const idOf = p => { let i=ids.get(p); if(!i){ i=nid++; ids.set(p,i); } return i; };
-  let clock=0; const jobs=[], queue=[], bolts=[], pulses=[], links=new Map(), pending=new Map();
+  let clock=0; const jobs=[], queue=[], bolts=[], pulses=[], bursts=[], links=new Map(), pending=new Map();
+  let landRun=0, landLast=-9;   // 80 版：0.7 秒内连续落下的次数 → 音调逐个升高
   const at = (d,fn) => jobs.push({t:clock+d, fn});
   const alive = p => G.pets.includes(p);
   const adj = (a,b) => Math.abs(a.lane-b.lane)+Math.abs(a.col-b.col)===1;
@@ -32,7 +33,11 @@ const BONUS = (()=>{
   const labelPos = p => { const f=ftOf(p); return {x:f.x, y:f.y+L.cs*0.16}; };
   const bodyPos = (p,h) => { const f=ftOf(p); return {x:f.x, y:f.y-L.cs*h}; };
   const eOut = k => 1-Math.pow(1-k,3);
-  const snd = (name, p) => { try{ COMBO.play(name, {x:p.x, y:p.y}); }catch(e){} };
+  const snd = (name, p, o) => { try{ COMBO.play(name, {x:p.x, y:p.y}, o); }catch(e){} };
+  // 80 版（用户 2026-11-15 拿塔塔冒险队弹珠做参照：「爽感不够」）：爆点 = 白闪核 + 放射光线 + 冲击环，全部程序画的柔光（能量不用贴图素材）
+  // big 0～1：0.35 小（加成落下）/ 0.6 中（3 连点亮）/ 1 大（链子锁上）
+  const burst = (x, y, col, big) => bursts.push({x, y, col, big, t:0, rot:Math.random()*6.28, n:big>=0.9?12:big>=0.5?9:7});
+  const freezeV = (v, s) => { if(v) v.freeze=Math.max(v.freeze||0, s); };
 
   // ---------- 小图：胶囊、圆点（每种颜色只画一次） ----------
   const CAP=new Map();
@@ -65,6 +70,7 @@ const BONUS = (()=>{
   function launch(a, b){
     if(!alive(a)||!alive(b)){ const sb=S.get(b); if(sb) sb.inbound=Math.max(0,sb.inbound-1); return; }
     const A=bodyPos(a,HB); snd('加成-弹出', A);   // 79 版：从角色身体正中弹出，起点不再有加成条反应
+    const va=visOf(a,true); va.squash=Math.max(va.squash||0, 0.09); burst(A.x, A.y, bcol(a.def.el), 0.25);   // 80 版：发射那一下身体一缩、身上亮一圈
     bolts.push({a, b, el:a.def.el, t:0, A, Bp:labelPos(b), landed:false, id0:idOf(a)*0.37+clock});
   }
   function land(bt){
@@ -73,7 +79,9 @@ const BONUS = (()=>{
     const B=labelPos(b), to=Math.min(b.nSame||0, s.shown+1);
     if(to!==s.shown){ s.roll={from:s.shown, to, t:0}; s.shown=to; }
     s.hit=clock; bt.Bp=B;   // 79 版：加成条白闪、鼓起再弹两下、迸火花（drawLabel / drawHit）
-    snd('加成-落下', B);
+    if(clock-landLast<0.7) landRun=Math.min(landRun+1, 7); else landRun=0; landLast=clock;
+    snd('加成-落下', B, {rate:Math.pow(2, landRun*2/12)});   // 80 版：连续落下每次升一个全音（最多 7 级）
+    burst(B.x, B.y, bcol(b.def.el), 0.35+0.05*landRun); freezeV(visOf(b,true), 0.05);
   }
   // 从新宠物 P 经邻居 n 往外依次点亮（不回头经过 P）；返回这一段用的时间
   function chain(P, n, grp, t0, done){
@@ -88,7 +96,8 @@ const BONUS = (()=>{
     return maxD ? maxD*T.hop+T.hold : 0;
   }
   function light(m){ const s=st(m); s.wait=Math.max(0,s.wait-1); if(!alive(m)) return; s.lit=true; s.glow=1;
-    const f=ftOf(m); flashAt(f.x, f.y-L.cs*0.05, 0.9, 0.18, undefined, ELC[m.def.el]); sparks(f.x, f.y-L.cs*0.1, 5, {x:0,y:-1}, 1.2, 2.6, ELC[m.def.el], 0.4);
+    const f=ftOf(m); flashAt(f.x, f.y-L.cs*0.05, 1.1, 0.2, undefined, ELC[m.def.el]); sparks(f.x, f.y-L.cs*0.1, 12, {x:0,y:-1}, 1.6, 3.6, ELC[m.def.el], 0.45);   // 80 版：火花 5 → 12
+    const bp=bodyPos(m,HB); burst(bp.x, bp.y, ELC[m.def.el], 0.6);
     const v=visOf(m,true); v.pop=0.25; }
   function whip(hi, lo, k){ links.set(k, {hi, lo, t:0, hit:false, id:idOf(hi)*7+idOf(lo)}); const v=visOf(hi,true); v.squash=0.1; }
 
@@ -105,6 +114,7 @@ const BONUS = (()=>{
       const big=p.group&&p.group.size>=3&&!mine(p); if(!big) s.lit=false; else if(!s.lit && s.wait===0) s.lit=true; }
     for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i]; b.t+=dt; if(!b.landed && b.t>=T.fly){ b.landed=true; land(b); } if(b.t>=T.fly+0.6) bolts.splice(i,1); }   // 落下后再留 0.6 秒画融化和火花
     for(let i=pulses.length-1;i>=0;i--){ pulses[i].t+=dt; if(pulses[i].t>=T.hop) pulses.splice(i,1); }
+    for(let i=bursts.length-1;i>=0;i--){ bursts[i].t+=dt; if(bursts[i].t>=BU.life) bursts.splice(i,1); }
     // 链接：和当前相邻关系对齐（铲掉 / 移开就断；其他原因出现的新相邻直接抽一次）
     const want=new Set();
     for(const p of G.pets){ if(mine(p)) continue; for(const o of [petAt(p.lane+1,p.col), petAt(p.lane,p.col+1)]) if(o && linkable(p,o)){ const hi=rankOf(p)>rankOf(o)?p:o, lo=hi===p?o:p; want.add(idOf(hi)+'>'+idOf(lo));
@@ -115,7 +125,10 @@ const BONUS = (()=>{
   function impact(lk){ const P=bodyPos(lk.lo,HB), B=bodyPos(lk.hi,HB), d=Math.hypot(P.x-B.x,P.y-B.y)||1, u={x:(P.x-B.x)/d, y:(P.y-B.y)/d};
     const lv=visOf(lk.lo,true), hv=visOf(lk.hi,true); lv.squash=0.12; lv.hitFlash=0.08;
     try{ COMBO.play('触手-抽打', {x:P.x, y:P.y}, {freeze:[lv, hv]}); }catch(e){}
-    flashAt(P.x, P.y, 0.8, 0.12); vfxXY('ring_shockwave_white', P.x, P.y, 0.8); sparks(P.x, P.y, 7, u, 2.4, 4.2, '#ffffff', 0.3); shakeDir(0.02, 0.12, u); }
+    freezeV(lv, 0.09); freezeV(hv, 0.09); lv.hitFlash=0.12; lv.squash=0.2;   // 80 版：锁上那一下两只都顿住 0.09 秒，被锁方白闪、压扁更狠
+    const col=ELC[lk.lo.def.el]||ELC.none;
+    flashAt(P.x, P.y, 1.3, 0.14); vfxXY('ring_shockwave_white', P.x, P.y, 1.1); burst(P.x, P.y, col, 1);
+    sparks(P.x, P.y, 9, u, 2.6, 4.8, '#ffffff', 0.32); sparks(P.x, P.y, 9, {x:-u.x,y:-u.y}, 1.6, 3.6, col, 0.4); shakeDir(0.045, 0.16, u); }
 
   // ---------- 画：地面光圈（drawAuras 位置） ----------
   function drawGround(){ const cs=L.cs;
@@ -145,6 +158,32 @@ const BONUS = (()=>{
     for(const lk of links.values()) drawLink(lk);   // 79 版：伸出 → 甩动 → 平静的柔光链子 + 能量
     for(const p of pulses) drawPulse(p);
     for(const b of bolts) drawBolt(b);
+    for(const b of bursts) drawBurst(b);
+  }
+  // ---------- 80 版：爆点 ----------
+  // 0～0.05 秒白核猛地胀到最大 → 光线从中心射出（细长、头尖尾宽的柔光条，长度先冲出去再收）→ 冲击环外扩变细淡出；全部 lighter 叠加
+  const BU={life:0.42, core:0.9, ray:1.15, ring:1.0};
+  let RAY=new Map();
+  function rayImg(col){ let c=RAY.get(col); if(c) return c; c=document.createElement('canvas'); c.width=128; c.height=24; const g=c.getContext('2d'), C=rgbOf(col), W=mixW(C,0.8);
+    const gr=g.createLinearGradient(0,0,128,0); gr.addColorStop(0,`rgba(${W},1)`); gr.addColorStop(0.35,`rgba(${mixW(C,0.4)},0.85)`); gr.addColorStop(1,`rgba(${C},0)`);
+    g.fillStyle=gr; g.beginPath(); g.moveTo(0,4); g.quadraticCurveTo(64,0,128,12); g.quadraticCurveTo(64,24,0,20); g.closePath(); g.fill();   // 根部宽、梢尖
+    RAY.set(col,c); return c; }
+  let RING=new Map();
+  function ringImg(col){ let c=RING.get(col); if(c) return c; c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'), C=rgbOf(col), gr=g.createRadialGradient(64,64,40,64,64,64);
+    gr.addColorStop(0,`rgba(${C},0)`); gr.addColorStop(0.55,`rgba(${mixW(C,0.7)},0.95)`); gr.addColorStop(0.75,`rgba(${C},0.6)`); gr.addColorStop(1,`rgba(${C},0)`);
+    g.fillStyle=gr; g.fillRect(0,0,128,128); RING.set(col,c); return c; }
+  function drawBurst(b){
+    const cs=L.cs, t=b.t, k=t/BU.life, S=cs*b.big;
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    const ce=t<0.05? t/0.05 : Math.exp(-(t-0.05)/0.07), cr=S*BU.core*(0.55+0.45*Math.min(1,t/0.05));   // 白核
+    if(ce>0.02){ ctx.globalAlpha=ce; soft(softImg('#ffffff'), b.x, b.y, cr*1.6); ctx.globalAlpha=0.8*ce; soft(softImg(b.col), b.x, b.y, cr*2.6); }
+    const RI=rayImg(b.col), out=1-Math.pow(1-Math.min(1,k/0.45),3), fade=k<0.3?1:Math.max(0,1-(k-0.3)/0.7);   // 光线
+    for(let i=0;i<b.n;i++){ const a=b.rot+i/b.n*Math.PI*2+(i%2?0.13:0), long=(i%2?0.62:1)*(0.85+0.3*Math.abs(Math.sin(i*7.3+b.rot)));
+      const len=S*BU.ray*long*(0.35+0.65*out), r0=S*0.12+S*0.25*out, w=S*(i%2?0.07:0.11)*(1-0.5*k);
+      ctx.globalAlpha=0.9*fade; ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(a); ctx.drawImage(RI, r0, -w/2, len, w); ctx.restore(); }
+    const rk=Math.min(1,k/0.8), rr=S*BU.ring*(0.25+0.95*(1-Math.pow(1-rk,2.4)));   // 冲击环
+    if(rk<1){ ctx.globalAlpha=0.85*(1-rk); ctx.save(); ctx.translate(b.x,b.y); ctx.scale(1,0.72); ctx.drawImage(ringImg(b.col), -rr, -rr, rr*2, rr*2); ctx.restore(); }
+    ctx.restore();
   }
   // ---------- 79 版：同系加成弹射 = 程序画的能量球（演示页 drawBolt 样子 B + 路径 2） ----------
   // 角色身体正中 → 对方加成条；水平匀速、高度抛物线（真 3D：高度朝屏幕外，主要表现为变大，0.3 的比例在屏幕上往上），影子留在地面原处；
@@ -286,9 +325,9 @@ const BONUS = (()=>{
   }
 
   HOOKS.push((type, d)=>{
-    if(type==='place') queue.push({p:d.pet, d:0});
-    else if(type==='move'){ queue.push({p:d.pet, d:0.25}); }
-    else if(type==='start'){ jobs.length=0; bolts.length=0; pulses.length=0; links.clear(); pending.clear(); }
+    if(type==='place'){ queue.push({p:d.pet, d:0}); if(window.HAPTIC) HAPTIC.tap(); }   // 80 版：放下 / 换位时手机「哒」一下（iPhone）
+    else if(type==='move'){ queue.push({p:d.pet, d:0.25}); if(window.HAPTIC) HAPTIC.tap(); }
+    else if(type==='start'){ jobs.length=0; bolts.length=0; pulses.length=0; bursts.length=0; links.clear(); pending.clear(); }
   });
   return {update, drawGround, drawLabel, drawAir};
 })();
