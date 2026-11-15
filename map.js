@@ -22,7 +22,7 @@ const CHAPTER_MAP = (()=>{
   const mi = n => img(BASE()+n+'.png');
   const envImg = n => img('env1/'+n+'.png');
   const KEY = 'tata_map';
-  const GROUND = [138,183,96], DEEP = [62,98,60], ROAD = [184,148,117];   // 地面 = 战斗棋盘两种亮格的中间色；树林深处 = 战斗场景 DEEP；路 = Road_Forest
+  let GROUND = [138,183,96], DEEP = [62,98,60], ROAD = [184,148,117];   // 地面 = 战斗棋盘两种亮格的中间色；树林深处 = 战斗场景 DEEP；路 = Road_Forest
   const rgb = (c,a=1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
   // ---------- 进度存档 ----------
@@ -67,7 +67,7 @@ const CHAPTER_MAP = (()=>{
     m=Math.min(m, Math.hypot(a.x+vx*t-x, a.y+vy*t-y)); } return m; };
 
   // ---------- 摆放（固定种子，每次打开一样）----------
-  const SET = {
+  const SET1 = {
     wallBack: ['Tree_Green_01','Tree_Green_02','Tree_Green_03','Tree_Green_04','Tree_Green_06','Tree_Green_07','Tree_Green_08','Tree_Green_10','Tree_Green_14','Tree_Green_15','Tree_Green_16'],
     wallFront:['Tree_Yellow_Green_02','Tree_Yellow_Green_03','Tree_Yellow_Green_04','Tree_Yellow_Green_06','Tree_Yellow_Green_07','Tree_Yellow_Green_08','Tree_Yellow_Green_10','Tree_Yellow_Green_15','Tree_Yellow_Green_17','Tree_Yellow_Green_18','Tree_Green_17','Tree_Green_18','Birch_Yellow_green_01'],
     mid:      ['Tree_Yellow_Green_01','Tree_Yellow_Green_05','Tree_Yellow_Green_09','Tree_Yellow_Green_12','Tree_Green_05','Tree_Green_11','Tree_Green_13','Birch_Yellow_green_02','Tree_Yellow_Green_19'],
@@ -76,10 +76,24 @@ const CHAPTER_MAP = (()=>{
     stone:    ['Stone_Gray1_01','Stone_Gray1_02','Stone_Gray1_03','Stone_Gray1_04','Stone_Gray2_02','Stone_Gray2_03'],
     shroom:   ['Mushroom_Wihte_01','Mushroom_Wihte_02','Mushroom_Pink_01','Mushroom_Yellow_02'],
   };
+  // 89 版：每章一套地图主题（地面、树林深处、路、草边、草斑、树和摆件）；第 1 章 = 原来的数值
+  const TH1 = { ground:[138,183,96], deep:[62,98,60], road:[184,148,117], lip:'lip', patchL:'170,205,118', patchD:'96,140,74', set:SET1 };
+  const THEMES = { 2:{ ground:[170,206,170], deep:[52,102,92], road:[214,184,160], lip:'ch2_lip', patchL:'206,232,200', patchD:'104,160,128', set:{
+    wallBack: ['Tree_Pink_01','Tree_Pink_02','Tree_Pink_03','Tree_Pink_04','Tree_Pink_06','Tree_Pink_07','Tree_Pink_08','Tree_Pink_10','Tree_Pink_14','Tree_Pink_15','Tree_Pink_16'],
+    wallFront:['Tree_Pink_09','Tree_Pink_11','Tree_Pink_12','Tree_Pink_17','Tree_Pink_18','Birch_Green_01'],
+    mid:      ['Tree_Pink_05','Tree_Pink_13','Tree_Pink_19','Birch_Green_02'],
+    small:    ['Small_Tree_Green_01','Small_Tree_Green_02','Small_Tree_Green_03'],
+    bush:     ['Bush_Green_01','Bush_Green_02','Bush_Green_03','Bush_Green_04','Bush_Green_05'],
+    stone:    ['Stone_Yellow_01','Stone_Yellow_02','Stone_Yellow_03','Stone_Yellow_04'],
+    shroom:   ['Mushroom_Pink_01','Mushroom_Pink_02','Mushroom_Wihte_01','Mushroom_Wihte_02'] } } };
+  const TH = () => Object.assign({}, TH1, THEMES[P.ch]||{});
+  const useTheme = () => { const T=TH(); GROUND=T.ground; DEEP=T.deep; ROAD=T.road; return T; };
+  function gotoChapter(id){ const c=D.chapters.find(q=>q.id===id); if(!c || !c.levels) return; P.ch=id; P.sel=null; save();
+    S.cam=null; S.petS=null; S.petTo=null; S.anim=null; S.follow=null; S.followOff=false; S.popup=false; S.vel=0; }
   const ASPECT = {};   // 素材宽高比（加载后读真实尺寸；没加载完先按 1）
   const ar = n => { const im=envImg(n); return ok(im) ? im.naturalWidth/im.naturalHeight : (ASPECT[n]||1); };
   function makeProps(nodes, path, wallY, cardTop, chU, width){
-    const R = seeded(20261113), pick = a => a[Math.floor(R()*a.length)], out = [];
+    const SET = TH().set, R = seeded(20261113), pick = a => a[Math.floor(R()*a.length)], out = [];
     const add = (n, x, y, h, kind) => out.push({n, x, y, h, kind, flip:R()<0.5, ph:R()*6.28});
     // 树墙：后排深绿密排、前排黄绿高低错落（树冠盖住远景和地面的分界线）
     for(let x=-70; x<width+70; x+=30+R()*22) add(pick(SET.wallBack), x, wallY-14+R()*10, 74+R()*26, 'tree');
@@ -110,8 +124,8 @@ const CHAPTER_MAP = (()=>{
 
   // ---------- 地面层（离屏画布，设备像素一一对应）----------
   function bakeGround(g, S0){
-    const k = `${S.gkey}|${S0}`; if(S.bake && S.bkey===k) return S.bake;
-    const need = ['Road_up_Forest','Forest_Grass','Forest_Flower_01','Forest_Flower_02','Stone_Gray1_05'].map(envImg).concat([mi('lip')]);
+    const T = useTheme(), k = `${S.gkey}|${S0}`; if(S.bake && S.bkey===k) return S.bake;
+    const need = ['Road_up_Forest','Forest_Grass','Forest_Flower_01','Forest_Flower_02','Stone_Gray1_05'].map(envImg).concat([mi(TH().lip)]);
     if(!need.every(ok)) return null;
     // 两端各多画 OVER（拖过头回弹时不露出底色）
     const sc = g.u*S0, cw = Math.ceil((g.width+OVER*2)*sc)+2, ch = Math.ceil((g.chU-g.groundTop)*sc)+2;
@@ -127,7 +141,7 @@ const CHAPTER_MAP = (()=>{
     x.strokeStyle='rgba(120,92,66,.35)'; x.lineWidth=ROAD_W+3; x.stroke();
     x.strokeStyle=rgb(ROAD); x.lineWidth=ROAD_W; x.stroke();
     // 草边按短段（原图的 1/12 宽）沿曲线贴，弯道处不会伸出直线头；每段取原图里接着的那一截，花纹连续
-    const lip = mi('lip'), lh = 11, lk = lh/lip.naturalHeight, segW = lip.naturalWidth/12, sw = segW*lk;
+    const lip = mi(TH().lip), lh = 11, lk = lh/lip.naturalHeight, segW = lip.naturalWidth/12, sw = segW*lk;
     for(const side of [-1,1]){
       let j = side<0 ? 5 : 0;
       for(let s=0; s<g.path[g.path.length-1].s; s+=sw*0.8, j++){
@@ -141,7 +155,7 @@ const CHAPTER_MAP = (()=>{
       const R = seeded(4242);
       for(let i=0;i<g.width/90;i++){ const cx=R()*g.width, cy=g.wallY+60+R()*(g.chU-g.wallY-60), rx=50+R()*80;
         y.save(); y.translate(cx,cy); y.scale(1,0.45); const rg=y.createRadialGradient(0,0,0,0,0,rx);
-        const light=R()<0.55; rg.addColorStop(0, light?'rgba(170,205,118,.45)':'rgba(96,140,74,.22)'); rg.addColorStop(1, light?'rgba(170,205,118,0)':'rgba(96,140,74,0)');
+        const light=R()<0.55; rg.addColorStop(0, light?`rgba(${T.patchL},.45)`:`rgba(${T.patchD},.22)`); rg.addColorStop(1, light?`rgba(${T.patchL},0)`:`rgba(${T.patchD},0)`);
         y.fillStyle=rg; y.beginPath(); y.arc(0,0,rx,0,7); y.fill(); y.restore(); }
       y.globalCompositeOperation='destination-out'; y.lineJoin='round'; y.lineCap='round'; y.lineWidth=ROAD_W-9;
       y.beginPath(); g.path.forEach((p,i)=>i?y.lineTo(p.x,p.y):y.moveTo(p.x,p.y)); y.stroke();
@@ -207,7 +221,7 @@ const CHAPTER_MAP = (()=>{
   // ---------- 主绘制 ----------
   function draw(lay){
     const now=performance.now(), dt=Math.min(0.05,(now-(S.last||now))/1000); S.last=now; S.t+=dt; S.lay=lay;
-    const c=lay.content, g=geometry(c), u=g.u, L=levels(), m=ctx.getTransform(), S0=m.a;
+    useTheme(); const c=lay.content, g=geometry(c), u=g.u, L=levels(), m=ctx.getTransform(), S0=m.a;
     const vw=c.w/u, maxCam=Math.max(0, g.width-vw), si=selIdx();
     if(S.cam==null){ S.cam=clamp(g.nodes[si].x-vw*0.42, 0, maxCam); }
     if(S.petS==null){ S.petS=g.nodes[si].s; }
@@ -257,9 +271,17 @@ const CHAPTER_MAP = (()=>{
     // 地图右端：下一章入口
     const nx=chap().id+1, nc=D.chapters.find(q=>q.id===nx);
     if(nc && S.cam>maxCam-60){ const bw=118*u, bh=36*u, bx=c.x+c.w-bw-10*u, by=Y(g.wallY+34)-bh/2, a=clamp01((S.cam-(maxCam-60))/60);
-      ctx.save(); ctx.globalAlpha=a; ctx.save(); rr(bx,by,bw,bh,bh/2); ctx.fillStyle='rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#2a2224'; ctx.stroke(); ctx.restore();
+      const open2 = nc.levels && P.cleared[L[L.length-1].id];
+      ctx.save(); ctx.globalAlpha=a; ctx.save(); rr(bx,by,bw,bh,bh/2); ctx.fillStyle=open2?'rgba(120,78,30,.9)':'rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=open2?'#ffd36b':'#2a2224'; ctx.stroke(); ctx.restore();
       text(`第 ${nx} 章  ›`, bx+bw/2, by+bh/2+1, 15*u, '#fff', 'center', 800, '#2a2224'); ctx.restore();
-      if(a>0.6) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ sfx('deny'); toast(P.cleared[L[L.length-1].id] ? `第 ${nx} 章「${nc.name}」即将开放` : `先通关 ${L[L.length-1].id}`); }); }
+      if(a>0.6) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ const done=P.cleared[L[L.length-1].id];
+        if(done && nc.levels){ sfx('ui'); gotoChapter(nx); } else { sfx('deny'); toast(done ? `第 ${nx} 章「${nc.name}」即将开放` : `先通关 ${L[L.length-1].id}`); } }); }
+    // 89 版：地图左端：回上一章
+    const pc0=D.chapters.find(q=>q.id===chap().id-1);
+    if(pc0 && pc0.levels && S.cam<60){ const bw=118*u, bh=36*u, bx=c.x+10*u, by=Y(g.wallY+34)-bh/2, a=clamp01((60-S.cam)/60);
+      ctx.save(); ctx.globalAlpha=a; ctx.save(); rr(bx,by,bw,bh,bh/2); ctx.fillStyle='rgba(58,49,51,.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#2a2224'; ctx.stroke(); ctx.restore();
+      text(`‹  第 ${pc0.id} 章`, bx+bw/2, by+bh/2+1, 15*u, '#fff', 'center', 800, '#2a2224'); ctx.restore();
+      if(a>0.6) addHit({x:bx,y:by,w:bw,h:bh}, ()=>{ sfx('ui'); gotoChapter(pc0.id); }); }
     ctx.restore();
     drawHud(lay, c, g, u);
     drawCard(c, g, u, L[selIdx()]);
@@ -406,7 +428,7 @@ const CHAPTER_MAP = (()=>{
     if(r[0]==='coin') drawImgC(coinIcon(), x, y, s); else if(r[0]==='star') drawImgC(icon('Star_Altar_05_Star'), x, y, s); else shardIcon(r[1], x, y, s*1.1);
     if(!noNum) text(`×${r[0]==='shard'?r[2]:r[1]}`, x, y+s*0.62, Math.max(12,s*0.3), '#fff', 'center', 800, '#2a2224');
   }
-  function reset(){ P.cleared={}; P.chest={}; P.sel=null; save(); S.cam=null; S.petS=null; S.petTo=null; S.anim=null; S.follow=null; S.followOff=false; }
+  function reset(){ P.cleared={}; P.chest={}; P.sel=null; P.ch=1; save(); S.cam=null; S.petS=null; S.petTo=null; S.anim=null; S.follow=null; S.followOff=false; }
   function preset(n){ reset(); levels().slice(0,n).forEach(l=>P.cleared[l.id]=true); if(n>=levels().length) P.chest={[chap().id]:'ready'}; save(); }   // 74 版：跳到全通关时宝箱等着领（测试开宝箱）   // 测试用：前 n 关算已通关
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
@@ -426,7 +448,7 @@ const CHAPTER_MAP = (()=>{
     if(typeof HOOKS!=='undefined') HOOKS.push(type=>{ if(type==='win' && S.playing) markCleared(S.playing); });
   });
 
-  const API = { draw, drawOverlay, chestState, markCleared, reset, preset, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
+  const API = { draw, drawOverlay, chestState, markCleared, reset, preset, gotoChapter, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
     get progress(){ return JSON.parse(JSON.stringify(P)); }, S };
   return API;
 })();

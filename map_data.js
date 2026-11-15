@@ -25,6 +25,21 @@ window.MAP_DATA = {
         {id:'1-9',  name:'深林山谷',     lanes:5, first:[['shard','pug',10]],          again:[['coin',40]]},
         {id:'1-10', name:'森林之王',     lanes:5, first:[['coin',500],['star',10]],          again:[['coin',50]], boss:'bear'},
       ] },
-    { id:2, name:'风车农场', soon:true },
+    { id:2, name:'樱粉花谷',   // 89 版（用户 2026-11-15）：第 2 章 = 樱粉花谷；战斗数据在 levels.js 的 2-1～2-10
+      far:{sky:'ch1_sky', far1:'ch2_far1', far2:'ch2_far2'},
+      final:[['coin',800], ['star',15]],
+      levels:[
+        {id:'2-1', name:'花谷入口', lanes:5, first:[['shard','fox',15]], again:[['coin',55]], newPet:'fox'},
+        {id:'2-2', name:'晨雾花坡', lanes:5, first:[['shard','flower',10]], again:[['coin',55]]},
+        {id:'2-3', name:'铃声花径', lanes:5, first:[['shard','lizard',15]], again:[['coin',60]]},
+        {id:'2-4', name:'蘑菇花荫', lanes:5, first:[['shard','mushgoat',15]], again:[['coin',60]], newPet:'mushgoat'},
+        {id:'2-5', name:'落樱风岭', lanes:5, first:[['shard','goldfish',15]], again:[['coin',65]]},
+        {id:'2-6', name:'花溪石滩', lanes:5, first:[['shard','pumpkin',10]], again:[['coin',65]]},
+        {id:'2-7', name:'晚霞花道', lanes:5, first:[['shard','bear',25]], again:[['coin',70]], elite:'wildox', newPet:'bear'},
+        {id:'2-8', name:'花雨小径', lanes:5, first:[['shard','fox',15]], again:[['coin',70]]},
+        {id:'2-9', name:'暮色花谷', lanes:5, first:[['shard','bomb',15]], again:[['coin',75]]},
+        {id:'2-10', name:'巴隆的舞会', lanes:5, first:[['coin',800],['star',15]], again:[['coin',100]], boss:'disco'},
+      ] },
+    { id:3, name:'海岸', soon:true },
   ],
 };

@@ -46,13 +46,13 @@ MT.ui = 'depth';   // 44 版（用户 2026-11-13）：默认立体
 try{ const u=localStorage.getItem('tata_ui44'); if(u==='flat'||u==='depth'||u==='deco') MT.ui=u; }catch(e){}
 const PULL = 190;   // 向下拉多少（设计像素）= 完整详情
 // 职能图标：Fantasy Hero PictoIcon（卡片左下圆标里就是它）；包里没有炸弹，地雷用 Critical（爆炸形）
-const ROLE_ICON = {producer:'PictoIcon_Thunder', shooter:'PictoIcon_Bow', melee:'PictoIcon_Attack', wall:'PictoIcon_Shield', mine:'PictoIcon_Critical'};
+const ROLE_ICON = {producer:'PictoIcon_Thunder', shooter:'PictoIcon_Bow', melee:'PictoIcon_Attack', wall:'PictoIcon_Shield', mine:'PictoIcon_Critical', support:'PictoIcon_Health'};   // 第2章角色 v1：+ 治疗
 const roleIcon = r => hero(ROLE_ICON[r]);
 // PictoIcon 是白图：启程配色的浅底上按深色着色，选中（深底）时用浅色
 const roleIco = (r, on) => MT.theme==='afk' ? heroT(ROLE_ICON[r], on?'#f4f0e7':'#8d8485') : roleIcon(r);
-const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦克', mine:'地雷'};
+const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦克', mine:'地雷', support:'治疗'};
 const EL_CN = {fire:'火', water:'水', grass:'草', none:'无'};
-const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速'};
+const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速', fox:'近战 · 三路横扫', mushgoat:'治疗 · 周围 3×3', bear:'坦克 · 拍击击退'};   // 第2章角色 v1
 // 升星后攻击方式的变化：照抄 docs/vfx-design.md 9.1（提案），那边改了这里跟着改
 const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
@@ -1061,7 +1061,7 @@ function statRows(e){
   if(d.dmg) rows.push(['伤害', `${d.dmg}`, statIco('dmg')]);
   if(d.int) rows.push(['攻击间隔', `${d.int} 秒`, statIco('int')]);
   if(d.prod) rows.push(['产能', `${d.prod} / ${d.prodInt} 秒`, statIco('prod')]);
-  const range = {shooter:'本路前方', melee:`前方 ${d.reach||1} 格`, mine:'周围 3×3'}[d.shape]||'—';
+  const range = d.sweep ? '本路和上下两路的前方 1 格' : d.heal ? '周围 3×3' : {shooter:'本路前方', melee:`前方 ${d.reach||1} 格`, mine:'周围 3×3'}[d.shape]||'—';   // 第2章角色 v1
   if(range!=='—') rows.push(['范围', range, statIco('range')]);
   rows.push(['冷却', `${d.cd} 秒`, statIco('cd')]);
   return rows;
