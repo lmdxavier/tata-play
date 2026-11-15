@@ -8,7 +8,7 @@
       被链接方（低稀有度）属性颜色的能量源源不断地从低稀有度流向高稀有度。只是表现，数值效果待定。
    79 版（用户 2026-11-15 在演示页 _dev\链子对比\链接特效设计.html 定稿）：链子从高稀有度身上伸出（力从发出端传到末端、整条甩动后平静），
       弹射改成程序画的 3D 能量球（角色身上 → 对方加成条，抛物线 + 斜镜头透视、拖尾、落下融化），加成条白闪鼓起 + 火花。参数见 docs/vfx-design.md「78 版」节末。
-   顺序：新宠物和每个邻居是一条「轨道」，各轨道同时开始；轨道内部 弹出 → 弹回 → 3 连传导 → 触手链接 一步一步来。
+   顺序（84 版改）：先所有弹球（各邻居同时 弹出 → 弹回），全部落下后 3 连依次点亮，3 连结束后才甩触手链接。
    画法全部是贴图（属性弹序列帧、胶囊 / 圆点小图旋转拉伸），不画会变形的路径——不增加每帧的光栅重画和贴图上传。
    ===================================================================== */
 const BONUS = (()=>{
@@ -45,26 +45,22 @@ const BONUS = (()=>{
   function seg(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, -w/2, -w/2, len+w, w); ctx.restore(); }
 
   // ---------- 序列 ----------
+  // 84 版（用户 2026-11-15）：顺序改成按类别分三段 —— 先所有弹球（各邻居同时弹出 → 弹回），全部弹完再 3 连依次点亮，最后才甩链子
   function startSeq(P, delay){
     const s=st(P); s.shown=0; s.roll=null;
     const grp = P.group && P.group.size>=3 && !mine(P) ? P.group : null;
-    const done=new Set(); let chainSound=false;
-    for(const n of nbrs(P)){
-      let t=T.land+(delay||0);
-      if(sameEl(P,n)){
-        st(n).inbound++; s.inbound++;
-        at(t, ()=>launch(P,n)); t+=T.fly+T.gap;
-        at(t, ()=>launch(n,P)); t+=T.fly+T.gap;
-        if(grp && grp.members.includes(n)){
-          const t0=t, d=chain(P, n, grp, t0, done);
-          if(d>0) t+=d;   // 83 版：不再整段只响一下，改成 light() 里每点亮一只响一下
-        }
-      }
-      if(linkable(P,n)){
-        const hi=rankOf(P)>rankOf(n)?P:n, lo=hi===P?n:P, k=idOf(hi)+'>'+idOf(lo);
-        pending.set(k, clock+t+0.5); links.delete(k);
-        at(t, ()=>{ pending.delete(k); if(alive(hi)&&alive(lo)&&adj(hi,lo)) whip(hi,lo,k); });
-      }
+    const done=new Set(), ns=nbrs(P), same=ns.filter(n=>sameEl(P,n));
+    let t=T.land+(delay||0);
+    // ① 弹球
+    for(const n of same){ st(n).inbound++; s.inbound++; at(t, ()=>launch(P,n)); at(t+T.fly+T.gap, ()=>launch(n,P)); }
+    if(same.length) t+=2*(T.fly+T.gap);
+    // ② 3 连：从 P 经每个同组邻居往外依次点亮（多条分支同时传）
+    if(grp){ let dmax=0; for(const n of same) if(grp.members.includes(n)) dmax=Math.max(dmax, chain(P, n, grp, t, done)); t+=dmax; }
+    // ③ 稀有度链接
+    for(const n of ns) if(linkable(P,n)){
+      const hi=rankOf(P)>rankOf(n)?P:n, lo=hi===P?n:P, k=idOf(hi)+'>'+idOf(lo);
+      pending.set(k, clock+t+0.5); links.delete(k);
+      at(t, ()=>{ pending.delete(k); if(alive(hi)&&alive(lo)&&adj(hi,lo)) whip(hi,lo,k); });
     }
   }
   function launch(a, b){
@@ -96,9 +92,10 @@ const BONUS = (()=>{
       at(t0+d*T.hop, ()=>light(m, d)); }
     return maxD ? maxD*T.hop+T.hold : 0;
   }
-  // 83 版（用户 2026-11-15）：3 连沿连线每点亮一只「叮」一下（SFX_Object_Place_Shiny_2），和点亮同一帧；第 n 只升 n 个半音、音量每只 +6%（最多 +40%）
+  // 84 版（用户 2026-11-15）：3 连沿连线每点亮一只「叮」一下（S_UI_BT_COMMON 后半段的叮），和点亮同一帧；
+  // 升调、变响要明显：第 n 只升 n 个全音（最多 7 级 = 高 14 个半音），音量从 -3dB 起每只 +2dB（最多 +6dB）；solo = 不和前一声分摊音量
   function light(m, n){ const s=st(m); s.wait=Math.max(0,s.wait-1); if(!alive(m)) return; s.lit=true; s.glow=1; n=n||0;
-    snd('三连-传导', ftOf(m), {rate:Math.pow(2, Math.min(n,12)/12), vol:Math.min(1.4, 1+0.06*n), fixed:true});
+    const k=Math.min(n,7); snd('三连-传导', ftOf(m), {rate:Math.pow(2, 2*k/12), vol:Math.pow(10, Math.min(6, -3+2*k)/20), fixed:true, solo:true});
     const f=ftOf(m); flashAt(f.x, f.y-L.cs*0.05, 1.1, 0.2, undefined, ELC[m.def.el]); sparks(f.x, f.y-L.cs*0.1, 12, {x:0,y:-1}, 1.6, 3.6, ELC[m.def.el], 0.45);   // 80 版：火花 5 → 12
     const bp=bodyPos(m,HB); burst(bp.x, bp.y, ELC[m.def.el], 0.6);
     const v=visOf(m,true); v.pop=0.25; }

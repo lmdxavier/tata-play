@@ -39,7 +39,7 @@ let READY = false, LOADMSG = '加载素材…', LOAD_N = null;
 // 战斗特效图、音效、音乐在进游戏后后台加载。没加载完就点进战斗 → 先显示进度，加载完自动开始（meta.js startBattle）。
 let BATTLE_READY = false, BATTLE_WAIT = false, BATTLE_WAIT_TAB = null, BATTLE_N = [0,0];
 function loadScript(src, tries, ok){   // 失败自动重试（隔 1/2/3… 秒），最多 tries 次；ok() 检查数据真的到了（防下载被截断）
-  return new Promise(res=>{ let n=0; const go=()=>{ const s=document.createElement('script'); s.src=src+(n?('?r='+n):'');
+  return new Promise(res=>{ let n=0; const go=()=>{ const s=document.createElement('script'); s.src=src+'?v='+(window.__BUILD||'')+(n?('&r='+n):'');   /* 84 版：带版本号，换了音效后玩家不会读到浏览器缓存里的旧 audio.js */
     s.onload=()=>{ if(!ok || ok()) res(true); else s.onerror(); }; s.onerror=()=>{ s.remove(); if(++n<tries) setTimeout(go, 1000*n); else { console.warn('加载失败', src); res(false); } };
     document.head.appendChild(s); }; go(); });
 }

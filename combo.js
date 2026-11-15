@@ -118,7 +118,7 @@ const COMBO = (()=>{
     A.voices=A.voices.filter(v=>v.end>now);
     const mine=A.voices.filter(v=>v.key===key);
     // 60ms 内重复 / 已满 4 个声部：合并进最近的那个，音量稍大（每次 +1dB，最多 +3dB）
-    if((st.last>=0 && now-st.last<0.06) || mine.length>=4){
+    if((st.last>=0 && now-st.last<0.06) || mine.length>=(opt.solo?6:4)){
       const v=mine[mine.length-1]; if(v && v.boost<3){ v.boost+=1; v.g.gain.setTargetAtTime(v.base*Math.pow(10,v.boost/20)/Math.sqrt(v.k), now, 0.01); }
       return;
     }
@@ -133,8 +133,8 @@ const COMBO = (()=>{
     const lt=s['档']||c['强度'];   // 只有 T 档的音效层跟着改档（界面、拾取层不动）
     if(opt.tier && /^T\d$/.test(lt) && TARGET_DB[opt.tier]!=null && TARGET_DB[lt]!=null) db+=TARGET_DB[opt.tier]-TARGET_DB[lt];
     const base=Math.pow(10,db/20)*(opt.vol??1);
-    const k=mine.length+1;
-    for(const v of mine){ v.k=k; v.g.gain.setTargetAtTime(v.base*Math.pow(10,v.boost/20)/Math.sqrt(k), now, 0.01); }
+    const k=opt.solo?1:mine.length+1;   // 84 版：solo（3 连逐只叮）不和还在响的同名声分摊音量，否则后几只反而变小、听不出递增
+    if(!opt.solo) for(const v of mine){ v.k=k; v.g.gain.setTargetAtTime(v.base*Math.pow(10,v.boost/20)/Math.sqrt(k), now, 0.01); }
     const src=ac.createBufferSource(); src.buffer=buf; src.playbackRate.value=rate;
     const g=ac.createGain(); g.gain.value=base/Math.sqrt(k);
     src.connect(g); g.connect(A.bus); src.start(now);
