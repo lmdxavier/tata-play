@@ -4,7 +4,7 @@
    ① 相邻同属性加成：新宠物弹出一颗属性小弹（火球 / 水团 / 绿焰），伪 3D 抛物线（升空变大、头朝上 → 落下尾朝上）
       落到旁边宠物的「+%」标签上，数字往上滚；再由旁边的宠物反向弹回一颗给新宠物。
    ② 同属性 3 连：从新宠物开始沿连线依次点亮脚下光圈（亮起明显 → 淡到很淡常驻）；只有 2 只时不再画脚下光。
-   ③ 稀有度链接：高稀有度宠物旁边有低稀有度宠物（同稀有度不连，炸弹类不算）时，高稀有度伸出触手扬起 → 啪地抽下 → 变成白色链子，
+   ③ 稀有度链接：高稀有度宠物旁边有低稀有度宠物（同稀有度不连，炸弹类不算）时，高稀有度伸出触手扬起 → 啪地抽下 → 收成持续波动的柔光带（77 版，照守山门），
       被链接方（低稀有度）属性颜色的能量源源不断地从低稀有度流向高稀有度。只是表现，数值效果待定。
    顺序：新宠物和每个邻居是一条「轨道」，各轨道同时开始；轨道内部 弹出 → 弹回 → 3 连传导 → 触手链接 一步一步来。
    画法全部是贴图（属性弹序列帧、胶囊 / 圆点小图旋转拉伸），不画会变形的路径——不增加每帧的光栅重画和贴图上传。
@@ -143,7 +143,7 @@ const BONUS = (()=>{
   }
   // ---------- 画：空中（角色之后） ----------
   function drawAir(){
-    for(const lk of links.values()) drawLink(lk);
+    for(const lk of links.values()){ drawBand(lk); drawLink(lk); }   // 77 版：光带 + 触手
     for(const p of pulses) drawPulse(p);
     for(const b of bolts) drawBolt(b);
   }
@@ -168,16 +168,26 @@ const BONUS = (()=>{
     ctx.restore();
   }
   // 触手 / 链子：沿二次曲线取点，用胶囊小图逐段摆
-  const N=20;
+  // 77 版（用户 2026-11-15「去看守山门那个链子」）：抽下以后不再是白色粗绳，改成守山门的羁绊连线——
+  //   一根被链接方属性色的柔光带（宽淡辉光 / 主色 / 细亮芯，预先烘成一张贴图，每段只贴一次），
+  //   整条持续轻微波动：一道平缓的波从低稀有度传向高稀有度（竖着连 = 左右摆，横着连 = 上下摆），两端固定、收细；
+  //   画在宠物下面（和守山门一样从身体后面穿出来），光团从低稀有度流向高稀有度。
+  const N=20, NB=16;
   const qb=(P0,C,P2,s)=>{ const a=1-s; return {x:a*a*P0.x+2*a*s*C.x+s*s*P2.x, y:a*a*P0.y+2*a*s*C.y+s*s*P2.y}; };
-  function drawLink(lk){
+  function geo(lk){
     const cs=L.cs, B=bodyPos(lk.hi,0.24), E=bodyPos(lk.lo,0.2), dx=E.x-B.x, dy=E.y-B.y, D=Math.hypot(dx,dy)||1, ux=dx/D, uy=dy/D;
     let nx=-uy, ny=ux; if(ny>0.05 || (Math.abs(ny)<=0.05 && nx>0)){ nx=-nx; ny=-ny; }   // 法线取朝上（朝画面里侧）那一边
-    const M={x:(B.x+E.x)/2, y:(B.y+E.y)/2}, sway=Math.sin(clock*2.2+lk.id)*cs*0.035;
+    const M={x:(B.x+E.x)/2, y:(B.y+E.y)/2};
     const rise={P2:{x:B.x-ux*D*0.25+nx*cs*0.9, y:B.y-uy*D*0.25+ny*cs*0.9-cs*0.6}, C:{x:B.x+nx*cs*0.7, y:B.y+ny*cs*0.7-cs*0.3}};
     const imp={P2:E, C:{x:M.x+nx*cs*0.5, y:M.y+ny*cs*0.5-cs*0.25}};
-    const rest={P2:E, C:{x:M.x+nx*cs*0.42+sway, y:M.y+ny*cs*0.42+cs*0.1}};   // 链子往一侧弯出去，不从宠物脸上直穿
-    const t=lk.t, pts=[]; let wk=0;   // wk：0 = 触手，1 = 链子
+    const rest={P2:E, C:{x:M.x+nx*cs*0.42, y:M.y+ny*cs*0.42+cs*0.1}};   // 往一侧弯出去，不从宠物脸上直穿
+    const t=lk.t-T.up-T.strike, u=t<0?0:Math.min(1,t/T.settle), sp=1-Math.cos(u*Math.PI*2.5)*Math.exp(-5*u);
+    const C=t<0?imp.C:{x:imp.C.x+(rest.C.x-imp.C.x)*sp, y:imp.C.y+(rest.C.y-imp.C.y)*sp};
+    return {cs,B,E,nx,ny,D,rise,imp,C,wk:t<0?0:eOut(u)};
+  }
+  function drawLink(lk){   // 触手（扬起 → 甩下 → 弹性收回时淡出），在角色上面
+    const g=geo(lk), {cs,B,E,nx,ny,rise,imp}=g, t=lk.t, pts=[], wk=g.wk;
+    if(wk>=1){ drawAbsorb(lk, g, 1); return; }
     if(t<T.up){ const e=eOut(t/T.up), wob=Math.sin(t*28)*cs*0.06*(1-e);
       const P2={x:B.x+(rise.P2.x-B.x)*e+wob, y:B.y+(rise.P2.y-B.y)*e}, C={x:B.x+(rise.C.x-B.x)*e, y:B.y+(rise.C.y-B.y)*e};
       for(let i=0;i<=N;i++) pts.push(qb(B,C,P2,i/N)); }
@@ -186,25 +196,50 @@ const BONUS = (()=>{
         const p0=qb(B,rise.C,rise.P2,s), p1=qb(B,imp.C,imp.P2,s), r0=Math.hypot(p0.x-B.x,p0.y-B.y), r1=Math.hypot(p1.x-B.x,p1.y-B.y);
         const a0=Math.atan2(p0.y-B.y,p0.x-B.x); let da=Math.atan2(p1.y-B.y,p1.x-B.x)-a0; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI;
         const a=a0+da*q, r=r0+(r1-r0)*q; pts.push({x:B.x+Math.cos(a)*r, y:B.y+Math.sin(a)*r}); } }
-    else { const u=Math.min(1,(t-T.up-T.strike)/T.settle), sp=1-Math.cos(u*Math.PI*2.5)*Math.exp(-5*u); wk=eOut(u);
-      const C={x:imp.C.x+(rest.C.x-imp.C.x)*sp, y:imp.C.y+(rest.C.y-imp.C.y)*sp};
-      for(let i=0;i<=N;i++) pts.push(qb(B,C,E,i/N)); }
-    const wOf=s=>cs*((0.2-0.14*s)*(1-wk)+0.075*wk);
-    const OUT=capImg(wk>0.5?'#5a5470':'#4a2a6e'), BODY=capImg(wk>0.5?'#ffffff':'#b77cf0'), HI=capImg(wk>0.5?'#ffffff':'#ecd9ff');   // 触手：紫色、深紫描边、浅色高光、粉色吸盘；变成链子后换成白色
-    ctx.save(); ctx.globalAlpha=1-0.5*wk;
+    else for(let i=0;i<=N;i++) pts.push(qb(B,g.C,E,i/N));
+    const wOf=s=>cs*(0.2-0.14*s)*(1-0.5*wk);
+    const OUT=capImg('#4a2a6e'), BODY=capImg('#b77cf0'), HI=capImg('#ecd9ff');   // 触手：紫色、深紫描边、浅色高光、粉色吸盘
+    const fa=1-wk;   // 收回时淡出，换成下面的光带
+    ctx.save(); ctx.globalAlpha=fa;
     for(let i=0;i<N;i++) seg(OUT, pts[i], pts[i+1], wOf(i/N)+cs*0.03);
-    ctx.globalAlpha=1;
     for(let i=0;i<N;i++) seg(BODY, pts[i], pts[i+1], wOf(i/N));
-    if(wk<1){ ctx.globalAlpha=0.8*(1-wk);
-      for(let i=0;i<N-2;i++){ const w=wOf(i/N); seg(HI, {x:pts[i].x+nx*w*0.2, y:pts[i].y+ny*w*0.2}, {x:pts[i+1].x+nx*w*0.2, y:pts[i+1].y+ny*w*0.2}, w*0.3); }
-      const dot=dotImg('#ffd3ea'); for(let i=2;i<N-3;i+=3){ const w=wOf(i/N); ctx.drawImage(dot, pts[i].x-nx*w*0.25-w*0.17, pts[i].y-ny*w*0.25-w*0.17, w*0.34, w*0.34); } }   // 吸盘
-    // 能量：被链接方的属性色，从低稀有度（曲线末端）流向高稀有度（起点）
-    if(wk>0){ const col=ELC[lk.lo.def.el], C2=capImg(col), g=glowImg(col), ph=clock*0.85;
-      for(let i=0;i<N;i++){ const s=(i+0.5)/N; let I=0; for(let j=0;j<3;j++){ const pos=1-((ph+j/3)%1); I=Math.max(I, Math.exp(-Math.pow((s-pos)/0.09,2))); }
-        const a=(0.22+0.3*s+0.7*I)*wk; if(a<0.03) continue; ctx.globalAlpha=Math.min(1,a); seg(C2, pts[i], pts[i+1], wOf(s)*(0.75+0.35*I)); }
-      if(g){ ctx.globalCompositeOperation='lighter';
-        for(let j=0;j<3;j++){ const pos=1-((ph+j/3)%1), q=qb(B, {x:pts[N>>1].x*2-(B.x+E.x)/2, y:pts[N>>1].y*2-(B.y+E.y)/2}, E, pos); ctx.globalAlpha=0.9*wk; drawImgC(g, q.x, q.y, cs*0.55); }
-        ctx.globalAlpha=(0.35+0.25*Math.sin(clock*5.3))*wk; drawImgC(g, B.x, B.y, cs*0.7); } }   // 高稀有度身上一团吸收光
+    ctx.globalAlpha=0.8*fa;
+    for(let i=0;i<N-2;i++){ const w=wOf(i/N); seg(HI, {x:pts[i].x+nx*w*0.2, y:pts[i].y+ny*w*0.2}, {x:pts[i+1].x+nx*w*0.2, y:pts[i+1].y+ny*w*0.2}, w*0.3); }
+    const dot=dotImg('#ffd3ea'); for(let i=2;i<N-3;i+=3){ const w=wOf(i/N); ctx.drawImage(dot, pts[i].x-nx*w*0.25-w*0.17, pts[i].y-ny*w*0.25-w*0.17, w*0.34, w*0.34); }   // 吸盘
+    ctx.restore();
+    if(wk>0) drawAbsorb(lk, g, wk);
+  }
+  function drawAbsorb(lk, g, k){   // 高稀有度身上一团吸收光（在角色上面）
+    const gl=glowImg(ELC[lk.lo.def.el]); if(!gl) return;
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(0.3+0.2*Math.sin(clock*5.3))*k; drawImgC(gl, g.B.x, g.B.y, g.cs*0.62); ctx.restore();
+  }
+  // 光带贴图：横向是长度（两头不收，逐段首尾相接），纵向是 辉光 / 主色 / 亮芯 三层的截面；每种颜色只烘一次
+  const BAND=new Map();
+  function bandImg(color){ let c=BAND.get(color); if(c) return c;
+    c=document.createElement('canvas'); c.width=16; c.height=64; const g=c.getContext('2d'), H=64, m=H/2;
+    const lay=(half, col, a)=>{ const gr=g.createLinearGradient(0,m-half,0,m+half), z=col.replace('rgb(','rgba(').replace(')',',0)'); gr.addColorStop(0,z); gr.addColorStop(0.5,col); gr.addColorStop(1,z); g.globalAlpha=a; g.fillStyle=gr; g.fillRect(0,m-half,16,half*2); };
+    const n=parseInt(color.slice(1),16), r=n>>16, gg=(n>>8)&255, b=n&255, cc=`rgb(${r},${gg},${b})`, lt=`rgb(${(r+255*1.2)/2.2|0},${(gg+255*1.2)/2.2|0},${(b+255*1.2)/2.2|0})`;   // 渐变两头用同色透明，避免发黑的边
+    lay(32, cc, 0.3);    // 宽淡辉光
+    lay(12, cc, 1);         // 主色
+    lay(6, lt, 1);          // 细亮芯
+    lay(2.6, 'rgb(255,255,255)', 1);
+    BAND.set(color, c); return c; }
+  function band(im, p, q, w){ const dx=q.x-p.x, dy=q.y-p.y, len=Math.hypot(dx,dy); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.atan2(dy,dx)); ctx.drawImage(im, -0.25, -w/2, len+0.5, w); ctx.restore(); }
+  function drawBand(lk){   // 光带（drawAir 里，在角色上面：tata 的格子很挤，画在下面几乎全被挡住）
+    const g=geo(lk); if(g.wk<=0) return;
+    const {cs,B,E,C,D}=g, k=g.wk, col=ELC[lk.lo.def.el], im=bandImg(col), ax=[];
+    const A=cs*0.075*Math.min(1, D/cs), ph=clock*2.2+lk.id*1.7;
+    for(let i=0;i<=NB;i++){ const s=i/NB, p=qb(B,C,E,s), a=1-s;
+      let tx=2*a*(C.x-B.x)+2*s*(E.x-C.x), ty=2*a*(C.y-B.y)+2*s*(E.y-C.y); const tl=Math.hypot(tx,ty)||1;
+      const env=Math.sin(Math.PI*s), w=A*env*Math.sin(s*Math.PI*2.2+ph);   // 波从低稀有度（s=1）传向高稀有度（s=0）
+      ax.push({x:p.x-ty/tl*w, y:p.y+tx/tl*w, e:env}); }
+    const W=cs*0.34;
+    ctx.save();
+    for(let i=0;i<NB;i++){ const e=(ax[i].e+ax[i+1].e)/2; ctx.globalAlpha=k*Math.min(1,e*1.7); band(im, ax[i], ax[i+1], W*(0.4+0.6*e)); }   // 两端淡出：接进身体里，不在脸上堆一团   // 光带本身用正常混合：草地很亮，叠加会洗成白色看不出属性色
+    const gl=glowImg(col); ctx.globalCompositeOperation='lighter';
+    if(gl){ for(let j=0;j<2;j++){ const pos=1-((clock*0.55+lk.id*0.37+j*0.5)%1), f=pos*NB, i0=Math.min(NB-1,f|0), fr=f-i0, e=Math.sin(Math.PI*pos);
+        const x=ax[i0].x+(ax[i0+1].x-ax[i0].x)*fr, y=ax[i0].y+(ax[i0+1].y-ax[i0].y)*fr;
+        ctx.globalAlpha=0.85*k*e; drawImgC(gl, x, y, cs*0.42*(0.6+0.6*e)); } }   // 光团：低稀有度 → 高稀有度
     ctx.restore();
   }
 
