@@ -534,7 +534,7 @@ HOOKS.push((type, d)=>{
       COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:{x:-f.x, y:-f.y}, target2:far?atPet(far,0.4):null}, {freeze:[v, ...d.pets.map(p=>visOf(p,true))]});
       for(const p of d.pets){ const pv=visOf(p,true); pv.squash=0.1; pv.hitFlash=0.08; } break; }
     case 'hop': COMBO.play('移动', atE(d.e)); break;   // 73 版：长信翁起飞（复用「移动」的嗖声 + 小烟团）
-    case 'bossWarn': sfx('alert'); G.fx.push({kind:'banner', text:`格鲁姆要换到第 ${d.lane+1} 路`, t:0, life:1.8, color:'#ff8a6a'}); break;
+    case 'bossWarn': COMBO.play('Boss-换路预警', null);   /* 76 版：同一段战鼓号角的第一下（T2），比大波来袭弱一档 */ G.fx.push({kind:'banner', text:`格鲁姆要换到第 ${d.lane+1} 路`, t:0, life:1.8, color:'#ff8a6a'}); break;
     case 'bossMove': { const v=visOf(d.e,false); v.squash=0.12; COMBO.later(0.6, ()=>{ const g=atE(d.e); COMBO.play('放置', {x:g.gx, y:g.gy-L.cs*0.1}, {scale:1.8}); shakeDir(0.03,0.2); }); break; }
     case 'bossRoar': { const e=d.e, v=visOf(e,false), g=atE(e); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); v.squash=0.12;
       COMBO.play('Boss-咆哮', g); vfxXY('ring_shockwave_white', g.x, g.y, 2.4); COMBO.later(0.25, ()=>vfxXY('ring_shockwave_white', g.x, g.y, 3.2)); shakeDir(0.05,0.6, null, true); break; }
@@ -588,7 +588,7 @@ function watchEvents(){
   for(const o of SKYLAND) if(o.fall<=0 && !o.landed){ o.landed=true; const s=orbScreen(o), gy=s.y+L.cs*0.2;
     COMBO.play('能量-掉落', {x:s.x, y:gy-L.cs*0.15, gx:s.x, gy}); }   // 金色星爆 + 贴地压扁的烟团
   for(let i=SKYLAND.length-1;i>=0;i--) if(SKYLAND[i].landed) SKYLAND.splice(i,1);
-  EVENTS.forEach((ev,i)=>{ if(G.t>=ev.t && !EV_SEEN.has(i)){ EV_SEEN.add(i); if(ev.kind==='banner') COMBO.play('警钟', null); else sfx('alert'); } });
+  EVENTS.forEach((ev,i)=>{ if(G.t>=ev.t && !EV_SEEN.has(i)){ EV_SEEN.add(i); if(ev.kind==='banner') COMBO.play('大波来袭', null); else sfx('alert'); } });   // 76 版：横幅出现那一刻播「大波来袭」（战鼓 + 号角，T3）
   if(G.t<1) EV_SEEN.clear();
 }
 
