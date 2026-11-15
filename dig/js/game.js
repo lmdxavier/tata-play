@@ -49,7 +49,8 @@
     if (w === VW && h === VH) return;
     VW = w; VH = h; cv.width = w; cv.height = h; T = Math.floor(w / W); OX = (w - T * W) >> 1;
     document.documentElement.style.fontSize = (wrap.clientWidth / 24) + 'px';
-    if (A.img.dirt) A.bake(T);
+    if (A.img.sky) A.bake(T);
+    if (TERRAIN.ready) TERRAIN.resize(T, OX, w);
   }
 
   /* ---------- 角色 ---------- */
@@ -91,6 +92,7 @@
   const fx = [], nums = [], drops = [];
   const hero = { c: 3, r: -1, x: 0, y: 0, fx: 0, fy: 0, tx: 0, ty: 0, mv: 0, face: 1, sw: 0, swinging: null, hurtT: 0, fall: 0 };
   function newRun() {
+    TERRAIN.reset();
     const start = Math.min(S.boss, B.STAGES - 1) * B.STAGE;
     R = { start, rows: new Map(), mons: [], st: D.stam, stMax: D.stam, hp: D.hp, hpMax: D.hp, coin: 0, gem: 0, t: 0, deep: start, on: false, over: null, revived: false, petT: 0, kills: 0, blocks: 0 };
     hero.c = 3; hero.r = start - 1; hero.mv = 0; hero.swinging = null; hero.sw = 0; hero.face = 1; hero.hurtT = 0; hero.dead = false;
@@ -218,12 +220,23 @@
 
   function hitBlock(c, r, dmg) {
     const k = cell(c, r); if (k.t !== 1 && k.t !== 2) return;
-    k.hp -= dmg; k.shake = 0.12; const x = (c + 0.5) * T, y = (r + 0.5) * T;
+    k.hp -= dmg; const x = (c + 0.5) * T, y = (r + 0.5) * T;
+    const hx = x + (hero.x - x) * 0.45, hy = y + (hero.y - T * 0.45 - y) * 0.45;   // 碎屑从镐子敲的那一面飞出来
     if (k.hp <= 0) {
-      const spur = k.t === 2; k.t = 0; R.blocks++;
+      const spur = k.t === 2; chips(c, r, x, y, spur ? 9 : 6, 1); k.t = 0; R.blocks++;
       addFx('puff', x, y, T / 110); SFX.play(spur ? 'chunk_fall' : 'dig_rock_block', spur ? 1 : 0.8); if (spur) shake = 0.18;
       const v = B.blockCoin(k.s) * D.coinM; drop('coin', x, y, 3); gain('coin', v, x, y);
-    } else { SFX.play('dig_dirt', 0.7, k.t === 2 ? 0.75 : 1); addFx('ring', x, y, T / 190); }
+    } else { SFX.play('dig_dirt', 0.7, k.t === 2 ? 0.75 : 1); chips(c, r, hx, hy, 3, 0.6); }
+    TERRAIN.cellChanged(c, r);
+  }
+  // 碎土块：用这格材质的贴图（terrain.js 生成），被敲下来往外蹦、落地前淡出
+  const bits = [];
+  function chips(c, r, x, y, n, pow) {
+    for (let i = 0; i < n; i++) {
+      const im = TERRAIN.chip(c, r, (Math.random() * 6) | 0); if (!im) return;
+      bits.push({ im, x: x + (Math.random() - 0.5) * T * 0.4, y: y + (Math.random() - 0.5) * T * 0.4, vx: (Math.random() - 0.5) * T * 4.5 * pow + (x - hero.x) * 0.0, vy: -T * (1.5 + Math.random() * 2.5) * pow, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14, t: 0, s: 0.55 + Math.random() * 0.6 });
+    }
+    if (bits.length > 50) bits.splice(0, bits.length - 50);
   }
   function hitMon(m, dmg, crit) {
     if (m.dead) return; m.hp -= dmg; m.flash = 0.12; const x = (m.c + 0.5) * T, y = (m.r + 0.4) * T;
@@ -234,7 +247,7 @@
       if (m.boss) {
         const b = B.boss(m.s); drop('gem', x, y, 6); drop('coin', x, y, 6); gain('gem', b.gem * D.gemM, x, y - T * 0.3); gain('coin', b.coin * D.coinM, x, y);
         addFx('star', x, y, T / 50); shake = 0.35;
-        for (let c = 2; c <= 4; c++) { const k = row(m.r + 1)[c]; k.t = 0; addFx('puff', (c + 0.5) * T, (m.r + 1.5) * T, T / 100); }
+        for (let c = 2; c <= 4; c++) { const k = row(m.r + 1)[c]; k.t = 0; addFx('puff', (c + 0.5) * T, (m.r + 1.5) * T, T / 100); chips(c, m.r + 1, (c + 0.5) * T, (m.r + 1.5) * T, 5, 1); TERRAIN.cellChanged(c, m.r + 1); }
         SFX.play('chunk_fall');
         if (S.boss < m.s + 1) { S.boss = m.s + 1; G.ui.banner('第 ' + (m.s + 1) + ' 层守卫已击败', '电梯通到 ' + S.boss * B.STAGE + ' 米'); }
         D = B.derive(S); G.save();
@@ -259,6 +272,10 @@
     }
     for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i], v = A.VFX[f.k]; f.t += dt; if (f.t * v[3] >= v[0]) fx.splice(i, 1); }
     for (let i = nums.length - 1; i >= 0; i--) { nums[i].t += dt; if (nums[i].t > 0.8) nums.splice(i, 1); }
+    for (let i = bits.length - 1; i >= 0; i--) { const b = bits[i]; b.t += dt; b.x += b.vx * dt; b.y += b.vy * dt; b.vy += T * 16 * dt; b.rot += b.vr * dt; if (b.t > 0.75) bits.splice(i, 1); }
+    // 角色踩在真正的土面上（地形是不规则的，逻辑格子的地面只是个参考）
+    const footT = (o, x, y) => { const f = TERRAIN.floorAt(x, y) - y; o.vo = o.vo === undefined ? f : o.vo + (f - o.vo) * Math.min(1, dt * 14); };
+    footT(hero, hero.x, hero.y); footT(pet, pet.x, pet.y);
     for (let i = drops.length - 1; i >= 0; i--) {
       const p = drops[i]; p.t += dt; if (p.t < 0) continue;
       if (p.t < 0.28) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += T * 22 * dt; }
@@ -327,7 +344,6 @@
   }
 
   /* ---------- 绘制 ---------- */
-  function tile(ax, ay, x, y) { ctx.drawImage(A.atlas, ax * A.T, ay * A.T, A.T, A.T, x, y, A.T, A.T); }
   function drawShoreBack() {
     const gy = Math.round(-camY);   // 地面线的屏幕 y
     if (gy <= 0) return;
@@ -345,51 +361,48 @@
     ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, VW, VH);
     if (!R || !A.ready) { if (ctx.__end) ctx.__end(); return; }
     const sx = shake > 0 ? Math.round((Math.random() - 0.5) * shake * T * 0.5) : 0, sy = shake > 0 ? Math.round((Math.random() - 0.5) * shake * T * 0.5) : 0;
-    const cy = Math.round(camY) + sy, ox = OX + sx, TT = A.T;
+    const cy = Math.round(camY) + sy, ox = OX + sx, CQ = TERRAIN.CQ();
+    TERRAIN.update(cy, VH);
     drawShoreBack();
+    TERRAIN.drawBG(ctx, cy, VW, VH);
+    TERRAIN.draw(ctx, cy, ox, VH);
+    TERRAIN.drawProps(ctx, cy, ox, VH, time);
+    // 守卫门：门中间的锁
     const r0 = Math.floor(cy / T), r1 = Math.floor((cy + VH) / T);
-    // 背墙 + 方块
-    for (let r = Math.max(0, r0); r <= r1; r++) {
-      const s = Math.min(B.STAGES - 1, B.stageOf(r)), y = r * T - cy;
-      for (let c = 0; c < W; c++) {
-        const k = cell(c, r), x = ox + c * T;
-        if (k.t === 0) {
-          tile(A.VARN, s, x, y);
-          if (cell(c, r - 1).t && r > 0) tile(0, A.rowShade, x, y);
-          if (cell(c - 1, r).t) tile(1, A.rowShade, x, y);
-          if (cell(c + 1, r).t) tile(2, A.rowShade, x, y);
-          if (cell(c, r + 1).t) tile(3, A.rowShade, x, y);
-          continue;
-        }
-        let dx = 0, dy = 0; if (k.shake > 0) { k.shake -= 1 / 60; dx = Math.round(Math.sin(time * 90) * T * 0.035); dy = Math.round(Math.cos(time * 70) * T * 0.02); }
-        if (k.t === 8) { tile(hash(c, r) % 4, s, x, y); continue; }
-        if (k.t === 3) { tile(A.VARN + k.v, A.rowSpur, x + dx, y + dy); if (c === 3) { const lw = TT * 0.5, lh = lw * A.img.lock.height / A.img.lock.width; ctx.drawImage(A.img.lock, x + (TT - lw) / 2 + dx, y + (TT - lh) / 2 + dy, lw, lh); } continue; }
-        if (k.t === 2) tile(k.v, A.rowSpur, x + dx, y + dy); else tile(k.v, s, x + dx, y + dy);
-        if (k.hp < k.max) { const f = 1 - k.hp / k.max; tile((f < 0.34 ? 0 : f < 0.67 ? 1 : 2) * 3 + (k.v % 3), A.rowCrack, x + dx, y + dy); }
-      }
-    }
-    // 草皮（只在地面线上露一条，不盖住第一排方块）
-    if (r0 <= 0) { const g = A.img.grass, gw = T * 2.4, gh = gw * g.height / g.width; for (let i = 0; i < 3; i++) ctx.drawImage(g, ox + i * gw - T * 0.1, Math.round(-cy - gh * 0.8), gw, gh); }
-    // 怪物
+    for (let r = Math.max(0, r0); r <= r1; r++) if (cell(3, r).t === 3) { const lw = T * 0.46, lh = lw * A.img.lock.height / A.img.lock.width; ctx.drawImage(A.img.lock, Math.round(ox + 3.5 * T - lw / 2), Math.round((r + 0.5) * T - cy - lh / 2), Math.round(lw), Math.round(lh)); }
+    // 怪物（脚踩在真正的土面上）
     for (const m of R.mons) {
-      const y = (m.r + 1) * T - cy; if (y < -T * 3 || y > VH + T * 3) continue;
-      const x = ox + (m.c + 0.5) * T, sc = (m.boss ? 1.55 : 0.86) * T / 190;
+      const y0 = (m.r + 1) * T; if (y0 - cy < -T * 3 || y0 - cy > VH + T * 3) continue;
+      const x = ox + (m.c + 0.5) * T, y = TERRAIN.floorAt((m.c + 0.5) * T, y0) - cy, sc = (m.boss ? 1.55 : 0.86) * T / 190;
       const a = m.dead ? Math.max(0, 1 - m.dead / 0.7) : 1;
       if (m.flash > 0) ctx.filter = 'brightness(2.2)';
-      m.m.draw(ctx, x, y - T * 0.06, { scale: sc, flipX: m.face > 0, alpha: a });
+      m.m.draw(ctx, x, y - T * 0.02, { scale: sc, flipX: m.face > 0, alpha: a });
       if (m.flash > 0) ctx.filter = 'none';
-      if (!m.dead && m.hp < m.max && !m.boss) { const w = T * 0.7, h = Math.max(3, T * 0.07), bx = Math.round(x - w / 2), by = Math.round(y - T * 0.98); ctx.fillStyle = 'rgba(20,10,30,0.8)'; ctx.fillRect(bx - 1, by - 1, w + 2, h + 2); ctx.fillStyle = '#ff5a4d'; ctx.fillRect(bx, by, Math.round(w * Math.max(0, m.hp / m.max)), h); }
+      m.sy = y;
     }
     // 宠物
     if (SK && petCv) {
       const PZ = petCv.width; petG.setTransform(1, 0, 0, 1, 0, 0); petG.clearRect(0, 0, PZ, PZ);
       const sc = T * 0.62 / 100; petG.setTransform(sc * pet.face, 0, 0, -sc, PZ / 2, PZ * 0.8); SR.draw(SK);
-      ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y - cy - PZ * 0.8 - T * 0.04));
+      ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y + (pet.vo || 0) - cy - PZ * 0.8 + T * 0.02));
     }
     // 主角
-    if (HERO) { if (hero.hurtT > 0) ctx.filter = 'brightness(1.8)'; HERO.draw(ctx, ox + hero.x, hero.y - cy - T * 0.05, { scale: T / 118, flipX: hero.face < 0 }); if (hero.hurtT > 0) ctx.filter = 'none'; }
+    if (HERO) { if (hero.hurtT > 0) ctx.filter = 'brightness(1.8)'; HERO.draw(ctx, ox + hero.x, hero.y + (hero.vo || 0) - cy + T * 0.01, { scale: T / 118, flipX: hero.face < 0 }); if (hero.hurtT > 0) ctx.filter = 'none'; }
+    // 碎土块
+    for (const b of bits) { const z = b.im.width * b.s, a = b.t > 0.5 ? Math.max(0, 1 - (b.t - 0.5) / 0.25) : 1; ctx.globalAlpha = a; ctx.save(); ctx.translate(Math.round(ox + b.x), Math.round(b.y - cy)); ctx.rotate(b.rot); ctx.drawImage(b.im, -z / 2, -z / 2, z, z); ctx.restore(); }
+    ctx.globalAlpha = 1;
     // 特效
     for (const f of fx) { const v = A.VFX[f.k], i = Math.min(v[0] - 1, Math.floor(f.t * v[3])), w = v[1] * f.sc, h = v[2] * f.sc; ctx.drawImage(A.img[f.k], i * v[1], 0, v[1], v[2], Math.round(ox + f.x - w / 2), Math.round(f.y - cy - h / 2), w, h); }
+    // 光照：环境光 + 光源（道具、主角身上的光）；乘整个场景，界面类的东西画在后面
+    const K = 80 / T, lights = TERRAIN.propLights(time);
+    lights.push({ x: hero.x * K, y: (hero.y + (hero.vo || 0)) * K - 40, r: 250, k: 0.75, c: [1.0, 0.9, 0.74] });
+    TERRAIN.drawLight(ctx, cy, ox, VW, VH, lights, time);
+    // 怪物血条
+    for (const m of R.mons) {
+      if (m.dead || m.hp >= m.max || m.boss || m.sy === undefined) continue;
+      const x = ox + (m.c + 0.5) * T, y = m.sy, w = T * 0.7, h = Math.max(3, T * 0.07), bx = Math.round(x - w / 2), by = Math.round(y - T * 0.98);
+      ctx.fillStyle = 'rgba(20,10,30,0.8)'; ctx.fillRect(bx - 1, by - 1, w + 2, h + 2); ctx.fillStyle = '#ff5a4d'; ctx.fillRect(bx, by, Math.round(w * Math.max(0, m.hp / m.max)), h);
+    }
     // 掉落
     for (const p of drops) { if (p.t < 0) continue; const z = T * 0.34; ctx.drawImage(A.img[p.kind], Math.round(ox + p.x - z / 2), Math.round(p.y - cy - z / 2), z, z); }
     // 数字
@@ -400,7 +413,6 @@
       ctx.lineWidth = Math.max(3, fs * 0.22); ctx.strokeStyle = '#2a1436'; ctx.strokeText(n.text, x, y); ctx.fillStyle = n.col; ctx.fillText(n.text, x, y);
     }
     ctx.globalAlpha = 1;
-    // 越深越暗的边角压暗
     if (ctx.__end) ctx.__end();
   }
 
@@ -435,7 +447,8 @@
     const off = G.offline(); resize();
     // 双击 index.html（file://）时 WebGL 读不了本地图片，自动退回 Canvas 2D；放到网站上才走 WebGL
     ctx = (window.PIXICTX && location.protocol !== 'file:') ? window.PIXICTX.create(cv) : cv.getContext('2d');
-    await A.load(); A.bake(T);
+    TERRAIN.init({ cell: (c, r) => cell(c, r), stageOf: r => B.stageOf(r) });
+    await Promise.all([A.load(), TERRAIN.load()]); A.bake(T); TERRAIN.ready = true; TERRAIN.resize(T, OX, VW);
     HERO = Hero.create(window.HERO_DATA, 'assets/hero/', { Eye: 1, Hair: 1, Chest: 10, Pickaxe: 0 }, { Hair: [0.55, 0.33, 0.2] }); heroLook(false); await HERO.ready();
     MLIB = await EnemyMonsters.load(window.ENEMY_MONSTER_DATA, 'assets/monsters/');
     petCv = document.createElement('canvas'); petCv.width = petCv.height = Math.ceil(T * 1.6); petG = petCv.getContext('2d'); SR = new spine.SkeletonRenderer(petG); SR.triangleRendering = true;
