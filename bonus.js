@@ -8,7 +8,7 @@
       被链接方（低稀有度）属性颜色的能量源源不断地从低稀有度流向高稀有度。只是表现，数值效果待定。
    79 版（用户 2026-11-15 在演示页 _dev\链子对比\链接特效设计.html 定稿）：链子从高稀有度身上伸出（力从发出端传到末端、整条甩动后平静），
       弹射改成程序画的 3D 能量球（角色身上 → 对方加成条，抛物线 + 斜镜头透视、拖尾、落下融化），加成条白闪鼓起 + 火花。参数见 docs/vfx-design.md「78 版」节末。
-   顺序（84 版改）：先所有弹球（各邻居同时 弹出 → 弹回），全部落下后 3 连依次点亮，3 连结束后才甩触手链接。
+   顺序（84 版改）：先所有弹球（各邻居同时 弹出 → 弹回），全部落下后 3 连依次点亮，3 连结束后才甩触手链接；86 版起链接一条一条来，顺序 上 → 下 → 左 → 右。
    画法全部是贴图（属性弹序列帧、胶囊 / 圆点小图旋转拉伸），不画会变形的路径——不增加每帧的光栅重画和贴图上传。
    ===================================================================== */
 const BONUS = (()=>{
@@ -56,11 +56,15 @@ const BONUS = (()=>{
     if(same.length) t+=2*(T.fly+T.gap);
     // ② 3 连：从 P 经每个同组邻居往外依次点亮（多条分支同时传）
     if(grp){ let dmax=0; for(const n of same) if(grp.members.includes(n)) dmax=Math.max(dmax, chain(P, n, grp, t, done)); t+=dmax; }
-    // ③ 稀有度链接
-    for(const n of ns) if(linkable(P,n)){
-      const hi=rankOf(P)>rankOf(n)?P:n, lo=hi===P?n:P, k=idOf(hi)+'>'+idOf(lo);
-      pending.set(k, clock+t+0.5); links.delete(k);
-      at(t, ()=>{ pending.delete(k); if(alive(hi)&&alive(lo)&&adj(hi,lo)) whip(hi,lo,k); });
+    // ③ 稀有度链接：86 版（用户 2026-11-15）改成一条一条依次甩，顺序按屏幕方向 上 → 下 → 左 → 右（按画面位置判断，横竖屏都对）；
+    //    前一条碰到对方（TE）后再隔 LINK_GAP 甩下一条
+    const f0=ftOf(P), dirRank = n => { const f=ftOf(n), dx=f.x-f0.x, dy=f.y-f0.y; return Math.abs(dy)>=Math.abs(dx) ? (dy<0?0:1) : (dx<0?2:3); };
+    let tk=t;
+    for(const n of ns.filter(n=>linkable(P,n)).sort((a,b)=>dirRank(a)-dirRank(b))){
+      const hi=rankOf(P)>rankOf(n)?P:n, lo=hi===P?n:P, k=idOf(hi)+'>'+idOf(lo), tt=tk;
+      pending.set(k, clock+tt+0.5); links.delete(k);
+      at(tt, ()=>{ pending.delete(k); if(alive(hi)&&alive(lo)&&adj(hi,lo)) whip(hi,lo,k); });
+      tk+=TE+LINK_GAP;
     }
   }
   function launch(a, b){
@@ -264,7 +268,7 @@ const BONUS = (()=>{
   // 力的传导：链子上每一点取发出端「早 0.32×位置」秒的状态，波从发出端传到末端，停也从发出端先停；
   // 伸出 / 剧烈时整条加宽发光（圆形柔光点沿路径盖章）+ 末端光头；平静后是细柔光带 + 沿线流动的能量（低稀有度 → 高稀有度）。
   // 所有渐变只烘一次成小图，每帧只做平移 / 缩放 / 旋转。
-  const NB=32, HB=0.33, TE=0.3, TC=1.0, DLY=0.32;   // HB：两端挂在身体正中（脚下往上 0.33 格）；TE：伸到对方用时；TC：剧烈 → 平静
+  const NB=32, HB=0.33, TE=0.3, TC=1.0, DLY=0.32, LINK_GAP=0.15;   // HB：两端挂在身体正中（脚下往上 0.33 格）；TE：伸到对方用时；TC：剧烈 → 平静
   const LK={cw:0.060, xw:1.0, gw:1.5, gb:0.14, hd:0.28, wa:0.19, ew:1.25, el:0.48};   // 81 版：用户 2026-11-15 16:39 在演示页定：实心 0.035→0.060、能量宽 1.3→1.25、能量长 0.34→0.48、球直径 0.10→0.13   // 实心宽 / 伸出时实心加粗 / 光晕宽 / 光晕亮度 / 末端光头 / 甩动幅度 / 能量宽（倍）/ 能量长（格）
   const XS=new Map(), SOFT=new Map();
   const rgbOf = c => { const n=parseInt(c.slice(1),16); return [n>>16,(n>>8)&255,n&255]; };
