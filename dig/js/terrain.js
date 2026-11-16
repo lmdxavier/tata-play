@@ -67,7 +67,7 @@
     if (c < 0 || c >= COLS) return 1;
     const k = G.cell(c, r), t = k.t;
     if (t === 0) return 0;
-    if ((t === 1 || t === 2) && k.hp < k.max) { const q = Math.max(0, k.hp / k.max); return TH + 0.1 + (1 - TH - 0.1) * Math.pow(q, 0.85); }
+    if (t !== 3 && k.hp < k.max) { const q = Math.max(0, k.hp / k.max); return TH + 0.1 + (1 - TH - 0.1) * Math.pow(q, 0.85); }
     return 1;
   }
   function cellMat(c, r) {
@@ -131,7 +131,7 @@
       const th = RIM_T[n] ? RIM_T[n] * 4 : Math.round(TOPSTRIP[n].h0 * TOPSTRIP[n].s * 4);
       RIMPXF[n] = prefilter(im, th);
     }));
-    await Promise.all(['l1_wall', 'l2_prop01', 'l3_prop02', 'l4_stones', 'l5_crystals'].map(async n => { IMG[n] = await load('assets/bg/' + n + '.png'); }));
+    await Promise.all(['l1_wall', 'l2_prop01', 'l3_prop02', 'l4_stones', 'l5_crystals'].map(async n => { IMG[n] = await load('assets/bg/' + n + '.png?v=3'); }));
     await Promise.all(Object.values(PROP).map(async p => { if (!IMG[p.img]) IMG[p.img] = await load('assets/props/' + p.img + '.png'); }));
     IMG.glow = await load('assets/ui/glow_white.png');
   };
@@ -319,10 +319,11 @@
     const cnt = new Map();
     for (let j = j0; j < j0 + nj; j++) for (let i = i0; i < i0 + ni; i++) { const m = at(i, j); if (m) cnt.set(m, (cnt.get(m) || 0) + 1); }
     if (!cnt.size) { for (const ch of targets) clipTo(ch, (g, cx0, cy0, x, y, w, h) => g.clearRect(x - cx0, y - cy0, w, h)); return; }
-    let base = 0, bc = -1; for (const [m, c] of cnt) if (c > bc) { bc = c; base = m; }
+    // 底色按材质编号固定取最小的（土 < 叉 < 门），不按区域里谁多：否则挖掉一格后底色可能翻转，整块重画区域里的交界都跟着变形
+    const mats = [...cnt.keys()].sort((a, b) => a - b), base = mats[0];
     const FU = fieldBlock(i0, j0, ni, nj, m => m > 0), pu = new Path2D(); contour(FU, pu);
     const sec = [];
-    for (const m of cnt.keys()) { if (m === base) continue; const Fm = fieldBlock(i0, j0, ni, nj, q => q === m), pm = new Path2D(); contour(Fm, pm); sec.push({ m, path: pm, rim: MAT[m].rim }); }
+    for (const m of mats) { if (m === base) continue; const Fm = fieldBlock(i0, j0, ni, nj, q => q === m), pm = new Path2D(); contour(Fm, pm); sec.push({ m, path: pm, rim: MAT[m].rim }); }
     PF.fill += performance.now() - t0; yield; let t1 = performance.now();
     // 2) 距离场（1 像素 = 1 世界像素）、最近轮廓点（半分辨率）
     const mw = wx1 - wx0, mh = wy1 - wy0, hw = mw >> 1, hh = mh >> 1, N = mw * mh;
@@ -365,7 +366,7 @@
         const cov = dk >= 2 ? 1 : half(mU, k, fxx, fyy, mw) / 255;
         if (cov <= 0.01) continue;
         const hx = Math.min(hw - 2, (mxf / 2) | 0), hy = Math.min(hh - 2, (myf / 2) | 0), hfx = mxf / 2 - hx, hfy = myf / 2 - hy, hi = hy * hw + hx;
-        const sk = site[(iy >> 1) * hw + (ix >> 1)]; if (sk < 0) continue;
+        const sk = site[(iy >> 1) * hw + (ix >> 1)]; if (sk < 0 && !si) continue;   // 叉和土的交界离空气远时也要画边（以前这里跳过，边框有没有取决于重画区域大小）
         let d = half(dU, k, fxx, fyy, mw), name, secEdge = false;
         if (d < 5) {   // 贴近边缘：用平滑场估算的距离（斜边不起锯齿），往里渐变回距离场
           const fv = fieldAt(FU, wx, wy), gr = gradAt(FU, wx, wy), gl = Math.hypot(gr[0], gr[1]) / (2 * SUB);
@@ -501,15 +502,15 @@
   function buildProps(k) {
     if (buildProps.done.has(k)) return; buildProps.done.add(k);
     for (let r = k * 4; r < k * 4 + 4; r++) {
-      const s = stageOf(r), st = STAGES[s], l = r - s * 20;
+      const s = stageOf(r), st = STAGES[s], l = r - s * window.BAL.AREA;
       for (let c = 0; c < COLS; c++) {
         const cell = G.cell(c, r); if (cell.t !== 0 || r < 1) continue;
         const below = G.cell(c, r + 1);
-        if (below.t === 1 && hash2(c, r, 3) < 0.75) {   // 怪物洞地面：蘑菇 / 水晶 / 火堆等
+        if ((below.t === 1 || below.t === 4) && !cell.web && !cell.mon && hash2(c, r, 3) < 0.75) {   // 怪物洞地面：蘑菇 / 水晶 / 火堆等
           const kind = st.props[(hash2(c, r, 4) * st.props.length) | 0], side = hash2(c, r, 5) < 0.5 ? -1 : 1;
           TR.props.push({ kind, c, r: r + 1, on: 'floor', x: (c + 0.5 + side * 0.3) * CELL, y: (r + 1) * CELL, ph: hash2(c, r, 6) * 10 });
         }
-        if (l === 18 && (c === 2 || c === 4)) {   // 守卫房两侧：火把
+        if (l === window.BAL.AREA - 2 && (c === 2 || c === 4)) {   // 守卫房两侧：火把
           TR.props.push({ kind: 'fire', c: c === 2 ? 1 : 5, r, on: 'wall', x: (c === 2 ? 2 : 5) * CELL + (c === 2 ? 8 : -8), y: (r + 0.62) * CELL, ph: c, torch: true });
         }
       }
@@ -533,6 +534,7 @@
   };
 
   /* ---------- 远景：洞穴剪影（灰度）× 阶段颜色，竖向视差 ---------- */
+  const BG_TINT = 0.35;   // 阶段色调强度（0 = 原图颜色）
   const BGL = [['l1_wall', 0.06, 1.0], ['l2_prop01', 0.16, 0.95], ['l3_prop02', 0.28, 0.9], ['l5_crystals', 0.36, 0.85], ['l4_stones', 0.44, 0.9]];
   function stageMix(yw, key) {   // 跨阶段时颜色渐变（门那一行前后各 2 行）
     const r = yw / CELL, s = stageOf(Math.floor(r)), l = r - s * 20;
@@ -542,7 +544,7 @@
   TR.drawBG = function (ctx, camY, VW, VH) {
     const gy = Math.round(-camY); if (gy >= VH) return;
     const top = Math.max(0, gy), H = VH - top;
-    ctx.fillStyle = '#7d7d7d'; ctx.fillRect(0, top, VW, H);
+    ctx.fillStyle = '#16304c'; ctx.fillRect(0, top, VW, H);   // dig 的洞穴底色
     BGL.forEach(([n, f, sc], li) => {
       const im = IMG[n]; if (!im) return;
       const w = VW * 1.5 * sc, h = w * im.height / im.width;
@@ -555,7 +557,8 @@
     });
     const c = stageMix(camY / CQ + VH / CQ * 0.5, 'bg');
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = `rgb(${Math.min(255, c[0] * 180) | 0},${Math.min(255, c[1] * 180) | 0},${Math.min(255, c[2] * 180) | 0})`; ctx.fillRect(0, top, VW, H);
+    const cm = Math.max(c[0], c[1], c[2]), tint = v => Math.round(255 * (1 - BG_TINT + BG_TINT * v / cm));   // 远景保留 dig 原图的颜色，阶段色只轻叠一层
+    ctx.fillStyle = `rgb(${tint(c[0])},${tint(c[1])},${tint(c[2])})`; ctx.fillRect(0, top, VW, H);
     ctx.globalCompositeOperation = 'source-over';
     if (gy > 0) { const gr = ctx.createLinearGradient(0, gy, 0, gy + 60 * CQ); gr.addColorStop(0, 'rgba(10,6,18,0.6)'); gr.addColorStop(1, 'rgba(10,6,18,0)'); ctx.fillStyle = gr; ctx.fillRect(0, gy, VW, 60 * CQ); }
   };

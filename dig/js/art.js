@@ -5,7 +5,7 @@
   const IMGS = {
     sky: 'bg/map02_06.png', hill1: 'bg/map01_11.png', hill2: 'bg/map01_09.png', bush: 'bg/map01_07.png', market: 'props/Market_01.png',
     puff: 'vfx/puff.png', coinburst: 'vfx/coin_burst_gold.png', ring: 'vfx/ring_shockwave_white.png', star: 'vfx/star_burst_gold.png', smoke: 'vfx/smoke.png',
-    coin: 'ui/i_coin.png', gem: 'ui/i_gem_1_purple.png', lock: 'ui/icon_color_lock_m.png', glow: 'ui/glow_white.png',
+    coin: 'ui/i_coin.png', gem: 'ui/i_gem_1_purple.png', lock: 'ui/icon_color_lock_m.png', glow: 'ui/glow_white.png', arrow: 'ui/icon_white_arrow_back.png', chest: 'icons/Item_Chest_01_Wood.png',
   };
   A.VFX = { puff: [18, 160, 135, 30], coinburst: [30, 128, 128, 30], ring: [16, 128, 128, 30], star: [24, 128, 128, 30], smoke: [10, 160, 154, 20] };
   A.load = function () {
