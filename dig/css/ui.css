@@ -18,7 +18,11 @@ button:active { transform: scale(.95); }
 .res { display: flex; gap: .5rem; align-items: center; }
 .pill { position: relative; height: 1.7rem; min-width: 5.4rem; padding: 0 .7rem 0 2rem; display: flex; align-items: center; font-size: .95rem; border-style: solid; border-width: 0 1.06rem; border-image: url('../assets/ui/status_frame_k.png') 0 19 fill / 0 1.06rem stretch; }
 .pill img { position: absolute; left: -.15rem; top: 50%; width: 1.9rem; height: 1.9rem; transform: translateY(-50%); object-fit: contain; }
+/* v0.18 修（小问题线）：挖矿时深度原来是裸字，刚下矿时镜头里还有技能屋屋顶的紫色书，“1 米”压在书上看不清 → 挖矿时（.res.run）深度用和金币 / 宝石同一张底框（两端尖角收窄到 .6rem，少占横向空间）。
+   第一排放不下时只让“收益×2”小牌折行，金币 / 宝石 / 深度不缩（原来金币会被挤成“12.3 / 万”两行）。小镇里的“最深 N 米”保持原样（加底框第一排放不下）。 */
 .depth { margin-left: auto; font-size: .95rem; }
+.res.run .depth { flex-shrink: 0; height: 1.7rem; padding: 0 .05rem; display: flex; align-items: center; white-space: nowrap; font-size: .9rem; border-style: solid; border-width: 0 .6rem; border-image: url('../assets/ui/status_frame_k.png') 0 19 fill / 0 .6rem stretch; } .res.run .depth:empty { display: none; }
+.res.run > .pill { flex-shrink: 0; }
 .bars { margin-top: .45rem; display: flex; flex-direction: column; gap: .3rem; width: 62%; }
 .bar { position: relative; height: 1.05rem; margin-left: 1.5rem; border-radius: .5rem; background: #1b1424; border: .12rem solid #0c0712; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .4rem; background: linear-gradient(#ffcf5a, #f08a1c); }
@@ -505,3 +509,152 @@ button:active { transform: scale(.95); }
 /* v0.17（用户 17:10）：挖矿时「回地面」改成和「开始挖掘」同色系同风格的棕色（亮棕渐变面 + 深棕侧面 + 粗深描边 + 奶油字），按钮小所以侧面和描边按比例收窄 */
 #back { color: #fff1cc; border: .14rem solid #24140a; border-radius: .9rem; background: linear-gradient(#c88a52 0 42%, #a8703f 42%, #84522c); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .22rem 0 #5a3519, 0 .22rem 0 .14rem #24140a, 0 .4rem .55rem rgba(20, 8, 2, .5); text-shadow: 0 .09rem 0 #24140a, .06rem 0 0 #24140a, -.06rem 0 0 #24140a, 0 -.06rem 0 #24140a; }
 #back:active { transform: translateY(.14rem); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .08rem 0 #5a3519, 0 .08rem 0 .14rem #24140a, 0 .15rem .25rem rgba(20, 8, 2, .5); }
+
+/* ===================== v0.18 面板统一：其余面板 / 弹窗照 v0.16 铁匠铺（用户认可的模板） =====================
+   通用 class（后续面板直接用）：
+   .kboard  米白→金黄渐变板（暖色图标底纹 + 深棕粗描边 + 内阴影）；#panel 里除铁匠铺 / 技能屋外的 .pbody 自动是这块板，大小跟内容走，放不下才在板里滚动
+   .kcard   板上的卡片（奶油→金黄渐变 + 深棕粗描边 + 底部投影）；#panel 的 .card / .cell / .day 自动套用
+   .kslot   深色凹槽（和铁匠铺装备槽同款），放头像 / 图标
+   .koct    八角属性框（和铁匠铺属性卡同款）
+   .kbtn    棕色按钮（#go 那套）；#panel / #pop 的 .buy 自动套用。.lite = 奶油色次要按钮，.no = 灰棕不可点状态，.done = 只有字
+   .tabs    贴在板上的页签（和铁匠铺页签同款），后面紧跟 .pbody / .kboard
+   滚动条：bindScrollThumb(滚动区) → 滑动时右边出现棕色圆头滑块 .sthumb */
+:root { --k-ink: #24140a; --k-ink2: #3a2412; --k-cream: #fff1cc; --k-txt: #4a2c14; --k-sub: #85613e; --k-ok: #2f8a22; --k-bad: #c8321e;
+  --k-bg: radial-gradient(ellipse at 50% 18%, rgba(255, 200, 130, .22), rgba(0, 0, 0, 0) 60%), url('../assets/ui/afk/pattern_brown.png') 0 0 / 256px 256px repeat, linear-gradient(#6e4b33, #553826 55%, #3e281a);
+  --k-board: url('../assets/ui/afk/pattern_warm.png') 0 0 / 256px 256px repeat, linear-gradient(#fff4dc, #f8e3b6 55%, #ecc98a);
+  --k-card: linear-gradient(#fffaf0, #fbecc8 60%, #f3d9a4);
+  --k-slot: radial-gradient(circle at 50% 40%, #6a4224, #3a2212);
+  --k-stroke: 0 .1rem 0 #24140a, .06rem 0 0 #24140a, -.06rem 0 0 #24140a, 0 -.06rem 0 #24140a; }
+/* 外层：暖棕图标底纹背景；标题奶油字深描边；关闭 = 棕色圆钮 */
+#panel { color: var(--k-cream); background: var(--k-bg); }
+#panel .t, #pop .t { text-shadow: var(--k-stroke); }
+#panel .phead h2 { flex: none; margin: 0 auto 0 .3rem; font-size: 1.35rem; font-weight: 900; color: var(--k-cream); }
+#panel .close { width: 2.5rem; height: 2.3rem; border-radius: 50%; background: radial-gradient(circle at 50% 35%, #c27a44, #7a4520 70%); border: .16rem solid var(--k-ink); box-shadow: inset 0 .16rem 0 rgba(255, 220, 170, .4), 0 .22rem 0 rgba(30, 15, 5, .55); }
+/* 板 */
+.kboard, #panel:not([data-tab="shop"]):not([data-tab="skill"]) > .pbody { color: var(--k-txt); background: var(--k-board); border: .16rem solid var(--k-ink2); border-radius: 1rem; box-shadow: inset 0 .3rem .5rem rgba(150, 90, 30, .22), 0 .3rem 0 rgba(20, 8, 2, .45); }
+#panel:not([data-tab="shop"]):not([data-tab="skill"]) > .pbody { flex: 0 1 auto; padding: .7rem .65rem .8rem; scrollbar-width: none; }
+#panel:not([data-tab="shop"]):not([data-tab="skill"]) > .pbody::-webkit-scrollbar { display: none; }
+.kboard .t, #panel > .pbody .t { color: var(--k-txt); text-shadow: none; }
+/* 页签贴在板上：没选 = 棕色渐变，选中 = 和板同色；都有粗深棕描边 */
+#panel:not([data-tab="shop"]) .tabs { gap: .25rem; margin: 0; padding: 0 .35rem; flex: none; }
+#panel:not([data-tab="shop"]) .tab { height: 2.3rem; color: #f8e3b9; border-radius: .8rem .8rem 0 0; background: linear-gradient(#b07a48, #84522c); border: .16rem solid var(--k-ink2); border-bottom: 0; box-shadow: inset 0 .14rem 0 rgba(255, 220, 170, .3); text-shadow: 0 .08rem 0 var(--k-ink2); }
+#panel:not([data-tab="shop"]) .tab.on { position: relative; z-index: 1; height: 2.66rem; margin-top: -.2rem; margin-bottom: -.16rem; color: var(--k-txt); background: #fff4dc; text-shadow: none; box-shadow: none; }
+#panel .tabs + .pbody, .tabs + .kboard { border-top-left-radius: 0; border-top-right-radius: 1rem; }
+/* 卡片 */
+.kcard, #panel .card, #panel .cell, #panel .day { color: var(--k-txt); background: var(--k-card); border: .16rem solid var(--k-ink2); border-image: none; border-radius: .8rem; box-shadow: inset 0 .12rem 0 rgba(255, 255, 255, .8), 0 .22rem 0 rgba(60, 30, 10, .35); }
+#panel .card { gap: .6rem; margin-bottom: .6rem; padding: .5rem .55rem; }
+#panel .card:last-child { margin-bottom: 0; }
+#panel .card .mid { margin: 0; }
+#panel .card .mid b { color: var(--k-txt); font-weight: 900; } #panel .card .mid b small { color: var(--k-sub); font-size: .72rem; }
+#panel .card .mid span { color: var(--k-sub); }
+#panel .card .src { display: flex !important; align-items: center; gap: .2rem; margin-top: .15rem; color: var(--k-txt) !important; }
+#panel .card .src img { width: 1rem; height: 1rem; object-fit: contain; }
+#panel .card.got { opacity: .62; }
+/* 深色凹槽 */
+.kslot, #panel .card .ic { position: relative; display: flex; align-items: center; justify-content: center; border-radius: .9rem; background: var(--k-slot); border: .16rem solid var(--k-ink); box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 .12rem 0 rgba(255, 225, 170, .28); }
+#panel .card .ic { margin: 0; width: 3.4rem; height: 3.4rem; }
+#panel .card.pet .ic { width: 4rem; height: 4rem; }
+#panel .vipi b { color: var(--k-cream) !important; text-shadow: var(--k-stroke) !important; right: .2rem; bottom: .05rem; }
+/* 八角框（铁匠铺属性卡同款） */
+.koct { position: relative; isolation: isolate; padding: .45rem .5rem .4rem; filter: drop-shadow(0 4px 5px rgba(30, 12, 2, .55)); color: var(--k-txt); }
+.koct::before, .koct::after { content: ''; position: absolute; z-index: -1; pointer-events: none; }
+.koct::before { inset: 0; background: var(--k-ink2); clip-path: polygon(.5rem 0, calc(100% - .5rem) 0, 100% .5rem, 100% calc(100% - .5rem), calc(100% - .5rem) 100%, .5rem 100%, 0 calc(100% - .5rem), 0 .5rem); }
+.koct::after { inset: .16rem; background: radial-gradient(ellipse farthest-corner at 50% 42%, #fffbe8 0%, #f6dda4 42%, #e0aa62 78%, #b77a3c 100%); clip-path: polygon(.4rem 0, calc(100% - .4rem) 0, 100% .4rem, 100% calc(100% - .4rem), calc(100% - .4rem) 100%, .4rem 100%, 0 calc(100% - .4rem), 0 .4rem); }
+/* 按钮：棕色（#go 那套）；次要 = 奶油；不可点 = 灰棕 */
+.kbtn, #panel:not([data-tab="skill"]) .buy, #pop .buy { color: var(--k-cream); border: .15rem solid var(--k-ink); border-image: none; border-radius: .8rem; padding: .2rem .7rem; background: linear-gradient(#c88a52 0 42%, #a8703f 42%, #84522c); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .22rem 0 #5a3519, 0 .22rem 0 .15rem var(--k-ink), 0 .4rem .55rem rgba(20, 8, 2, .45); text-shadow: var(--k-stroke); }
+#panel:not([data-tab="skill"]) .buy:active, #pop .buy:active { transform: translateY(.14rem); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .08rem 0 #5a3519, 0 .08rem 0 .15rem var(--k-ink), 0 .15rem .25rem rgba(20, 8, 2, .45); }
+.kbtn.lite, #panel .buy.lite, #pop .buy.lite { color: var(--k-txt); text-shadow: none; background: linear-gradient(#fffaf0 0 42%, #fbe6b8 42%, #efcf92); box-shadow: inset 0 .13rem 0 rgba(255, 255, 255, .8), 0 .22rem 0 #b98a52, 0 .22rem 0 .15rem var(--k-ink), 0 .4rem .55rem rgba(20, 8, 2, .35); }
+.kbtn.no, #panel:not([data-tab="skill"]) .buy.no, #pop .buy.no { color: #fff8e8; background: linear-gradient(#e2d2b4 0 42%, #c9b394 42%, #b39c7a); box-shadow: inset 0 .13rem 0 rgba(255, 255, 255, .5), 0 .22rem 0 #8a7252, 0 .22rem 0 .15rem var(--k-ink), 0 .4rem .55rem rgba(20, 8, 2, .3); text-shadow: 0 .08rem 0 #5a4028, .06rem 0 0 #5a4028, -.06rem 0 0 #5a4028, 0 -.06rem 0 #5a4028; }
+.kbtn.done, #panel:not([data-tab="skill"]) .buy.done { background: none; border: 0; box-shadow: none; color: var(--k-ok); text-shadow: none; }
+#panel .buy[disabled], #pop .buy[disabled] { filter: grayscale(.85) brightness(.85); }
+#panel .buy small, #pop .buy small { color: #ffe2b0; font-size: .62rem; }
+#panel .buy.lite small, #pop .buy.lite small { color: var(--k-sub); }
+#panel .card .buy { margin: 0; min-width: 4.6rem; height: 2.5rem; }
+#panel .wide { width: 100%; margin: 0 0 .7rem !important; height: 2.9rem !important; font-size: .95rem; }
+#panel .wide:last-child { margin-bottom: 0 !important; }
+#panel .vipnow { color: var(--k-txt); text-shadow: none; }
+/* 图鉴 */
+#panel .grid { gap: .6rem; }
+#panel .cell { padding: .5rem .35rem .55rem; }
+#panel .cell .kslot { width: 4.6rem; height: 4.6rem; margin: 0 auto .3rem; }
+#panel .cell canvas, #panel .cell img.big { width: 88%; height: 88%; margin: 0; }
+#panel .cell.mat img.big { width: 70%; height: 70%; margin: 0; }
+#panel .cell b { color: var(--k-txt); font-weight: 900; } #panel .cell span { color: var(--k-sub); }
+#panel .cell .drop { color: var(--k-txt) !important; }
+#panel .cell.unk { opacity: .8; }
+/* 签到 */
+#panel .days { gap: .5rem; margin-bottom: .7rem; }
+#panel .days:last-child { margin-bottom: 0; }
+#panel .day { padding: .45rem .2rem .5rem; color: var(--k-sub); }
+#panel .day b { color: var(--k-txt); font-weight: 900; }
+#panel .day.now { box-shadow: 0 0 0 .16rem #f6a12a inset, 0 0 .55rem rgba(246, 161, 42, .75), 0 .22rem 0 rgba(60, 30, 10, .35); }
+#panel .day.got { opacity: .55; }
+#panel .day .ok { color: var(--k-ok); text-shadow: 0 .06rem 0 #fff; }
+/* 弹窗：外框 = 面板外层的暖棕底纹 + 深描边，标题奶油字；内容和按钮都放在米白→金黄板上 */
+#pop { background: rgba(20, 10, 4, .7); }
+.box { width: auto; min-width: 17rem; max-width: 88%; padding: .75rem .7rem .8rem; text-align: center; color: var(--k-cream); background: var(--k-bg); border: .18rem solid var(--k-ink); border-radius: 1.1rem; box-shadow: inset 0 .14rem 0 rgba(255, 220, 170, .25), 0 .5rem 1rem rgba(10, 4, 0, .55); }
+.box h2 { margin: 0 0 .55rem; font-size: 1.3rem; font-weight: 900; color: var(--k-cream); }
+.box .kboard.in { padding: .7rem .7rem .85rem; }
+.box p { color: var(--k-txt); }
+.box .gain { color: var(--k-txt); text-shadow: none; } .box .gain s { color: var(--k-bad); }
+.box .gmat { color: var(--k-txt); text-shadow: none; }
+.box .bst { color: #b0601a !important; }
+.box .btns { margin-top: .8rem; }
+.btns .buy { min-width: 6.4rem; height: 3rem; padding: .15rem .8rem; white-space: nowrap; }
+.box.src .row { display: flex; justify-content: center; gap: .6rem; margin-bottom: .4rem; }
+.box.src .kslot { width: 4.4rem; height: 4.4rem; }
+.box.src .mi { width: 70%; height: 70%; object-fit: contain; } .box.src canvas { width: 90%; height: 90%; }
+.box.src .where { color: var(--k-sub); }
+.adbox .prog { height: 1.1rem; margin: .2rem 0; background: var(--k-slot); border: .14rem solid var(--k-ink); } .adbox .prog i { background: linear-gradient(#ffdc72, #f6a12a 58%, #d4721a); }
+/* 领取动画：标题奶油→金字深描边，数字奶油字深描边 */
+.claim h2 { color: #ffe08a; }
+.claim .ci b, .claim .tapon { color: var(--k-cream); }
+/* 提示条：和建筑名牌同款的棕色牌子 */
+#toast { padding: .45rem 1.1rem .5rem; border-radius: .8rem; color: var(--k-cream); background: linear-gradient(#8a5a32, #5a3519); border: .16rem solid var(--k-ink); box-shadow: inset 0 .13rem 0 rgba(255, 220, 170, .35), 0 .25rem .4rem rgba(20, 8, 2, .5); text-shadow: var(--k-stroke); }
+#pop .kboard .t, #panel .kboard .t, #panel > .pbody .t { color: var(--k-txt); text-shadow: none; }
+#panel .kslot .t, #pop .kslot .t, #panel .buy.t, #pop .buy.t { color: var(--k-cream); text-shadow: var(--k-stroke); }
+#panel .buy.lite.t, #pop .buy.lite.t, #panel .buy.done.t { color: var(--k-txt); text-shadow: none; } #panel .buy.done.t { color: var(--k-ok); }
+/* 没解锁的剪影：深色凹槽上用浅棕剪影，看得清轮廓 */
+#panel .kslot canvas, #panel .kslot img { position: relative; }
+#panel .unk .kslot canvas, #panel .unk .kslot img.big { filter: brightness(0) invert(.86) sepia(.55); opacity: .4; }
+#panel .cell.unk { opacity: 1; } #panel .cell.unk b, #panel .cell.unk span { opacity: .75; }
+/* VIP 礼物选部位：深色凹槽 */
+#panel:not([data-tab="shop"]) .slots.gift { gap: .6rem; margin: 0 0 .7rem; }
+#panel:not([data-tab="shop"]) .slot { width: 3.9rem; height: 3.9rem; border-radius: .9rem; background: var(--k-slot); border: .16rem solid var(--k-ink); box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 .12rem 0 rgba(255, 225, 170, .28); }
+#panel:not([data-tab="shop"]) .slot small { bottom: -1.05rem; color: var(--k-txt); text-shadow: none; white-space: nowrap; }
+#panel .phead, #panel .tabs { flex: none; }   /* 内容多时标题行不被压扁，各面板标题同一高度 */
+#panel:not([data-tab="shop"]) .slots.gift { margin-bottom: 1.6rem; }
+#panel .phead h2 { display: flex; align-items: center; height: 1.94rem; }   /* 纯拉丁字标题（VIP）的行高比中文矮，固定高度居中，和中文标题对齐；中文标题行高本来就是这么高，铁匠铺不动 */
+/* v0.18（用户 18:14 看到小镇顶栏「收益×2 剩 5 趟」「最深 37 米」「5.43 万」都挤成两行）：牌子只留图标 + ×2，剩余趟数放右上角标；顶栏数字一律不折行 */
+.res .pill span, .res .depth { white-space: nowrap; }
+.res > .pill, .res > .boost { flex-shrink: 0; }
+.boost { position: relative; font-size: .85rem; padding: .1rem .55rem .1rem .2rem; }
+.boost i.n { position: absolute; top: -.35rem; right: -.35rem; min-width: 1rem; height: 1rem; padding: 0 .2rem; border-radius: .5rem; background: #e03a2f; color: #fff; font-size: .62rem; font-style: normal; line-height: 1rem; text-align: center; box-shadow: 0 0 0 .1rem #24140a; }
+/* ---------- v0.18 VIP 与广告位（系统与数值 16 节）：沿用面板统一线的 .card / .kslot / .buy，只补进度条和灰按钮 ---------- */
+#panel .vipnow { text-align: left; font-size: inherit; margin-bottom: .6rem; }
+#panel .vipnow .mid b { font-size: 1.05rem; }
+#panel .vipnow .prog, .vipstreak .prog { height: 1.1rem; margin: .3rem 0 0; background: var(--k-slot); border: .14rem solid var(--k-ink); }
+#panel .vipnow .prog i, .vipstreak .prog i { background: linear-gradient(#ffdc72, #f6a12a 58%, #d4721a); }
+#panel .vipnow .prog span, .vipstreak .prog span { display: flex !important; align-items: center; justify-content: center; color: var(--k-cream) !important; text-shadow: var(--k-stroke) !important; font-size: .7rem; line-height: 1; }
+#panel .vipi canvas { width: 92%; height: 92%; }
+.side button.off { filter: grayscale(1) brightness(.78); }   /* 今天的广告宝箱用完 */
+
+/* v0.18 挖掘机制线：技能说明卡购买按钮里的材料（缺的标红，点了弹“去哪拿”） */
+.dcard .buy .skm { display: flex; gap: .25rem; justify-content: center; font-style: normal; font-size: .68rem; margin-top: .1rem; }
+.dcard .buy .skm .m { display: inline-flex; align-items: center; } .dcard .buy .skm img { width: .95rem; height: .95rem; margin-right: .05rem; }
+.dcard .buy .skm .lack { color: #ff5a4d; }
+
+/* ===== v0.18 修复 B（界面）===== */
+/* 弹窗层级：#pop 打开时整块挡住下面所有界面（.ui 默认 pointer-events:none，弹窗遮罩原来点得穿，能点到“开始挖掘”和侧边按钮） */
+#pop.on { pointer-events: auto; }
+/* 层级表（从下到上）：画布 → #shore 20 → 摇杆 22 → #panel 25 → #hud 30 → #auto 31 → 教程手势 / 材料飘字 34 → #pop 35 → #fade 40 → toast / 横幅 45 → 飞金币 60 */
+#tut { z-index: 34; } .matpop { z-index: 34; }
+/* 数字和单位不拆行（mulfix 包成 <nb>） */
+nb { white-space: nowrap; }
+/* 技能说明卡购买按钮里的材料：原来被 #panel[data-tab="skill"] .dcard span 盖成深棕 + 两行截断，缺的看不出红 */
+#panel[data-tab="skill"] .dcard .buy .skm .m { display: inline-flex; align-items: center; overflow: visible; -webkit-line-clamp: none; font-size: .74rem; line-height: 1; color: var(--k-cream); text-shadow: var(--k-stroke); }
+#panel[data-tab="skill"] .dcard .buy .skm .m.lack { color: #ff3a2a; text-shadow: 0 .07rem 0 #3a0e04, .07rem 0 0 #3a0e04, -.07rem 0 0 #3a0e04, 0 -.07rem 0 #3a0e04, 0 0 .2rem rgba(255, 240, 220, .9); }
+/* 签到：宠物那天用宠物头像（和 VIP 卡一致） */
+#panel .day canvas.si { width: 2.7rem; height: 2.7rem; margin: -.1rem auto -.2rem; }
+/* 图鉴：格子高度跟着自己的内容走，不被同一排更高的格子撑出空块 */
+#panel .grid { align-items: start; }

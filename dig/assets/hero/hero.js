@@ -93,6 +93,13 @@
       for (const a in this.anims) for (const t of this.anims[a].tracks) if (t.k === 'spr') for (const k of t.c) ids.add(k[1]);
       return Promise.all([...ids].map(id => image(this.base, id)._p));
     }
+    /** 只改这个实例的绘制层级（不动共用的 HERO_DATA）：orders = {节点名: SortingOrder}，传 {} 恢复素材原值 */
+    setOrders(orders) {
+      const key = JSON.stringify(orders || {}); if (key === this._ordKey) return; this._ordKey = key;
+      const nodes = this.D.nodes, ov = {}; for (const nm in orders) if (this.idx[nm] !== undefined) ov[this.idx[nm]] = orders[nm];
+      const ord = i => ov[i] !== undefined ? ov[i] : nodes[i].order;
+      this.drawList = nodes.map((n, i) => i).filter(i => nodes[i].order !== undefined).sort((p, q) => (ord(p) - ord(q)) || (p - q));
+    }
     has(name) { return !!this.anims[name]; }
     play(name, opt = {}) {
       const clip = this.anims[name]; if (!clip) return this;
@@ -181,7 +188,8 @@
         if (opt.shadow === false && nodes[i].name === 'Shadow') continue;
         const fr = frames[id]; if (!fr) continue;
         const src = this._src(i, id); if (!src) continue;
-        const o = i * 6, A = W[o], B = W[o + 1], C = W[o + 2], Dd = W[o + 3];
+        const ns = this.nodeScale && this.nodeScale[i] || 1;   // v0.18：单个部件放大（巨镐 = 镐头 ×1.45），绕部件自己的支点
+        const o = i * 6, A = W[o] * ns, B = W[o + 1] * ns, C = W[o + 2] * ns, Dd = W[o + 3] * ns;
         const sfx = nodes[i].fx ? -1 : 1, sfy = nodes[i].fy ? -1 : 1;
         ctx.setTransform(base.multiply(new DOMMatrix([k * fx * A / ppu * sfx, -k * B / ppu * sfx, -k * fx * C / ppu * sfy, k * Dd / ppu * sfy, x + k * fx * W[o + 4], y - k * W[o + 5]])));
         ctx.globalAlpha = prevA * alpha * this.s.a[i];

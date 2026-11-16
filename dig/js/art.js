@@ -5,9 +5,12 @@
   const IMGS = {
     sky: 'bg/map02_06.png', hill1: 'bg/map01_11.png', hill2: 'bg/map01_09.png', bush: 'bg/map01_07.png', market: 'props/Market_01.png',
     puff: 'vfx/puff.png', coinburst: 'vfx/coin_burst_gold.png', ring: 'vfx/ring_shockwave_white.png', star: 'vfx/star_burst_gold.png', smoke: 'vfx/smoke.png',
+    pfire: 'vfx/pet_fire.png', pboom: 'vfx/pet_boom.png', pheal: 'vfx/pet_heal.png', pbubble: 'vfx/pet_bubble.png', ppuff: 'vfx/place_puff.png', bomb: 'sk/Consumable_Explosives_Bomb_01_Red.png',   // v0.18 宠物机制
     coin: 'ui/i_coin.png', gem: 'ui/i_gem_1_purple.png', lock: 'ui/icon_color_lock_m.png', glow: 'ui/glow_white.png', arrow: 'ui/icon_white_arrow_back.png', chest: 'icons/Item_Chest_01_Wood.png',
+    arc: 'vfx/swing_arc_white.png', sparkle: 'vfx/sparkle_white.png', dchest: 'icons/dchest.png', dchestOpen: 'icons/dchest_open.png', pick: 'hero/parts/FA_Tool_Pick_001_Brown.png',   // v0.18 挖掘机制线
   };
-  A.VFX = { puff: [18, 160, 135, 30], coinburst: [30, 128, 128, 30], ring: [16, 128, 128, 30], star: [24, 128, 128, 30], smoke: [10, 160, 154, 20] };
+  A.VFX = { puff: [18, 160, 135, 30], coinburst: [30, 128, 128, 30], ring: [16, 128, 128, 30], star: [24, 128, 128, 30], smoke: [10, 160, 154, 20],
+    pfire: [18, 256, 238, 30], pboom: [33, 160, 115, 30], pheal: [24, 150, 247, 24], pbubble: [30, 60, 64, 30], ppuff: [17, 160, 159, 30], arc: [9, 220, 173, 34], sparkle: [24, 128, 128, 30] };   // [帧数, 帧宽, 帧高, 每秒帧]
   A.load = function () {
     return Promise.all(Object.keys(IMGS).map(k => new Promise(res => { const im = new Image(); im.onload = im.onerror = res; im.src = 'assets/' + IMGS[k]; A.img[k] = im; })));
   };
