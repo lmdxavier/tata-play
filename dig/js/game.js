@@ -24,20 +24,28 @@
 
   /* ---------- 音效：一个动作一个固定文件（用户 2026-11-16 规则） ---------- */
   const SFX = (() => {
-    let ac = null; const buf = {}, last = {};
+    let ac = null, unlocked = false; const buf = {}, last = {};
     const data = () => Object.assign({}, window.SFX_DATA || {}, window.SFX_COMBAT_DATA || {}, window.SFX_EXTRA_DATA || {});
-    function init() {
-      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
-      try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    function create() {   // 启动时就建好并解码（v0.4 等第一次点画布才建，界面按钮不触发，开头几个音效还没解码就丢了）
+      if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
       const d = data();
-      for (const k in d) { const b64 = d[k].files[0], bin = atob(b64), u = new Uint8Array(bin.length); for (let j = 0; j < bin.length; j++) u[j] = bin.charCodeAt(j); ac.decodeAudioData(u.buffer, b => { buf[k] = b; }, () => { }); }
+      for (const k in d) { try { const b64 = d[k].files[0], bin = atob(b64), u = new Uint8Array(bin.length); for (let j = 0; j < bin.length; j++) u[j] = bin.charCodeAt(j); const p = ac.decodeAudioData(u.buffer, b => { buf[k] = b; }, () => { }); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
+    }
+    function init() {   // 每次用户手势都调：不是 running（suspended / iOS 的 interrupted）就恢复；第一次放一段静音解锁 iOS
+      create(); if (!ac) return;
+      if (ac.state !== 'running') { try { ac.resume(); } catch (e) { } }
+      if (!unlocked) { try { const s = ac.createBufferSource(); s.buffer = ac.createBuffer(1, 1, 22050); s.connect(ac.destination); s.start(0); unlocked = true; } catch (e) { } }
     }
     function play(k, vol, rate) {
-      if (!ac || !buf[k] || G.mute) return; const now = ac.currentTime; if (last[k] && now - last[k] < 0.05) return; last[k] = now;
+      if (!ac || !buf[k] || G.mute) return; if (ac.state !== 'running') { try { ac.resume(); } catch (e) { } }
+      const now = ac.currentTime; if (last[k] && now - last[k] < 0.05) return; last[k] = now;
       const s = ac.createBufferSource(), g = ac.createGain(); s.buffer = buf[k]; s.playbackRate.value = rate || 1;
       g.gain.value = (vol === undefined ? 1 : vol) * ((data()[k] || {}).vol || 1) * 0.8; s.connect(g); g.connect(ac.destination); s.start();
     }
-    return { init, play };
+    // 手势监听挂在 window 捕获阶段：点界面按钮、画布、键盘都算；iOS 只认 touchend / click / pointerup 为“用户激活”
+    for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, init, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && ac && ac.state !== 'running') { try { ac.resume(); } catch (e) { } } });
+    return { init, play, create, state: () => ac ? ac.state : 'none', ready: () => Object.keys(buf).length };
   })();
   G.sfx = SFX;
   const PICK_SFX = { wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone', silk: 'pick_soft', gel: 'pick_soft', pearl: 'pick_soft' };
@@ -182,7 +190,7 @@
   G.cell = (c, r) => cell(c, r);
 
   /* ---------- 镜头 ---------- */
-  const townCam = () => -Math.round(VH * 0.85);
+  const townCam = () => -Math.round(VH - T * 1.9);   // 地面离底边 1.9 格：下矿按钮整个在地面以下，不挡洞口
   const runCam = () => hero.y - VH * 0.42;
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
@@ -273,10 +281,10 @@
     }
     if (t >= 0.75 && !trans.pop) { trans.pop = 1; HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.6); heroLook(); }
     if (trans.pop) { const u = Math.min(1, (t - 0.75) / 0.45), hx = (TL.hole.x0 + 0.5) * T; hero.x = hx + (TL.hole.x0 - 0.45 - TL.hole.x0 - 0.5) * T * u; hero.face = -1; hero.y = T * (1 - u) - Math.sin(u * Math.PI) * T * 1.3; }
-    if (t >= 1.2 && !trans.land) { trans.land = 1; hero.y = 0; addFx('puff', hero.x, -T * 0.05, T / 120); SFX.play('land', 0.8); HERO.play('Idle'); toShore(true); }
+    if (t >= 1.2 && !trans.land) { trans.land = 1; hero.y = 0; addFx('puff', hero.x, -T * 0.05, T / 120); SFX.play('land', 0.8); HERO.play('Idle'); toShore(true); }   // toShore 里清 trans（v0.4 漏了，上岸后所有点击被挡住）
   }
   function toShore(fromRise) {
-    mode = 'shore'; D = B.derive(S); if (!fromRise) { newRun(); hero.x = (TL.hole.x0 - 0.45) * T; hero.y = 0; hero.lvl = 0; camY = townCam(); pet.x = hero.x - T * 0.9; pet.y = 0; HERO.play('Idle'); }
+    mode = 'shore'; trans = null; D = B.derive(S); if (!fromRise) { newRun(); hero.x = (TL.hole.x0 - 0.45) * T; hero.y = 0; hero.lvl = 0; camY = townCam(); pet.x = hero.x - T * 0.9; pet.y = 0; HERO.play('Idle'); }
     heroLook(); hero.alpha = 1; hero.path = null; G.ui.showShore(fromRise ? G.lastGain : null);
     if (S.loop && S.auto && fromRise) setTimeout(() => { if (mode === 'shore' && S.loop && S.auto) G.dive(); }, 1800);
   }
@@ -427,8 +435,13 @@
     time += dt;
     if (HERO) HERO.update(dt);
     if (SK) {
-      let tx = hero.x - hero.face * T * 0.78; const ty = hero.y;
-      if (mode === 'shore' && hero.lvl && !hero.climb) tx = Math.max((TL.plat.x0 + 0.35) * T, Math.min(6.8 * T, tx));
+      let tx = hero.x - hero.face * T * 0.78, ty = hero.y;
+      if (mode === 'shore' && !(trans && (trans.k === 'dive' || trans.k === 'rise'))) {   // 宠物只在地面这一层走（进出门的过渡也算在小镇里）（狗不爬梯子）：人在平台上 / 正在爬梯，就在梯子脚下等
+        if (hero.lvl || hero.climb) tx = (TL.ladder.x + 0.75) * T;
+        tx = Math.max(0.4 * T, Math.min(6.7 * T, tx)); const h0 = (TL.hole.x0 - 0.1) * T, h1 = (TL.hole.x1 + 0.1) * T;
+        if (tx > h0 && tx < h1) tx = (tx - h0 < h1 - tx) ? h0 - T * 0.05 : h1 + T * 0.05;   // 不停在洞口上
+        ty = 0;
+      }
       const dx = tx - pet.x, dy = ty - pet.y, d = Math.hypot(dx, dy);
       if (d > T * 3) { pet.x = tx; pet.y = ty; } else if (d > 2) { const sp = Math.min(d, T * 9 * dt); pet.x += dx / d * sp; pet.y += dy / d * sp; if (Math.abs(dx) > 3) pet.face = dx > 0 ? 1 : -1; if (pet.anim === 'Idle') petAnim('Walk'); }
       else if (pet.anim === 'Walk') petAnim('Idle');
@@ -564,7 +577,10 @@
     if (SK && petCv) {
       const PZ = petCv.width; petG.setTransform(1, 0, 0, 1, 0, 0); petG.clearRect(0, 0, PZ, PZ);
       const sc = T * 0.62 / 100; petG.setTransform(sc * pet.face, 0, 0, -sc, PZ / 2, PZ * 0.8); SR.draw(SK);
-      ctx.globalAlpha = hero.alpha; ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y + (mode === 'run' ? (pet.vo || 0) : 0) - cy - PZ * 0.8 + T * 0.02)); ctx.globalAlpha = 1;
+      let pvo = mode === 'run' ? (pet.vo || 0) : 0, pa = hero.alpha;
+      if (mode === 'shore' && !(trans && (trans.k === 'dive' || trans.k === 'rise'))) { const u = (pet.x / T - (TL.hole.x0 - 0.15)) / (TL.hole.x1 - TL.hole.x0 + 0.3); if (u > 0 && u < 1) pvo = -Math.sin(u * Math.PI) * T * 0.5; }   // 宠物过洞口也小跳，不悬在洞上
+      if (mode === 'shore' && (hero.lvl || hero.climb)) pa = 1;   // 人进平台上的屋子时，在梯子脚下等的宠物不跟着消失
+      ctx.globalAlpha = pa; ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y + pvo - cy - PZ * 0.8 + T * 0.02)); ctx.globalAlpha = 1;
     }
     if (HERO && hero.alpha > 0.01) {
       if (hero.hurtT > 0) ctx.filter = 'brightness(1.8)';
@@ -614,12 +630,19 @@
     }
     if (ctx.__end) ctx.__end();
   }
+  const DARK = new Map();
+  function doorDark(im) {   // 门图的剪影：形状和门一样，填成屋里的暗色，边缘保留一点原图描边
+    let c = DARK.get(im); if (c) return c;
+    c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d');
+    g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(28,18,12,0.94)'; g.fillRect(0, 0, c.width, c.height);
+    DARK.set(im, c); return c;
+  }
   function drawDoors(cy, ox) {   // 门：开合 = 门板绕左边铰链横向收窄，露出里面的黑
     const T0 = T, I = TW.img;
     for (const [k, im, x, y, w, h] of [['smithy', I.t_Wide_Door_02, TL.smithy.door - 0.65, 0, 1.3, 1.3], ['house', I.t_Door_04, TL.house.door - 0.31, TL.house.y - 0.04, 0.62, 1.24]]) {
       if (!im || !im.width) continue;
       const X = ox + x * T0, Y = (y - h) * T0 - cy, Wd = w * T0, Hd = h * T0, o = door.k === k ? door.open : 0;
-      if (o > 0) { ctx.fillStyle = '#1c120c'; ctx.fillRect(Math.round(X + Wd * 0.1), Math.round(Y + Hd * 0.08), Math.round(Wd * 0.8), Math.round(Hd * 0.9)); }
+      if (o > 0) { const d = doorDark(im); ctx.drawImage(d, Math.round(X), Math.round(Y), Math.round(Wd), Math.round(Hd)); }   // 门里的黑按门的原形（拱门就是拱形），不画直角矩形
       ctx.drawImage(im, Math.round(X), Math.round(Y), Math.round(Wd * (1 - 0.82 * o)), Math.round(Hd));
     }
   }
@@ -698,7 +721,7 @@
   G.heroScreen = () => ({ x: (OX + hero.x) / dpr, y: (hero.y - camY - T * 1.2) / dpr });
 
   async function boot() {
-    const off = G.offline(); resize();
+    const off = G.offline(); resize(); SFX.create();
     ctx = (window.PIXICTX && location.protocol !== 'file:' && Q.get('gl') !== '0') ? window.PIXICTX.create(cv) : cv.getContext('2d');
     TERRAIN.init({ cell: (c, r) => cell(c, r), stageOf: r => B.stageOf(r) });
     await Promise.all([A.load(), TERRAIN.load(), TW.load()]); A.bake(T); TERRAIN.ready = true; TERRAIN.resize(T, OX, VW); TW.bake(T, VW);

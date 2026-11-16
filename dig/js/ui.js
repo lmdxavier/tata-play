@@ -64,12 +64,12 @@
     if (mode === 'shore') {   // 建筑名牌跟着镜头（世界格 → CSS 像素）
       const st = G.state(), k = $('cv').clientWidth / st.VW, T = st.T * k, ox = ($('cv').clientWidth - 7 * T) / 2;
       const pos = (id, x, y) => { $(id).style.transform = `translate(${Math.round(ox + x * T)}px, ${Math.round((y * st.T - st.camY) * k)}px) translate(-50%, -100%)`; };
-      pos('tag-smithy', 1.42, -3.62); pos('tag-house', 5.84, -7.15);
+      const TL = window.TOWN.L; pos('tag-smithy', TL.smithy.x0 + 1.3, TL.smithy.y - 3.62); pos('tag-house', 5.84, TL.house.y - 3.05);   // 跟着布局表走，不写死
     }
     if (tab === 'shop' && $('doll')) G.drawDoll($('doll'), preview ? Object.assign({}, s.gear, { [preview.slot]: preview.t }) : s.gear, null, dt);
   };
   ui.showRun = () => { $('shore').style.display = 'none'; ui.close(true); if (!S().tut.move && !$('tip')) { const d = document.createElement('div'); d.id = 'tip'; d.className = 't'; d.textContent = '按住屏幕拖动：往哪走，就往哪挖'; $('wrap').appendChild(d); } };
-  ui.hideRun = () => { $('bossbar').style.display = 'none'; cache.boss = false; };
+  ui.hideRun = () => { $('bossbar').style.display = 'none'; cache.boss = false; const t = $('tip'); if (t) t.remove(); };
   ui.hideShore = () => { $('shore').style.display = 'none'; ui.close(true); };
   ui.showShore = (gain) => { $('shore').style.display = ''; const t = $('tip'); if (t) t.remove(); ui.refresh(); if (gain) flyGain(gain); };
   ui.refresh = () => {
