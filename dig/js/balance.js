@@ -57,7 +57,7 @@
     weapon: { name: '武器', stat: 'atk', part: 'Sword' },
     shield: { name: '盾牌', stat: 'def', part: 'Shield' },
     helmet: { name: '头盔', stat: 'hp', part: 'Helmet' },
-    armor: { name: '背包', stat: 'stam', part: 'Chest' },
+    armor: { name: '衣服', stat: 'stam', part: 'Chest' },
   };
   B.GEAR = {
     weapon: [
@@ -83,9 +83,9 @@
     ],
     armor: [
       { name: '粗布衣', v: 10, spr: 'FA_Chest_004_Brown' },
-      { name: '草编背包', v: 15, coin: 90, mat: { wood: 5 }, spr: 'FA_Chest_010_Brown' },
-      { name: '蛛丝背包', v: 22, coin: 450, mat: { silk: 4, gel: 3 }, spr: 'FA_Chest_013_White' },
-      { name: '琥珀背包', v: 33, coin: 1800, mat: { copper: 8, pearl: 2, amber: 1 }, spr: 'FA_Chest_016_Gold' },
+      { name: '草编衣', v: 15, coin: 90, mat: { wood: 5 }, spr: 'FA_Chest_010_Brown' },
+      { name: '蛛丝衣', v: 22, coin: 450, mat: { silk: 4, gel: 3 }, spr: 'FA_Chest_013_White' },
+      { name: '琥珀甲', v: 33, coin: 1800, mat: { copper: 8, pearl: 2, amber: 1 }, spr: 'FA_Chest_016_Gold' },
       { name: '翠银斗篷', v: 50, next: true, spr: 'FA_Chest_015_GreenSilver' },
     ],
   };
@@ -94,27 +94,27 @@
   // eff：派生属性用；mech：机制节点；cur：币种；c0：第 1 级价格；k：每级乘数；req：[[节点, 级], ...]；boss：要打过守卫
   B.SK = [
     { id: 'root', name: '矿工之心', ic: 'Item_Compass_01_Gold', x: 0, y: 0, max: 1, c0: 0, cur: 'coin', br: 'root', desc: () => '一切从这里开始' },
-    { id: 'dig', name: '锋利镐尖', ic: 'Gear_Weapons_Pickaxe_01', x: 0, y: -1, max: 10, c0: 8, k: 1.42, cur: 'coin', br: 'dig', req: [['root', 1]], desc: l => `挖掘力 +25% / 级（现在 ×${(1 + .25 * l).toFixed(2)}）` },
-    { id: 'freq', name: '挥镐速度', ic: 'Economy_Energy_01_Yellow', x: -1, y: -2, max: 6, c0: 25, k: 1.9, cur: 'coin', br: 'dig', req: [['dig', 1]], desc: l => `每秒挥击 +0.25 次（现在 ${(2.5 + .25 * l).toFixed(2)} 次/秒）` },
-    { id: 'heavy', name: '重击', ic: 'Gear_Weapons_Hammer_01', x: 1, y: -2, max: 1, c0: 60, cur: 'coin', br: 'dig', mech: 1, req: [['dig', 3]], desc: () => '每第 4 下挖掘，伤害 ×3' },
-    { id: 'heavy2', name: '重击强化', ic: 'Gear_Weapons_Hammer_02', x: 2, y: -3, max: 3, c0: 300, k: 2.5, cur: 'coin', br: 'dig', req: [['heavy', 1]], desc: l => `重击倍率 +1 / 级（现在 ×${3 + l}）` },
+    { id: 'dig', name: '锋利镐尖', ic: 'Gear_Weapons_Pickaxe_01', x: 0, y: -1, max: 10, c0: 8, k: 1.42, cur: 'coin', br: 'dig', req: [['root', 1]], desc: () => '挖掘力 +25% / 级' },
+    { id: 'freq', name: '挥镐速度', ic: 'Economy_Energy_01_Yellow', x: -1, y: -2, max: 6, c0: 25, k: 1.9, cur: 'coin', br: 'dig', req: [['dig', 1]], desc: () => '每秒挥击 +0.25 次 / 级' },
+    { id: 'heavy', name: '重击', ic: 'Gear_Weapons_Hammer_01', x: 1, y: -2, max: 1, c0: 60, cur: 'coin', br: 'dig', mech: 1, req: [['dig', 3]], desc: () => '每第 4 下挖掘伤害 ×3' },
+    { id: 'heavy2', name: '重击强化', ic: 'Gear_Weapons_Hammer_02', x: 2, y: -3, max: 3, c0: 300, k: 2.5, cur: 'coin', br: 'dig', req: [['heavy', 1]], desc: () => '重击倍率 +1 / 级' },
     { id: 'pierce', name: '穿透', ic: 'Gear_Weapons_Shovel_01', x: -2, y: -3, max: 1, c0: 500, cur: 'coin', br: 'dig', mech: 1, req: [['freq', 2]], desc: () => '往下挖时，下面第 2 格同时受 50% 伤害' },
-    { id: 'soil', name: '表土专精', ic: 'Material_Ore_01', x: 0, y: -3, max: 4, c0: 600, k: 2, cur: 'coin', br: 'dig', req: [['dig', 6]], desc: l => `对表土层方块伤害 +50% / 级（现在 ×${(1 + .5 * l).toFixed(1)}）` },
-    { id: 'soilx', name: '表土制霸', ic: 'Misc_Earth_01', x: 0, y: -4, max: 1, c0: 6000, gem: 50, cur: 'coin', br: 'dig', mech: 1, req: [['soil', 4]], boss: 1, desc: () => '表土层的土、树根、矿一下就碎（玄武岩除外）' },
-    { id: 'time', name: '耐饿', ic: 'Consumable_Food_Meat_01', x: -1, y: 0, max: 10, c0: 10, k: 1.5, cur: 'coin', br: 'live', req: [['root', 1]], desc: l => `体力上限 +15% / 级（现在 ×${(1 + .15 * l).toFixed(2)}）` },
+    { id: 'soil', name: '表土专精', ic: 'Material_Ore_01', x: 0, y: -3, max: 4, c0: 600, k: 2, cur: 'coin', br: 'dig', req: [['dig', 6]], desc: () => '表土层方块伤害 +50% / 级' },
+    { id: 'soilx', name: '表土制霸', ic: 'Misc_Earth_01', x: 0, y: -4, max: 1, c0: 6000, gem: 50, cur: 'coin', br: 'dig', mech: 1, req: [['soil', 4]], boss: 1, desc: () => '表土层方块一下就碎（玄武岩除外）' },
+    { id: 'time', name: '耐饿', ic: 'Consumable_Food_Meat_01', x: -1, y: 0, max: 10, c0: 10, k: 1.5, cur: 'coin', br: 'live', req: [['root', 1]], desc: () => '体力上限 +15% / 级' },
     { id: 'full', name: '吃饱有力', ic: 'Consumable_Food_Steak_01', x: -2, y: -1, max: 1, c0: 50, cur: 'coin', br: 'live', mech: 1, req: [['time', 2]], desc: () => '体力高于 50% 时挖掘力 +30%' },
     { id: 'kill', name: '打怪回气', ic: 'Consumable_Food_Skewer_01', x: -3, y: 0, max: 1, c0: 120, cur: 'coin', br: 'live', mech: 1, req: [['time', 4]], desc: () => '打死怪回复 8% 体力' },
-    { id: 'aid', name: '急救包', ic: 'Consumable_Healing_Bandage_01', x: -2, y: 1, max: 2, c0: 150, k: 3, cur: 'coin', br: 'live', req: [['time', 3]], desc: l => `血量归零时保住的收获：${[70, 85, 100][l]}%${l < 2 ? ' → ' + [70, 85, 100][l + 1] + '%' : ''}` },
-    { id: 'atk', name: '臂力', ic: 'Misc_Fist_01_Brown', x: 1, y: 0, max: 10, c0: 3, k: 1.5, cur: 'gem', br: 'war', req: [['root', 1]], desc: l => `攻击 +20% / 级（现在 ×${(1 + .2 * l).toFixed(1)}）` },
-    { id: 'def', name: '铁壁', ic: 'Gear_Shield_01', x: 2, y: -1, max: 10, c0: 4, k: 1.5, cur: 'gem', br: 'war', req: [['atk', 1]], desc: l => `防御 +20% / 级（现在 ×${(1 + .2 * l).toFixed(1)}）` },
-    { id: 'hp', name: '强壮', ic: 'Economy_Heart_Red', x: 2, y: 1, max: 10, c0: 4, k: 1.5, cur: 'gem', br: 'war', req: [['atk', 1]], desc: l => `血量 +20% / 级（现在 ×${(1 + .2 * l).toFixed(1)}）` },
+    { id: 'aid', name: '急救包', ic: 'Consumable_Healing_Bandage_01', x: -2, y: 1, max: 2, c0: 150, k: 3, cur: 'coin', br: 'live', req: [['time', 3]], desc: () => '血量归零时多保住 15% 收获 / 级' },
+    { id: 'atk', name: '臂力', ic: 'Misc_Fist_01_Brown', x: 1, y: 0, max: 10, c0: 3, k: 1.5, cur: 'gem', br: 'war', req: [['root', 1]], desc: () => '攻击 +20% / 级' },
+    { id: 'def', name: '铁壁', ic: 'Gear_Shield_01', x: 2, y: -1, max: 10, c0: 4, k: 1.5, cur: 'gem', br: 'war', req: [['atk', 1]], desc: () => '防御 +20% / 级' },
+    { id: 'hp', name: '强壮', ic: 'Economy_Heart_Red', x: 2, y: 1, max: 10, c0: 4, k: 1.5, cur: 'gem', br: 'war', req: [['atk', 1]], desc: () => '血量 +20% / 级' },
     { id: 'counter', name: '反击', ic: 'Misc_Fist_02_Yellow', x: 3, y: -1, max: 1, c0: 15, cur: 'gem', br: 'war', mech: 1, req: [['def', 1]], desc: () => '被打时立刻还手一下，伤害 ×2' },
     { id: 'crit', name: '暴击', ic: 'Misc_Crosshair_01_Red', x: 3, y: 0, max: 1, c0: 30, cur: 'gem', br: 'war', mech: 1, req: [['atk', 3]], desc: () => '攻击有 15% 概率造成 2.5 倍伤害' },
-    { id: 'coin', name: '招财', ic: 'Economy_Coin_04_Gold', x: 0, y: 1, max: 10, c0: 5, k: 1.6, cur: 'gem', br: 'eco', req: [['root', 1]], desc: l => `金币获取 +20% / 级（现在 ×${(1 + .2 * l).toFixed(1)}）` },
-    { id: 'gem', name: '宝石嗅觉', ic: 'Economy_Gem_01_Purple', x: 1, y: 2, max: 10, c0: 15, k: 1.6, cur: 'coin', br: 'eco', req: [['coin', 1]], desc: l => `宝石获取 +20% / 级（现在 ×${(1 + .2 * l).toFixed(1)}）` },
-    { id: 'ore', name: '矿石专家', ic: 'Material_Ore_02_01', x: -1, y: 2, max: 2, c0: 200, k: 3, cur: 'coin', br: 'eco', req: [['coin', 2]], desc: l => `每块树根 / 矿多掉 1 个材料（现在 +${l}）` },
-    { id: 'slime', name: '史莱姆猎人', ic: 'Item_Jelly_01', x: 0, y: 3, max: 2, c0: 6, k: 2, cur: 'gem', br: 'eco', req: [['coin', 1]], desc: l => `史莱姆黏液掉率：${[50, 75, 100][l]}%${l < 2 ? ' → ' + [50, 75, 100][l + 1] + '%' : ''}` },
-    { id: 'chest', name: '幸运宝箱', ic: 'Item_Chest_01_Wood', x: 2, y: 3, max: 1, c0: 80, cur: 'coin', br: 'eco', mech: 1, req: [['gem', 1]], desc: () => '每趟地下出现 1 个宝箱（金币 = 10 块同深度的土）' },
+    { id: 'coin', name: '招财', ic: 'Economy_Coin_04_Gold', x: 0, y: 1, max: 10, c0: 5, k: 1.6, cur: 'gem', br: 'eco', req: [['root', 1]], desc: () => '金币获取 +20% / 级' },
+    { id: 'gem', name: '宝石嗅觉', ic: 'Economy_Gem_01_Purple', x: 1, y: 2, max: 10, c0: 15, k: 1.6, cur: 'coin', br: 'eco', req: [['coin', 1]], desc: () => '宝石获取 +20% / 级' },
+    { id: 'ore', name: '矿石专家', ic: 'Material_Ore_02_01', x: -1, y: 2, max: 2, c0: 200, k: 3, cur: 'coin', br: 'eco', req: [['coin', 2]], desc: () => '每块树根 / 矿多掉 1 个材料 / 级' },
+    { id: 'slime', name: '史莱姆猎人', ic: 'Item_Jelly_01', x: 0, y: 3, max: 2, c0: 6, k: 2, cur: 'gem', br: 'eco', req: [['coin', 1]], desc: () => '史莱姆黏液掉率 +25% / 级' },
+    { id: 'chest', name: '幸运宝箱', ic: 'Item_Chest_01_Wood', x: 2, y: 3, max: 1, c0: 80, cur: 'coin', br: 'eco', mech: 1, req: [['gem', 1]], desc: () => '每趟地下出现 1 个宝箱' },
   ];
   B.SKI = {}; B.SK.forEach(n => { B.SKI[n.id] = n; });
   B.BR_COL = { root: '#ffd84a', dig: '#ff9a3c', live: '#7ee05a', war: '#ff5a5a', eco: '#ffd84a' };

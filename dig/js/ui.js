@@ -17,7 +17,7 @@
 
   ui.init = () => {
     $('hud').innerHTML = `<div class="res"><div class="pill t">${img('coin')}<span id="h-coin">0</span><b class="rg" id="h-rc"></b></div><div class="pill t">${img('gem')}<span id="h-gem">0</span><b class="rg" id="h-rg"></b></div><div class="boost t" id="h-boost">${img('boost')}<span></span></div><div class="depth t" id="h-depth"></div></div>
-      <div class="bars" id="h-bars"><div class="bar" id="b-st">${img('stam')}<i></i><span class="t"></span></div><div class="bar hp" id="b-hp">${img('hp')}<i></i><span class="t"></span></div></div>
+      <div class="bars" id="h-bars"><div class="bar hp" id="b-hp">${img('hp')}<i></i><span class="t"></span></div><div class="bar" id="b-st">${img('stam')}<i></i><span class="t"></span></div></div>
       <button id="back" class="t">回地面</button><button id="auto" class="t">${img('auto')}<span>自动</span></button><div id="bossbar"><b class="t"></b><div class="bar"><i></i><span class="t"></span></div></div>`;
     $('wrap').appendChild($('auto'));
     $('back').onclick = () => { snd('ui_tap'); G.endRun('back'); };
@@ -27,8 +27,8 @@
     };
     $('shore').innerHTML = `<div class="side l">${sideBtn('vip', 'VIP')}${sideBtn('sign', '签到')}${sideBtn('codex', '图鉴')}</div>
       <div class="side r">${sideBtn('chest', '宝箱')}${sideBtn('pet', '宠物')}</div>
-      <div class="tag t" id="tag-smithy">铁匠铺<small>装备</small><i class="dot"></i></div><div class="tag t" id="tag-house">技能屋<small>技能树</small><i class="dot"></i></div>
-      <button id="go" class="t">下矿</button><div id="loop" class="t">挂机中 · 点这里停止</div>`;
+      <div class="tag t" id="tag-smithy">铁匠铺<i class="dot"></i></div><div class="tag t" id="tag-house">技能屋<i class="dot"></i></div>
+      <button id="go" class="t">开始挖掘</button><div id="loop" class="t">挂机中 · 点这里停止</div>`;
     $('go').onclick = () => { snd('ui_tap'); G.dive(); };
     $('shore').querySelectorAll('.side button').forEach(b => b.onclick = () => {
       const k = b.dataset.k; if (k === 'chest') { if (G.chestReady()) G.openAdChest(); else { snd('ui_tap'); ui.toast(G.adLeft('chest') ? '宝箱还在准备：' + chestLeft() : '今天的广告宝箱领完了，明天再来'); } return; }
@@ -38,7 +38,7 @@
     $('loop').onclick = () => { S().loop = false; G.save(); ui.refresh(); };
     $('panel').addEventListener('click', onPanel);
   };
-  const sideBtn = (k, n) => `<button data-k="${k}" class="t">${img(k)}<span>${n}</span><i class="dot"></i><u></u></button>`;
+  const sideBtn = (k, n) => `<button data-k="${k}" class="t">${img(k)}<span>${n}</span><i class="dot"></i></button>`;
   const chestLeft = () => { const ms = Math.max(0, 4 * 3600e3 - (Date.now() - (S().chestT || 0))); const h = Math.floor(ms / 3600e3), m = Math.ceil((ms % 3600e3) / 60e3); return h ? h + ' 小时 ' + m + ' 分' : m + ' 分钟'; };
 
   /* ---------- 每帧：顶部、名牌位置 ---------- */
@@ -84,11 +84,11 @@
     if (tab) render();
   };
   const chestShort = () => { const ms = Math.max(0, 4 * 3600e3 - (Date.now() - (S().chestT || 0))); const h = Math.floor(ms / 3600e3), m = Math.ceil((ms % 3600e3) / 60e3); return h ? h + '时' + m + '分' : m + '分'; };
-  function sideDot(k, on, txt) { const b = $('shore').querySelector(`[data-k="${k}"]`); b.querySelector('.dot').style.display = on ? '' : 'none'; const u = b.querySelector('u'); u.textContent = txt || ''; u.style.display = txt ? '' : 'none'; }
+  function sideDot(k, on) { const b = $('shore').querySelector(`[data-k="${k}"]`); b.querySelector('.dot').style.display = on ? '' : 'none'; }   // v0.6：按钮下不再写说明小字（用户：可领用红点表示）
 
   /* ---------- 面板 ---------- */
   let preview = null, sel = 'root', ctab = 'mon', shopTab = 'weapon', treePan = { x: 0, y: 0 };
-  ui.open = k => { tab = k; preview = null; snd('ui_open'); $('panel').classList.add('on'); render(); if (k === 'shop' && !S().tut.drag) setTimeout(tutDrag, 450); };
+  ui.open = k => { tab = k; preview = null; snd('ui_open'); $('panel').dataset.tab = k; $('panel').classList.add('on'); render(); if (k === 'shop' && !S().tut.drag) setTimeout(tutDrag, 450); };
   ui.close = quiet => { if (!tab) return; tab = null; preview = null; const t = $('tut'); if (t) t.remove(); $('panel').classList.remove('on'); if (!quiet) { snd('ui_close'); G.exitDoor(); } };
   ui.tab = () => tab;
   const mulfix = h => h.replace(/×/g, '<i class="mul">×</i>');
@@ -100,23 +100,22 @@
   };
   function render() {
     const s = S(), D = G.D(), P = $('panel'); let h = '';
-    const sc = P.querySelector('.pbody') ? P.querySelector('.pbody').scrollTop : 0;
+    const scEl = P.querySelector(tab === 'shop' ? '.items' : '.pbody'), sc = scEl ? scEl.scrollTop : 0;   // v0.7：铁匠铺只有商品区滚动
     if (tab === 'shop') {
       const pg = preview ? Object.assign({}, s.gear, { [preview.slot]: preview.t }) : s.gear;
       const statBox = sl => { const st = B.SLOT[sl].stat, m = D.mult[st], b0 = B.GEAR[sl][s.gear[sl] || 0].v, b1 = B.GEAR[sl][pg[sl] || 0].v, up = b1 !== b0;
-        return `<div class="stat"><b>${img(st)}${STAT[st]}</b><em class="t">${fv(b1 * m)}${up ? `<i class="${b1 > b0 ? 'up' : 'down'}">${b1 > b0 ? '▲' : '▼'}${fv(Math.abs(b1 - b0) * m)}</i>` : ''}</em><small>基础 ${fv(b1)} × 技能 ${m.toFixed(m % 1 ? 2 : 0)}</small></div>`; };
+        return `<div class="stat">${img(st, 'si')}<div class="sv"><b>${STAT[st]}</b><em class="t">${fv(b1 * m)}${up ? `<i class="${b1 > b0 ? 'up' : 'down'}">${b1 > b0 ? '▲' : '▼'}${fv(Math.abs(b1 - b0) * m)}</i>` : ''}</em></div><small>基础${fv(b1)}×技能${m.toFixed(m % 1 ? 2 : 0)}</small></div>`; };
       h += head('铁匠铺') + `<div class="pbody shop"><div class="dollrow"><div class="col">${statBox('weapon')}${statBox('shield')}</div><canvas id="doll" width="320" height="320"></canvas><div class="col">${statBox('helmet')}${statBox('armor')}</div></div>
-        <div class="slots">${B.SLOTS.map(sl => { const g = B.GEAR[sl][pg[sl] || 0]; return `<div class="slot ${preview && preview.slot === sl ? 'pv' : ''}" data-slot="${sl}"><img src="${part(g.spr)}"><small>${B.SLOT[sl].name}</small></div>`; }).join('')}</div>
-        <div class="bag">${B.MAT_ORDER.filter(k => s.seen[k] || s.mat[k]).map(k => `<span data-mat="${k}">${img(k)}${s.mat[k] || 0}</span>`).join('') || '<em>材料：挖树根和铜矿、收蜘蛛网、打怪掉落</em>'}</div>
+        <div class="slots">${B.SLOTS.map(sl => { const g = B.GEAR[sl][pg[sl] || 0]; return `<div class="slot ${preview && preview.slot === sl ? 'pv' : ''}" data-slot="${sl}"><img src="${part(g.spr)}"></div>`; }).join('')}</div>
+        <div class="bag">${B.MAT_ORDER.filter(k => s.seen[k] || s.mat[k]).map(k => `<span data-mat="${k}">${img(k)}${s.mat[k] || 0}</span>`).join('')}</div>
         <div class="tabs">${B.SLOTS.map(sl => `<button class="tab ${sl === shopTab ? 'on' : ''}" data-stab="${sl}">${B.SLOT[sl].name}${B.GEAR[sl].some((g, t) => G.canGear(sl, t)) ? '<i class="dot"></i>' : ''}</button>`).join('')}</div>
         <div class="items">${B.GEAR[shopTab].map((g, t) => {
           const own = (s.gear[shopTab] || 0) >= t, wear = (s.gear[shopTab] || 0) === t, st = B.SLOT[shopTab].stat;
           if (g.next) return `<div class="item next"><img src="${part(g.spr)}"><b>${g.name}</b><span>${STAT[st]} ${g.v}</span><small>打败红甲虫王后<br>沙岩层开放</small></div>`;
           return `<div class="item ${wear ? 'wear' : own ? 'own' : G.canGear(shopTab, t) ? 'can' : 'no'} ${preview && preview.slot === shopTab && preview.t === t ? 'pv' : ''}" data-item="${t}"><img src="${part(g.spr)}" draggable="false"><b>${g.name}</b><span>${STAT[st]} ${g.v}</span>
-            ${wear ? '<small class="on">穿着</small>' : own ? '<small>已拥有</small>' : `<div class="cost">${costHtml(g.coin, g.mat)}</div>`}</div>`; }).join('')}</div>
-        <p class="hint">点装备 = 预览　拖到上面的装备槽 = 买下穿上</p></div>`;
+            ${wear ? '<small class="on">穿着</small>' : own ? '<small>已拥有</small>' : `<div class="cost">${costHtml(g.coin, g.mat)}</div>`}</div>`; }).join('')}</div></div>`;
     } else if (tab === 'skill') {
-      h += head('技能屋') + `<div class="pbody tree" id="tree"><svg id="links"></svg><div id="nodes"></div></div><div class="detail" id="detail"></div><button id="sk-go" class="t">下矿</button>`;
+      h += head('技能屋') + `<div class="pbody tree" id="tree"><svg id="links"></svg><div id="nodes"></div></div><div class="detail" id="detail"></div>`;
     } else if (tab === 'pet') {
       h += head('宠物') + '<div class="pbody">';
       for (const k in B.PETS) { const p = B.PETS[k], own = s.pets.includes(k), v = B.VIP.find(x => x.pet === k), sg = B.SIGN.findIndex(x => x.pet === k);
@@ -144,11 +143,11 @@
         <p class="tomorrow t">${n >= B.SIGN.length ? '7 天奖励已全部领取' : (ready ? '今天可领：' : '明天可领：') + B.SIGN[n].text}${ready && n + 1 < B.SIGN.length ? '<br><small>明天可领：' + B.SIGN[n + 1].text + '</small>' : ''}</p><p class="hint">漏签不清零，下次来接着领</p></div>`;
     }
     P.innerHTML = mulfix(h);
-    const pb = P.querySelector('.pbody'); if (pb && tab !== 'skill') pb.scrollTop = sc;
+    const pb = P.querySelector(tab === 'shop' ? '.items' : '.pbody'); if (pb && tab !== 'skill') pb.scrollTop = sc;
     if (tab === 'skill') renderTree();
     P.querySelectorAll('canvas[data-mon]').forEach(c => G.portrait(c, c.dataset.mon));
     P.querySelectorAll('canvas[data-pet]').forEach(c => G.petPortrait(c, c.dataset.pet));
-    if (tab === 'shop') bindDrag();
+    if (tab === 'shop') { bindDrag(); bindScrollThumb(); }
   }
   const signIcon = d => d.coin ? img('coin', 'si') : d.gem ? img('gem', 'si') : d.mat ? img(Object.keys(d.mat)[0], 'si') : d.pet ? img('pet', 'si') : d.boost ? img('boost', 'si') : img('chest', 'si');
 
@@ -165,22 +164,36 @@
     if ((b = q('[data-gift]'))) { const sl = b.dataset.gift; G.giftGear(sl); const g = B.GEAR[sl][S().gear[sl]]; claimFx([{ part: g.spr, n: g.name }], 'VIP 6 礼物'); return; }
     if (q('#vip-ad')) { G.watchAd('vip', () => ui.toast('VIP 进度 +1')); return; }
     if (q('#sign-go')) { const s = G.claimSign(); if (s) claimSignFx(s); return; }
-    if (q('#sk-go')) { snd('ui_tap'); ui.close(true); G.exitDoor(); setTimeout(() => G.goto('hole'), 560); return; }
   }
 
   /* ---------- 铁匠铺：拖到装备槽 = 买下穿上 ---------- */
   let dragMoved = false;
+  // v0.15（用户 17:03）：商品区不显示系统滚动条；滑动时才在右边出现一根符合画风的棕色圆头滑块，停下 0.8 秒后淡出
+  function bindScrollThumb() {
+    const box = $('panel').querySelector('.items'), host = $('panel').querySelector('.pbody.shop'); if (!box || !host) return;
+    const th = document.createElement('i'); th.className = 'sthumb'; host.appendChild(th); let hide = 0, armed = false; setTimeout(() => { armed = true; }, 120);   // 重画时恢复滚动位置也会触发 scroll，不算玩家在滑
+    const place = () => { const H = box.clientHeight, SH = box.scrollHeight; if (SH <= H + 2) { th.classList.remove('on'); return; }
+      const h = Math.max(28, H * H / SH), y = box.offsetTop + 6 + (H - 12 - h) * (box.scrollTop / (SH - H));
+      th.style.height = h + 'px'; th.style.top = y + 'px'; th.style.left = (box.offsetLeft + box.offsetWidth - 9) + 'px'; };
+    box.addEventListener('scroll', () => { if (!armed) return; place(); th.classList.add('on'); clearTimeout(hide); hide = setTimeout(() => th.classList.remove('on'), 800); }, { passive: true });
+  }
   function bindDrag() {
     $('panel').querySelectorAll('.item[data-item]').forEach(el => el.onpointerdown = e => {
-      const t = +el.dataset.item; if ((S().gear[shopTab] || 0) >= t) return;
-      dragMoved = false; const im = el.querySelector('img'), r = im.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY; let ghost = null;
+      const t = +el.dataset.item, owned = (S().gear[shopTab] || 0) >= t;
+      // v0.7：只有商品区滚动。商品区放不下时：按下就快速上下划 = 滚动商品区；按住约 0.15 秒再拖（或横着拖）= 拖去装备槽
+      const box = el.closest('.items'), over = box && box.scrollHeight > box.clientHeight + 2, t0 = performance.now(), st0 = box ? box.scrollTop : 0;
+      dragMoved = false; const im = el.querySelector('img'), r = im.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY; let ghost = null, scrolling = false;
       const mv = ev => {
         const dx = ev.clientX - x0, dy = ev.clientY - y0;
+        if (scrolling) { box.scrollTop = st0 - dy; return; }
+        if (!dragMoved && Math.hypot(dx, dy) > 8 && over && (owned || (performance.now() - t0 < 150 && Math.abs(dy) > Math.abs(dx)))) { scrolling = true; dragMoved = true; box.scrollTop = st0 - dy; return; }
+        if (owned) return;
         if (!dragMoved && Math.hypot(dx, dy) > 8) { dragMoved = true; ghost = im.cloneNode(); ghost.className = 'ghost'; ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px'; document.body.appendChild(ghost); const tu = $('tut'); if (tu) tu.style.display = 'none'; }
         if (ghost) { ghost.style.left = (ev.clientX - r.width / 2) + 'px'; ghost.style.top = (ev.clientY - r.height / 2) + 'px'; const s = slotAt(ev.clientX, ev.clientY); $('panel').querySelectorAll('.slot').forEach(x => x.classList.toggle('hover', x === s)); }
       };
       const upf = ev => {
         window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', upf);
+        if (scrolling) { setTimeout(() => { dragMoved = false; }, 60); return; }
         if (!ghost) return; const s = slotAt(ev.clientX, ev.clientY);
         if (s && s.dataset.slot === shopTab && G.canGear(shopTab, t)) { ghost.remove(); buyFx(t); }
         else {
@@ -221,8 +234,9 @@
     const seen = B.SK.filter(n => B.skSeen(s, n));
     let h = '', lines = '';
     const xy = n => [n.x * NG, n.y * NG];
-    for (const n of seen) for (const [rid] of n.req || []) { const p = B.SKI[rid]; if (!seen.includes(p)) continue; const [x1, y1] = xy(p), [x2, y2] = xy(n), on = G.skLv(n.id) > 0;
-      lines += `<line x1="${x1}rem" y1="${y1}rem" x2="${x2}rem" y2="${y2}rem" class="${on ? 'on' : ''}" style="${on ? 'stroke:' + B.BR_COL[n.br] : ''}"/>`; }
+    for (const n of seen) for (const [rid] of n.req || []) { const p = B.SKI[rid]; if (!seen.includes(p)) continue; const [x1, y1] = xy(p), [x2, y2] = xy(n), on = G.skLv(rid) >= ((n.req.find(q => q[0] === rid) || [0, 1])[1]);   // v0.10：前置满足 = 实线（分支色），没满足 = 虚线
+      const R = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;   // v0.10：SVG 属性不认 rem，连线一直没画出来 → 换算成 px
+      lines += `<line x1="${x1 * R}" y1="${y1 * R}" x2="${x2 * R}" y2="${y2 * R}" class="${on ? 'on' : ''}" style="${on ? 'stroke:' + B.BR_COL[n.br] : ''}"/>`; }
     for (const n of seen) { const l = G.skLv(n.id), open = B.skOpen(s, n), can = G.canSkill(n.id), [x, y] = xy(n);
       h += `<button class="sk ${n.mech ? 'mech' : ''} ${l >= n.max ? 'max' : ''} ${open ? '' : 'lock'} ${can ? 'can' : ''} ${l ? 'got' : ''} ${sel === n.id ? 'sel' : ''}" data-sk="${n.id}" style="left:${x}rem;top:${y}rem;--c:${B.BR_COL[n.br]}"><i></i><img src="assets/sk/${n.ic}.png">${n.max > 1 ? `<u class="t">${l}/${n.max}</u>` : ''}${can ? '<b class="dot"></b>' : ''}</button>`; }
     N.innerHTML = h; L.innerHTML = lines;
@@ -237,8 +251,8 @@
   function renderDetail() {
     const n = B.SKI[sel], s = S(), l = G.skLv(n.id), open = B.skOpen(s, n), mx = l >= n.max, c = G.skCost(n.id);
     let req = ''; if (!open) req = (n.req || []).filter(([id, lv]) => G.skLv(id) < lv).map(([id, lv]) => `${B.SKI[id].name} 到 ${lv} 级`).concat(n.boss && !s.boss ? ['打败红甲虫王'] : []).join('、');
-    $('detail').innerHTML = mulfix(`<div class="dcard" style="--c:${B.BR_COL[n.br]}"><img src="assets/sk/${n.ic}.png"><div class="mid"><b>${n.name}${n.mech ? '<small class="mk">机制</small>' : ''}<small>${n.max > 1 ? '　' + l + ' / ' + n.max + ' 级' : n.id === 'root' ? '' : l ? '　已拥有' : '　未拥有'}</small></b>
-      <span>${n.desc(l)}</span>${!mx && n.max > 1 ? `<span class="nx">下一级：${n.desc(l + 1).replace(/（现在.*）/, '')}</span>` : ''}${req ? `<span class="req">需要：${req}</span>` : ''}</div>
+    // v0.10（用户 16:48）：固定 3 行 = 名字 + 级数 / 效果（最多 2 行）；不写“机制”、不写“现在 ×”、不重复“下一级”、前置条件交给连线（没满足 = 虚线）
+    $('detail').innerHTML = mulfix(`<div class="dcard" style="--c:${B.BR_COL[n.br]}"><img src="assets/sk/${n.ic}.png"><div class="mid"><b>${n.name}${n.max > 1 ? `<small>　${l} / ${n.max}</small>` : ''}</b><span>${n.desc(l)}</span></div>
       ${n.id === 'root' ? '' : mx ? '<button class="buy t done">已满</button>' : `<button class="buy t ${G.canSkill(n.id) ? 'green' : 'no'}" id="sk-buy">${img(c.cur)}${f(c.n)}${c.gem ? '<br>' + img('gem') + f(c.gem) : ''}</button>`}</div>`);
     const b = $('sk-buy'); if (b) b.onclick = () => { if (G.buySkill(n.id)) { renderTree(); const el = $('nodes').querySelector(`[data-sk="${n.id}"]`); if (el) el.classList.add('pulse'); } else { snd('ui_close'); ui.toast(!open ? '还没解锁：' + req : (c.cur === 'gem' ? '宝石' : '金币') + '还差 ' + f(Math.max(0, c.n - s[c.cur]))); } };
   }

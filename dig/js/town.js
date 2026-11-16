@@ -17,6 +17,10 @@
     smithy: { x0: 0.24, x1: 2.74, door: 1.12, y: 0 },
     house: { x0: 4.9, x1: 6.78, door: 5.48, y: -2.6 },
   };
+  // 前景装饰（格）：每样都要落在真实画出来的地表上（v0.5 的 Plant_02 摆在 2.55，地形画出来的洞口比格子宽，草浮在洞上）
+  TW.FG = [['Grass_02', -0.1, 0.9], ['Grass_01', 0.95, 0.7], ['Plant_02', 2.05, 0.55], ['Grass_01', 4.4, 0.6], ['Plant_03', 6.35, 0.55], ['Grass_02', 6.6, 0.7], ['Rock_03', 1.6, 0.5]];
+  // 落地检查：每样装饰底边上取 7 个点，问地形“这里的土面在哪”，比地面线低超过 0.12 格 = 悬空（tools/test/ground.js 调用）
+  TW.checkGround = (T, floorAt) => TW.FG.flatMap(([n, x, w]) => { const bad = []; for (let i = 0; i <= 6; i++) { const xi = x + 0.08 * w + (0.84 * w) * i / 6; if (xi < 0 || xi > 7) continue; const f = floorAt(xi * T, 0); if (f > 0.12 * T) bad.push(+xi.toFixed(2)); } return bad.length ? [{ n, x, w, bad }] : []; });
   TW.load = () => Promise.all([...N.map(n => ['t_' + n, 'town/' + n + '.png']), ...Object.entries(EXTRA)].map(([k, src]) => new Promise(res => { const im = new Image(); im.onload = im.onerror = res; im.src = 'assets/' + src; TW.img[k] = im; }))).then(() => { TW.ready = true; });
   const I = n => TW.img['t_' + n];
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; };
@@ -109,7 +113,7 @@
     // 前景（画在角色前面）：只有草和小石头
     const fr = mk(VW, H + T * 0.6), f = fr.getContext('2d'), fy0 = H;
     const FX = v => gx + v * T, FY = v => fy0 + v * T;
-    for (const [n, x, w] of [['Grass_02', -0.1, 0.9], ['Grass_01', 0.95, 0.7], ['Plant_02', 2.55, 0.55], ['Grass_01', 4.2, 0.6], ['Plant_03', 6.35, 0.55], ['Grass_02', 6.6, 0.7], ['Rock_03', 1.95, 0.5]])
+    for (const [n, x, w] of TW.FG)
       { const h = w * T * I(n).height / I(n).width; dr(f, I(n), FX(x), FY(0) - h + T * 0.06, w * T, h); }   // 底边落在地面线（只压进 0.06 格草根）
     B.front = fr; B.gx = gx;
   };

@@ -247,3 +247,261 @@ button:active { transform: scale(.95); }
 .pill .rg { margin-left: .3rem; font-size: .72rem; color: #9df07a; white-space: nowrap; } .pill .rg:empty { display: none; }
 .box p, .day span, .cell span, .ci b, .card .mid span, .dcard span { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; }
 .vipi { position: relative; } .vipi img { width: 78%; height: 78%; object-fit: contain; } .vipi b { position: absolute; right: .1rem; bottom: .05rem; font-size: .8rem; color: #ffe27a; }
+
+/* ===================== v0.6：铁匠铺 / 技能屋按侧边按钮的美术风格统一（奶油 → 棕、深棕粗描边、底部投影） ===================== */
+:root { --cr1: #fffaf0; --cr2: #f6dca6; --tan: #e3b170; --brn: #96582a; --ink: #3a2412; --txt: #4a2c14; --sub: #85613e; --ok: #2f8a22; --bad: #c8321e; }
+/* 小镇：血条正红、体力在下；红点正红；主按钮 */
+.bar.hp i { background: linear-gradient(#ff5446, #d3161b); }
+.side .dot, .tag .dot, .tab .dot, .buy .dot, .sk .dot { background: #f0201b; box-shadow: 0 0 .3rem rgba(240, 32, 27, .7); }
+.node.can::before { background: #f0201b; }
+#go, #sk-go, #back { border-image: none; border: .16rem solid var(--ink); border-radius: 1.1rem; background: linear-gradient(#ffdc72, #f6a12a 58%, #d4721a); box-shadow: inset 0 .22rem 0 rgba(255, 255, 255, .5), inset 0 -.28rem 0 rgba(130, 55, 0, .35), 0 .3rem 0 rgba(40, 20, 10, .55); text-shadow: 0 .1rem 0 var(--ink), .07rem 0 0 var(--ink), -.07rem 0 0 var(--ink), 0 -.07rem 0 var(--ink); }
+#back { border-radius: .9rem; background: radial-gradient(circle at 50% 35%, #fff5d2, #f0c882 60%, #96582a); font-size: .82rem; }
+#auto { background: radial-gradient(circle at 50% 38%, #fff5d2, #f0c882 60%, #96582a); border: .16rem solid var(--ink); box-shadow: 0 .22rem 0 rgba(40, 20, 10, .5); }
+#auto.on { box-shadow: 0 0 0 .16rem #ffb43a, 0 0 .8rem #ffb43a, 0 .22rem 0 rgba(40, 20, 10, .5); }
+
+/* 两个面板共用 */
+#panel[data-tab="shop"], #panel[data-tab="skill"] { color: var(--txt); }
+#panel[data-tab="shop"] .t, #panel[data-tab="skill"] .t { text-shadow: 0 .09rem 0 var(--ink), .06rem 0 0 var(--ink), -.06rem 0 0 var(--ink), 0 -.06rem 0 var(--ink); }
+#panel[data-tab="shop"] .close, #panel[data-tab="skill"] .close { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: radial-gradient(circle at 50% 35%, #c27a44, #7a4520 70%); border: .16rem solid var(--ink); box-shadow: inset 0 .16rem 0 rgba(255, 220, 170, .4), 0 .22rem 0 rgba(30, 15, 5, .55); }
+#panel[data-tab="shop"] .buy, #panel[data-tab="skill"] .buy { border-image: none; border: .15rem solid var(--ink); border-radius: .8rem; padding: .25rem .5rem; color: #fff; background: linear-gradient(#ffdc72, #f6a12a 58%, #d4721a); box-shadow: inset 0 .18rem 0 rgba(255, 255, 255, .5), 0 .22rem 0 rgba(40, 20, 10, .5); }
+#panel[data-tab="shop"] .buy.no, #panel[data-tab="skill"] .buy.no { color: #fff8e8; background: linear-gradient(#d9c7a4, #a8936e); }
+#panel[data-tab="skill"] .buy.done { background: none; border: 0; box-shadow: none; color: var(--ok); text-shadow: none; }
+
+/* 铁匠铺：木板墙 + 吊牌标题 + 圆形展示台 + 奶油属性牌 + 深色凹槽装备位 + 文件夹式页签货架 */
+#panel[data-tab="shop"] { background: radial-gradient(ellipse at 50% 22%, rgba(255, 190, 110, .28), rgba(0, 0, 0, 0) 55%), radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(20, 8, 2, .55)), repeating-linear-gradient(90deg, #74492a 0 2.4rem, #5a3519 2.4rem 2.55rem, #6c4224 2.55rem 4.9rem, #573318 4.9rem 5.05rem); }
+#panel[data-tab="shop"] .phead h2 { flex: none; margin-right: auto; padding: .15rem 1.1rem .25rem; font-size: 1.2rem; color: #fff1cc; border-radius: .55rem; background: linear-gradient(#a06a38, #6a3f1c); border: .16rem solid #24140a; box-shadow: inset 0 .14rem 0 rgba(255, 220, 170, .35), 0 .25rem 0 rgba(20, 8, 2, .5); }
+#panel[data-tab="shop"] #doll { border-radius: 50%; background: radial-gradient(circle at 50% 62%, #fffbe8, #f6dda4 48%, #e0aa62 72%, #b77a3c); border: .2rem solid var(--ink); box-shadow: inset 0 -.5rem .8rem rgba(120, 60, 10, .35), 0 .3rem 0 rgba(20, 8, 2, .5); }
+#panel[data-tab="shop"] .stat { background: linear-gradient(var(--cr1), var(--cr2)); border: .15rem solid var(--ink); border-radius: .8rem; box-shadow: 0 .2rem 0 rgba(20, 8, 2, .45); }
+#panel[data-tab="shop"] .stat b { color: var(--sub); }
+#panel[data-tab="shop"] .stat em { color: var(--txt); text-shadow: none; } #panel[data-tab="shop"] .stat em .up { color: var(--ok); } #panel[data-tab="shop"] .stat em .down { color: var(--bad); }
+#panel[data-tab="shop"] .stat small { color: var(--sub); }
+#panel[data-tab="shop"] .slots { gap: .6rem; margin: .25rem 0 .5rem; }
+#panel[data-tab="shop"] .slot { width: 3.7rem; height: 3.7rem; border-radius: .9rem; background: radial-gradient(circle at 50% 40%, #6a4224, #3a2212); border: .16rem solid #24140a; box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 .12rem 0 rgba(255, 225, 170, .28); }
+#panel[data-tab="shop"] .bag:empty { display: none; }
+#panel[data-tab="shop"] .bag span { color: var(--txt); background: linear-gradient(var(--cr1), var(--cr2)); border: .12rem solid var(--ink); }
+#panel[data-tab="shop"] .tabs { gap: .25rem; margin: 0; padding: 0 .3rem; }
+#panel[data-tab="shop"] .tab { height: 2.3rem; color: #f8e3b9; border-radius: .8rem .8rem 0 0; background: linear-gradient(#a8703f, #7a4a24); border: .15rem solid var(--ink); border-bottom: 0; text-shadow: 0 .08rem 0 var(--ink); }
+#panel[data-tab="shop"] .tab.on { position: relative; z-index: 1; height: 2.5rem; margin-top: -.2rem; margin-bottom: -.15rem; color: var(--txt); text-shadow: none; background: #fbe9c2; }
+#panel[data-tab="shop"] .items { padding: .55rem; border-radius: .9rem; background: #fbe9c2; border: .15rem solid var(--ink); box-shadow: inset 0 .3rem .5rem rgba(150, 90, 30, .22), 0 .3rem 0 rgba(20, 8, 2, .45); }
+#panel[data-tab="shop"] .item { background: linear-gradient(var(--cr1), #f1d6a2); border: .14rem solid var(--ink); box-shadow: 0 .2rem 0 rgba(60, 30, 10, .35); }
+#panel[data-tab="shop"] .item b { color: var(--txt); } #panel[data-tab="shop"] .item > span { color: var(--sub); }
+#panel[data-tab="shop"] .item small { color: var(--sub); } #panel[data-tab="shop"] .item small.on { color: #fff; display: inline-block; padding: 0 .45rem; border-radius: .6rem; background: var(--ok); }
+#panel[data-tab="shop"] .item .cost .ok { color: var(--ok); } #panel[data-tab="shop"] .item .lack { color: var(--bad); }
+
+/* 技能屋：暖棕书房 + 绸带标题 + 带点阵的羊皮纸图 + 立体奶油菱形节点 + 奶油说明卡 */
+#panel[data-tab="skill"] { background: radial-gradient(ellipse at 50% 30%, #6e4629, #3a2414 62%, #24150b); }
+#panel[data-tab="skill"] .phead h2 { position: relative; flex: none; margin: 0 auto 0 1rem; padding: .2rem 1.3rem .3rem; font-size: 1.2rem; color: var(--txt); text-shadow: none; background: linear-gradient(#fff6d8, #efcd8a); border: .16rem solid var(--ink); border-radius: .4rem; box-shadow: 0 .25rem 0 rgba(15, 6, 2, .5); }
+#panel[data-tab="skill"] .phead h2::before, #panel[data-tab="skill"] .phead h2::after { content: ''; position: absolute; top: .45rem; width: .9rem; height: 1.6rem; z-index: -1; background: #c98f4a; border: .16rem solid var(--ink); }
+#panel[data-tab="skill"] .phead h2::before { left: -.75rem; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 45% 50%); }
+#panel[data-tab="skill"] .phead h2::after { right: -.75rem; clip-path: polygon(0 0, 100% 0, 55% 50%, 100% 100%, 0 100%); }
+#panel[data-tab="skill"] .tree { border: .2rem solid var(--ink); border-radius: 1.3rem; background-color: #f7e2b4; background-image: radial-gradient(circle, rgba(140, 90, 40, .2) .07rem, rgba(0, 0, 0, 0) .09rem), radial-gradient(ellipse at 50% 45%, #fff6dc, #f3dba8 55%, #d8ac6e); background-size: 1.1rem 1.1rem, 100% 100%; box-shadow: inset 0 0 1.6rem rgba(130, 75, 20, .4), 0 .3rem 0 rgba(15, 6, 2, .5); }
+#panel[data-tab="skill"] #links line { stroke: #a5763f; } #panel[data-tab="skill"] #links line.on { stroke: #c8641a; }
+#panel[data-tab="skill"] .sk i { background: linear-gradient(135deg, #fffaf0, #eccf95); border: .2rem solid var(--c); box-shadow: 0 0 0 .13rem var(--ink), .16rem .2rem 0 .13rem rgba(70, 35, 10, .4); }
+#panel[data-tab="skill"] .sk.mech i { background: radial-gradient(#fffaf0, #f0cf8c); }
+#panel[data-tab="skill"] .sk.got i { background: linear-gradient(135deg, #fff4c4, #ffcf5a); }
+#panel[data-tab="skill"] .sk.max i { background: linear-gradient(135deg, #fff1a8, #f0b020); box-shadow: 0 0 0 .13rem var(--ink), 0 0 .7rem var(--c), .16rem .2rem 0 .13rem rgba(70, 35, 10, .4); }
+#panel[data-tab="skill"] .sk.lock { filter: grayscale(.9) brightness(.8) opacity(.75); }
+#panel[data-tab="skill"] .sk.sel i { box-shadow: 0 0 0 .13rem var(--ink), 0 0 0 .32rem #fff8e0, 0 0 .9rem #ffb43a; }
+#panel[data-tab="skill"] .sk u { color: #ffeec8; background: var(--txt); text-shadow: none; }
+#panel[data-tab="skill"] .dcard { color: var(--txt); background: linear-gradient(var(--cr1), var(--cr2)); border: .16rem solid var(--ink); border-radius: .9rem; box-shadow: inset .4rem 0 0 var(--c), 0 .25rem 0 rgba(15, 6, 2, .5); padding-left: 1rem; }
+#panel[data-tab="skill"] .dcard > img { padding: .25rem; border-radius: 50%; background: radial-gradient(#fffaf0, #f0cf8c); border: .14rem solid var(--ink); }
+#panel[data-tab="skill"] .dcard b { color: var(--txt); text-shadow: none; } #panel[data-tab="skill"] .dcard b small { color: var(--sub); }
+#panel[data-tab="skill"] .dcard span { color: #5e3c1e; } #panel[data-tab="skill"] .dcard .nx { color: var(--ok); } #panel[data-tab="skill"] .dcard .req { color: var(--bad); }
+#panel[data-tab="skill"] #sk-go { width: 6.4rem; height: 2.8rem; font-size: .95rem; }
+#auto.lock span::after { content: none; }   /* v0.6：不写“VIP2”小字，灰色就表示没解锁 */
+#tip { bottom: calc(12.2rem + env(safe-area-inset-bottom)); }   /* v0.6：教程字不压自动按钮 */
+/* v0.6 独立检查后：卡片改成和侧边按钮同样的奶油→棕渐变 + 粗描边；主按钮白字；铁匠铺内容在高屏上居中 */
+#go, #sk-go, #back { color: #fff; }
+#panel[data-tab="shop"] .stat, #panel[data-tab="shop"] .item { background: radial-gradient(circle at 50% 30%, #fff5d2, #f6d79a 70%, #e6b673); border-width: .18rem; }
+#panel[data-tab="shop"] .stat small { font-size: .6rem; color: #6e4a28; }
+#panel[data-tab="shop"] .shop > :first-child { margin-top: auto; } #panel[data-tab="shop"] .shop > :last-child { margin-bottom: auto; }
+#panel[data-tab="skill"] .dcard { background: radial-gradient(circle at 50% 30%, #fff5d2, #f6d79a 75%, #e6b673); border-width: .18rem; }
+/* ===== v0.7（用户 2026-11-16）：铁匠铺 / 技能屋改用 tata 宠物页的「启程」配色和底纹 =====
+   取色全部来自 tata meta.js TH_AFK：面板 #eae7de + Pattern_512 着色 #e1dccf（半尺寸平铺）+ 底部渐变 #ddd6c8；
+   卡片 = BaseFrame_Basic_Rectangle_H50 着色 #f7f4ee，无描边，暖灰投影 rgba(84,64,50,.58)（照 tata 详情的属性框）；
+   深色按钮 #685d5b / 侧面 #4f4548；浅色按钮 #f1ece1 / 侧面 #b9aea8；文字 #4f4548、次要 #8d8485、小标题 #b07a3a；主按钮金 #dfad64 / 侧面 #b07a3a / 描边 #3a3133。 */
+:root { --af-panel: #eae7de; --af-box: #f7f4ee; --af-dark: #685d5b; --af-dark2: #4f4548; --af-out: #3a3133; --af-lt: #f1ece1; --af-lts: #b9aea8; --af-txt: #4f4548; --af-sub: #8d8485; --af-ttl: #b07a3a; --af-gold: #dfad64; --af-gold2: #b07a3a; --af-sh: rgba(84, 64, 50, .58); --af-up: #4f8a3e; --af-bad: #c0473a; }
+#panel[data-tab="shop"], #panel[data-tab="skill"] { color: var(--af-txt); background: url('../assets/ui/afk/grad_bottom.png') left bottom / 100% 40% no-repeat, url('../assets/ui/afk/pattern.png') 0 0 / 256px 256px repeat, var(--af-panel); }
+#panel[data-tab="shop"] .t, #panel[data-tab="skill"] .t { text-shadow: none; }
+/* 标题：照 tata 面板里的文字，平的深暖灰粗体，不加框 */
+#panel[data-tab="shop"] .phead h2, #panel[data-tab="skill"] .phead h2 { flex: none; margin: 0 auto 0 .3rem; padding: 0; font-size: 1.35rem; font-weight: 900; color: var(--af-txt); background: none; border: 0; box-shadow: none; }
+#panel[data-tab="skill"] .phead h2::before, #panel[data-tab="skill"] .phead h2::after { content: none; }
+/* 关闭：照 tata 右上角深色方钮（深暖灰面 + 深边侧面 + 投影） */
+#panel[data-tab="shop"] .close, #panel[data-tab="skill"] .close { width: 2.5rem; height: 2.3rem; border-radius: .6rem; background: var(--af-dark); border: .1rem solid var(--af-out); box-shadow: 0 .22rem 0 var(--af-dark2), 0 .22rem 0 .1rem var(--af-out), 0 .4rem .6rem var(--af-sh); }
+/* 无边浮动卡片（属性、装备、装备槽、技能说明） */
+#panel[data-tab="shop"] .stat, #panel[data-tab="shop"] .item, #panel[data-tab="shop"] .slot, #panel[data-tab="skill"] .dcard { background: none; border: 0; border-radius: 0; box-shadow: none; border-image: none; filter: none; position: relative; isolation: isolate; }
+#panel[data-tab="shop"] .stat { padding: .45rem .55rem; }
+#panel[data-tab="shop"] .stat b { color: var(--af-sub); font-weight: 700; } #panel[data-tab="shop"] .stat em { color: var(--af-txt); font-weight: 900; }
+#panel[data-tab="shop"] .stat em .up { color: var(--af-up); } #panel[data-tab="shop"] .stat em .down { color: var(--af-bad); }
+#panel[data-tab="shop"] .stat small { color: var(--af-sub); }
+/* 纸娃娃：浮在面板上的亮圆台，无描边 */
+#panel[data-tab="shop"] #doll { border: 0; border-radius: 50%; background: radial-gradient(ellipse 46% 13% at 50% 84%, rgba(58, 48, 45, .22), rgba(58, 48, 45, 0)), radial-gradient(circle at 50% 60%, #fffaf0, #f6efe1 52%, #e7dccb); box-shadow: 0 .3rem .7rem var(--af-sh); }
+#panel[data-tab="shop"] .slot { width: 3.7rem; height: 3.7rem; }
+#panel[data-tab="shop"] .bag span { color: var(--af-txt); background: var(--af-box); border: 0; box-shadow: 0 .15rem .3rem var(--af-sh); }
+/* 页签：照 tata 宠物页筛选按钮（选中深暖灰白字，没选浅色 + 浅色侧面） */
+#panel[data-tab="shop"] .tabs { gap: .4rem; margin: .1rem 0 .7rem; padding: 0 .1rem; }
+#panel[data-tab="shop"] .tab, #panel[data-tab="shop"] .tab.on { height: 2.3rem; margin: 0; font-weight: 800; border-radius: .6rem; border: .09rem solid #cfc7bc; color: var(--af-txt); text-shadow: none; background: var(--af-lt); box-shadow: 0 .2rem 0 var(--af-lts), 0 .35rem .45rem var(--af-sh); }
+#panel[data-tab="shop"] .tab.on { color: #fff; background: var(--af-dark); border-color: var(--af-out); box-shadow: 0 .2rem 0 var(--af-dark2), 0 .2rem 0 .09rem var(--af-out), 0 .35rem .45rem var(--af-sh); }
+/* 商品区：直接放在面板底纹上，只有这一块上下滚动（人物、属性、装备槽、页签固定） */
+#panel[data-tab="shop"] .pbody.shop { overflow: visible; padding-bottom: 0; }   /* v0.8：外层不裁，商品区自己滚动；否则左右边和投影被切掉 */
+#panel[data-tab="shop"] .shop > :first-child, #panel[data-tab="shop"] .shop > :last-child { margin-top: 0; margin-bottom: 0; }
+#panel[data-tab="shop"] .items { flex: 1; min-height: 0; overflow-y: auto; touch-action: pan-y; align-content: start; gap: .7rem .6rem; padding: .3rem .6rem 1rem; margin: 0 -.6rem; background: none; border: 0; border-radius: 0; box-shadow: none; }
+#panel[data-tab="shop"] .item { padding: .5rem .2rem .55rem; }
+#panel[data-tab="shop"] .item b { color: var(--af-txt); font-weight: 800; } #panel[data-tab="shop"] .item > span, #panel[data-tab="shop"] .item small { color: var(--af-sub); }
+#panel[data-tab="shop"] .item small.on { color: #f4f0e7; display: inline-block; padding: 0 .5rem; border-radius: .6rem; background: #4f4644; }
+#panel[data-tab="shop"] .item .cost { color: var(--af-txt); } #panel[data-tab="shop"] .item .cost .ok { color: var(--af-up); } #panel[data-tab="shop"] .item .lack { color: var(--af-bad); }
+#panel[data-tab="shop"] .item.own { opacity: .6; }
+#panel[data-tab="shop"] .item.next { opacity: .75; }
+/* 技能屋：网直接铺在面板底纹上；技能图标不变 */
+#panel[data-tab="skill"] .tree { border: 0; border-radius: 0; background: none; box-shadow: none; margin: 0 -.6rem; }
+#panel[data-tab="skill"] #links line { stroke: var(--af-lts); } #panel[data-tab="skill"] #links line.on { stroke: var(--af-dark); }
+#panel[data-tab="skill"] .sk i { background: var(--af-box); box-shadow: 0 0 0 .12rem var(--af-dark2), .1rem .25rem .35rem .05rem var(--af-sh); }
+#panel[data-tab="skill"] .sk.mech i { background: radial-gradient(#ffffff, var(--af-box)); }
+#panel[data-tab="skill"] .sk.got i { background: linear-gradient(135deg, #fff6e2, #f2d29a); }
+#panel[data-tab="skill"] .sk.max i { background: linear-gradient(135deg, #fff6e2, var(--af-gold)); box-shadow: 0 0 0 .12rem var(--af-dark2), 0 0 .7rem var(--c), .1rem .25rem .35rem .05rem var(--af-sh); }
+#panel[data-tab="skill"] .sk.sel i { box-shadow: 0 0 0 .12rem var(--af-dark2), 0 0 0 .3rem #fff, 0 0 .8rem #f2c35f; }
+#panel[data-tab="skill"] .sk u { color: #f4f0e7; background: #4f4644; }
+#panel[data-tab="skill"] .detail { margin: .5rem 0 .2rem; }
+#panel[data-tab="skill"] .dcard { padding: .6rem .7rem; color: var(--af-txt); }
+#panel[data-tab="skill"] .dcard > img { padding: .35rem; border-radius: 50%; background: #4f4644; border: 0; }
+#panel[data-tab="skill"] .dcard b { color: var(--af-txt); font-weight: 800; } #panel[data-tab="skill"] .dcard b small { color: var(--af-sub); } #panel[data-tab="skill"] .dcard .mk { color: #fff !important; }
+#panel[data-tab="skill"] .dcard span { color: var(--af-txt); } #panel[data-tab="skill"] .dcard .nx { color: var(--af-up); } #panel[data-tab="skill"] .dcard .req { color: var(--af-bad); }
+/* 购买按钮 / 开始挖掘：照 tata「开始战斗」（金面 + 深金侧面 + 深描边 + 白字深棕描边） */
+#panel[data-tab="skill"] .buy, #go { color: #fff; border: .1rem solid var(--af-out); background: linear-gradient(#e9c387 0 40%, var(--af-gold) 40%); box-shadow: 0 .26rem 0 var(--af-gold2), 0 .26rem 0 .1rem var(--af-out), 0 .45rem .6rem var(--af-sh); text-shadow: 0 .08rem 0 #7a3d12, .06rem 0 0 #7a3d12, -.06rem 0 0 #7a3d12, 0 -.06rem 0 #7a3d12; }
+#go { border-radius: .9rem; }
+#panel[data-tab="skill"] .buy { border-radius: .7rem; }
+#panel[data-tab="skill"] .buy.no { background: linear-gradient(#a19899 0 40%, var(--af-sub) 40%); box-shadow: 0 .26rem 0 var(--af-dark2), 0 .26rem 0 .1rem var(--af-out), 0 .45rem .6rem var(--af-sh); text-shadow: 0 .08rem 0 var(--af-out), .06rem 0 0 var(--af-out), -.06rem 0 0 var(--af-out), 0 -.06rem 0 var(--af-out); }
+#panel[data-tab="skill"] .buy.done { background: none; border: 0; box-shadow: none; color: var(--af-up); text-shadow: none; }
+#go:active { transform: translateX(-50%) translateY(.2rem); box-shadow: 0 .06rem 0 var(--af-gold2), 0 .06rem 0 .1rem var(--af-out), 0 .2rem .3rem var(--af-sh); }
+
+/* v0.8（用户 16:38：投影怪、边缘像被截掉）：照 tata mtBox 的画法——卡片下面垫一块往里收 2px 的圆角块投影（blur 11 / 下移 5.5 / rgba(84,64,50,.58)），
+   上面再盖卡面贴图；不再用 filter: drop-shadow。滚动区左右下留足投影的位置。 */
+#panel[data-tab="shop"] .stat::before, #panel[data-tab="shop"] .item::before, #panel[data-tab="shop"] .slot::before, #panel[data-tab="skill"] .dcard::before { content: ''; position: absolute; inset: 2px; border-radius: .7rem; background: var(--af-panel); box-shadow: 0 5px 11px var(--af-sh); z-index: -2; pointer-events: none; }
+#panel[data-tab="shop"] .stat::after, #panel[data-tab="shop"] .item::after, #panel[data-tab="shop"] .slot::after, #panel[data-tab="skill"] .dcard::after { content: ''; position: absolute; inset: 0; border-style: solid; border-width: 0; border-image: url('../assets/ui/afk/box.png') 24 fill / .85rem stretch; z-index: -1; pointer-events: none; }
+/* 状态描边：在卡面下面垫一张大一圈的同形八角图（金 = 穿着，深灰 = 预览 / 拖到槽上），不用 drop-shadow */
+#panel[data-tab="shop"] .item.wear::before, #panel[data-tab="shop"] .item.pv::before, #panel[data-tab="shop"] .slot.pv::before, #panel[data-tab="shop"] .slot.hover::before { inset: -.16rem; border-radius: .85rem; background: none; border-style: solid; border-width: 0; border-image: url('../assets/ui/afk/box_gold.png') 24 fill / 1rem stretch; }
+#panel[data-tab="shop"] .item.pv::before, #panel[data-tab="shop"] .slot.pv::before, #panel[data-tab="shop"] .slot.hover::before { border-image-source: url('../assets/ui/afk/box_dark.png'); }
+#panel[data-tab="shop"] .item.can::before { box-shadow: 0 5px 11px var(--af-sh), 0 0 .55rem .15rem rgba(242, 195, 95, .75); }
+#panel[data-tab="shop"] .item.wear, #panel[data-tab="shop"] .item.can, #panel[data-tab="shop"] .item.pv, #panel[data-tab="shop"] .slot.pv, #panel[data-tab="shop"] .slot.hover { box-shadow: none; filter: none; }
+#panel[data-tab="shop"] .items { padding: .4rem .9rem 1.2rem; margin: 0 -.9rem; }
+
+/* ===== v0.9（用户 16:41：太白了；装备板、技能树底板、技能说明的色条都被删了）=====
+   恢复 v0.6 的结构（商品板 + 贴着板的页签、技能树底板、说明卡左侧分支色条），只借 tata 启程配色：
+   外层 = 同色系深暖灰 #5f5553 + 深色底纹；板子 = 米白 #eae7de + 浅底纹（tata 面板）；卡片 = #f7f4ee 无边浮动投影。 */
+#panel[data-tab="shop"], #panel[data-tab="skill"] { color: #f4f0e7; background: radial-gradient(ellipse at 50% 20%, rgba(255, 236, 200, .10), rgba(0, 0, 0, 0) 60%), url('../assets/ui/afk/pattern_dark.png') 0 0 / 256px 256px repeat, #5f5553; }
+#panel[data-tab="shop"] .phead h2, #panel[data-tab="skill"] .phead h2 { color: #f4f0e7; }
+#panel[data-tab="shop"] .close, #panel[data-tab="skill"] .close { background: #4f4548; }
+/* 深底上的投影更深一点 */
+#panel[data-tab="shop"] .stat::before, #panel[data-tab="shop"] .slot::before { box-shadow: 0 5px 11px rgba(30, 20, 16, .55); }
+#panel[data-tab="shop"] #doll { box-shadow: 0 .3rem .8rem rgba(30, 20, 16, .55); }
+/* 页签贴在商品板上：选中 = 板子同色，没选 = 深一号暖灰 */
+#panel[data-tab="shop"] .tabs { gap: .25rem; margin: 0; padding: 0 .35rem; }
+#panel[data-tab="shop"] .tab, #panel[data-tab="shop"] .tab.on { height: 2.3rem; border-radius: .8rem .8rem 0 0; border: 0; color: #e9e3d8; background: #7a6f6c; box-shadow: inset 0 .14rem 0 rgba(255, 255, 255, .12); }
+#panel[data-tab="shop"] .tab.on { position: relative; z-index: 1; height: 2.5rem; margin-top: -.2rem; color: var(--af-txt); background: var(--af-panel); box-shadow: none; }
+/* 商品板：tata 面板（米白 + 浅底纹 + 底部渐变），板里面滚动；四周留出卡片投影的位置 */
+#panel[data-tab="shop"] .items { margin: 0; padding: .7rem .65rem 1rem; gap: .65rem .55rem; border-radius: 0 0 1rem 1rem; background: url('../assets/ui/afk/grad_bottom.png') left bottom / 100% 40% no-repeat, url('../assets/ui/afk/pattern.png') 0 0 / 256px 256px repeat, var(--af-panel); box-shadow: 0 .35rem .8rem rgba(30, 20, 16, .5); }
+/* 技能树底板：同一块米白面板 */
+#panel[data-tab="skill"] .tree { margin: 0; border-radius: 1.1rem; background: url('../assets/ui/afk/grad_bottom.png') left bottom / 100% 40% no-repeat, url('../assets/ui/afk/pattern.png') 0 0 / 256px 256px repeat, var(--af-panel); box-shadow: inset 0 0 1.2rem rgba(120, 100, 85, .22), 0 .35rem .8rem rgba(30, 20, 16, .5); }
+/* 技能说明卡：浮动卡 + 左侧分支色条（恢复） */
+#panel[data-tab="skill"] .dcard { padding: .6rem .7rem .6rem 1rem; border-radius: .8rem; background: var(--af-box); box-shadow: inset .4rem 0 0 var(--c), 0 5px 11px rgba(30, 20, 16, .55); }
+#panel[data-tab="skill"] .dcard::before, #panel[data-tab="skill"] .dcard::after { content: none; }
+
+/* v0.10：技能说明卡固定 3 行高，按钮固定宽，点不同技能布局不动；连线看得清 */
+#panel[data-tab="skill"] .detail { min-height: 0; }
+#panel[data-tab="skill"] .dcard { height: 4.9rem; box-sizing: border-box; }
+#panel[data-tab="skill"] .dcard .mid { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+#panel[data-tab="skill"] .dcard b { font-size: .95rem; line-height: 1.35; white-space: nowrap; }
+#panel[data-tab="skill"] .dcard span { font-size: .78rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#panel[data-tab="skill"] .dcard .buy { flex: none; width: 5.2rem; min-width: 0; height: 3.1rem; min-height: 0; padding: .1rem .2rem; font-size: .85rem; }
+#panel[data-tab="skill"] .dcard .buy img { width: 1.1rem; height: 1.1rem; vertical-align: -.2rem; }
+#panel[data-tab="skill"] #links line { stroke: #9d928c; stroke-width: .2rem; stroke-dasharray: .35rem .3rem; }
+#panel[data-tab="skill"] #links line.on { stroke-dasharray: none; stroke-width: .3rem; }
+#panel[data-tab="skill"] #links { width: 1px; height: 1px; }   /* v0.10：0×0 的 svg 浏览器不画（连线一直不显示的真正原因） */
+
+/* ===== v0.11（用户 16:51：颜色太单一、灰白冷色不如之前、没有渐变）=====
+   回到 v0.6 的暖色（木纹背景、奶油→金黄渐变、棕色字），保留：无边浮动卡、商品板 / 技能树底板（tata 图标底纹改暖色着色）、贴板页签、说明卡色条。 */
+:root { --af-txt: #4a2c14; --af-sub: #8a6a48; --af-box: #fff7e6; --af-sh: rgba(90, 50, 20, .45); --af-up: #2f8a22; --af-bad: #c8321e; }
+#panel[data-tab="shop"] { color: #fff1cc; background: radial-gradient(ellipse at 50% 22%, rgba(255, 190, 110, .28), rgba(0, 0, 0, 0) 55%), radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(20, 8, 2, .55)), repeating-linear-gradient(90deg, #74492a 0 2.4rem, #5a3519 2.4rem 2.55rem, #6c4224 2.55rem 4.9rem, #573318 4.9rem 5.05rem); }
+#panel[data-tab="skill"] { color: #fff1cc; background: radial-gradient(ellipse at 50% 30%, #6e4629, #3a2414 62%, #24150b); }
+#panel[data-tab="shop"] .phead h2, #panel[data-tab="skill"] .phead h2 { color: #fff1cc; text-shadow: 0 .1rem 0 #24140a, .06rem 0 0 #24140a, -.06rem 0 0 #24140a, 0 -.06rem 0 #24140a; }
+#panel[data-tab="shop"] .close, #panel[data-tab="skill"] .close { border-radius: 50%; background: radial-gradient(circle at 50% 35%, #c27a44, #7a4520 70%); border: .16rem solid #24140a; box-shadow: inset 0 .16rem 0 rgba(255, 220, 170, .4), 0 .22rem 0 rgba(30, 15, 5, .55); }
+/* 浮动卡：奶油→浅金渐变面，无描边，暖棕投影 */
+#panel[data-tab="shop"] .stat::after, #panel[data-tab="shop"] .item::after, #panel[data-tab="shop"] .slot::after { border-image: none; border-radius: .8rem; background: linear-gradient(#fffaf0, #fbecc8 60%, #f3d9a4); box-shadow: inset 0 .12rem 0 rgba(255, 255, 255, .8); }
+#panel[data-tab="shop"] .stat::before, #panel[data-tab="shop"] .item::before, #panel[data-tab="shop"] .slot::before { inset: 2px; border-radius: .8rem; border: 0; border-image: none; background: #6c4224; box-shadow: 0 5px 11px rgba(30, 12, 2, .55); }
+#panel[data-tab="shop"] .item::before { box-shadow: 0 5px 11px var(--af-sh); background: #e8c98e; }
+#panel[data-tab="shop"] .stat b, #panel[data-tab="shop"] .stat small, #panel[data-tab="shop"] .item > span, #panel[data-tab="shop"] .item small { color: var(--af-sub); }
+#panel[data-tab="shop"] .stat em, #panel[data-tab="shop"] .item b { color: var(--af-txt); }
+#panel[data-tab="shop"] .item small.on { color: #fff; background: var(--af-up); }
+/* 状态：穿着 = 金圈，预览 / 拖到槽上 = 橙圈，买得起 = 金色光晕 */
+#panel[data-tab="shop"] .item.wear::before, #panel[data-tab="shop"] .item.pv::before, #panel[data-tab="shop"] .slot.pv::before, #panel[data-tab="shop"] .slot.hover::before { inset: 2px; border-image: none; background: #e8c98e; }
+#panel[data-tab="shop"] .item.wear::after { box-shadow: inset 0 .12rem 0 rgba(255, 255, 255, .8), 0 0 0 .16rem #e0a81e; }
+#panel[data-tab="shop"] .item.pv::after, #panel[data-tab="shop"] .slot.pv::after, #panel[data-tab="shop"] .slot.hover::after { inset: 0; border-image: none; box-shadow: inset 0 .12rem 0 rgba(255, 255, 255, .8), 0 0 0 .16rem #f6a12a, 0 0 .6rem rgba(246, 161, 42, .7); }
+#panel[data-tab="shop"] .item.can::before { box-shadow: 0 5px 11px var(--af-sh), 0 0 .6rem .18rem rgba(255, 196, 70, .8); }
+/* 纸娃娃台：暖色亮圆台 */
+#panel[data-tab="shop"] #doll { background: radial-gradient(ellipse 46% 13% at 50% 84%, rgba(90, 45, 10, .25), rgba(90, 45, 10, 0)), radial-gradient(circle at 50% 60%, #fffbe8, #f6dda4 50%, #e0aa62 78%, #b77a3c); box-shadow: 0 .3rem .8rem rgba(20, 8, 2, .55); }
+/* 页签：没选 = 棕色渐变，选中 = 和商品板同色 */
+#panel[data-tab="shop"] .tab { color: #f8e3b9; background: linear-gradient(#b07a48, #84522c); box-shadow: inset 0 .14rem 0 rgba(255, 220, 170, .3); text-shadow: 0 .08rem 0 #3a2412; }
+#panel[data-tab="shop"] .tab.on { color: var(--af-txt); background: #fff4dc; text-shadow: none; box-shadow: none; }
+/* 商品板 / 技能树底板：奶油→金黄渐变 + 暖色图标底纹 + 内阴影 */
+#panel[data-tab="shop"] .items, #panel[data-tab="skill"] .tree { background: url('../assets/ui/afk/pattern_warm.png') 0 0 / 256px 256px repeat, linear-gradient(#fff4dc, #f8e3b6 55%, #ecc98a); }
+#panel[data-tab="shop"] .items { box-shadow: inset 0 .3rem .6rem rgba(150, 90, 30, .18), 0 .35rem .8rem rgba(20, 8, 2, .5); }
+#panel[data-tab="skill"] .tree { box-shadow: inset 0 0 1.4rem rgba(150, 90, 30, .35), 0 .35rem .8rem rgba(20, 8, 2, .5); }
+#panel[data-tab="skill"] #links line { stroke: #b8956a; }
+#panel[data-tab="skill"] .sk i { background: linear-gradient(135deg, #fffaf0, #f1d9a6); box-shadow: 0 0 0 .12rem #3a2412, .1rem .25rem .35rem .05rem var(--af-sh); }
+#panel[data-tab="skill"] .sk.got i { background: linear-gradient(135deg, #fff4c4, #ffcf5a); }
+#panel[data-tab="skill"] .sk.max i { background: linear-gradient(135deg, #fff1a8, #f0b020); box-shadow: 0 0 0 .12rem #3a2412, 0 0 .7rem var(--c), .1rem .25rem .35rem .05rem var(--af-sh); }
+#panel[data-tab="skill"] .sk u { color: #ffeec8; background: #4a2c14; }
+#panel[data-tab="skill"] .dcard { background: linear-gradient(#fffaf0, #fbecc8 60%, #f3d9a4); box-shadow: inset .4rem 0 0 var(--c), 0 5px 11px rgba(20, 8, 2, .55); }
+#panel[data-tab="skill"] .dcard > img { background: radial-gradient(#fffaf0, #f0cf8c); box-shadow: 0 0 0 .14rem #3a2412; }
+#panel[data-tab="skill"] .buy.no { background: linear-gradient(#e2d2b4 0 40%, #c9b394 40%); box-shadow: 0 .26rem 0 #a68d6a, 0 .26rem 0 .1rem #4a3420, 0 .45rem .6rem var(--af-sh); text-shadow: 0 .08rem 0 #5a4028, .06rem 0 0 #5a4028, -.06rem 0 0 #5a4028, 0 -.06rem 0 #5a4028; border-color: #4a3420; }
+/* v0.11（用户 16:52）：装备槽改回 v0.6 的凹陷深色槽 */
+#panel[data-tab="shop"] .slot::before, #panel[data-tab="shop"] .slot::after { content: none; }
+#panel[data-tab="shop"] .slot { border-radius: .9rem; background: radial-gradient(circle at 50% 40%, #6a4224, #3a2212); border: .16rem solid #24140a; box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 .12rem 0 rgba(255, 225, 170, .28); filter: none; }
+#panel[data-tab="shop"] .slot.pv, #panel[data-tab="shop"] .slot.hover { box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 0 0 .16rem #ffd34a, 0 0 .6rem #ffd34a; filter: none; }
+
+/* v0.12（用户 16:54：木纹背景丑，不要）：外层背景 = tata 图标底纹（暖棕着色）+ 暖棕渐变，不用木纹 */
+#panel[data-tab="shop"], #panel[data-tab="skill"] { background: radial-gradient(ellipse at 50% 18%, rgba(255, 200, 130, .22), rgba(0, 0, 0, 0) 60%), url('../assets/ui/afk/pattern_brown.png') 0 0 / 256px 256px repeat, linear-gradient(#6e4b33, #553826 55%, #3e281a); }
+
+/* v0.13（用户 16:57）① 属性卡改成 tata 详情属性框：八角米白框（BaseFrame 着色 #f7f4ee）+ 柔和暖灰投影，左边大图标，右边 小标签 / 粗数值 */
+#panel[data-tab="shop"] .stat { display: flex; align-items: center; gap: .45rem; padding: .4rem .5rem; }
+#panel[data-tab="shop"] .stat::after { border-radius: 0; background: none; box-shadow: none; border-style: solid; border-width: 0; border-image: url('../assets/ui/afk/box.png') 24 fill / .85rem stretch; }
+#panel[data-tab="shop"] .stat::before { inset: 2px; border-radius: .7rem; background: #f7f4ee; box-shadow: 0 5px 11px rgba(84, 64, 50, .58); }
+#panel[data-tab="shop"] .stat .si { flex: none; width: 1.9rem; height: 1.9rem; object-fit: contain; filter: drop-shadow(0 .1rem .1rem rgba(58, 48, 45, .35)); }
+#panel[data-tab="shop"] .stat .sv { min-width: 0; }
+#panel[data-tab="shop"] .stat b { display: block; font-size: .72rem; font-weight: 700; color: #8d8485; }
+#panel[data-tab="shop"] .stat em { font-size: 1.15rem; line-height: 1.15; color: #4f4548; font-weight: 900; }
+#panel[data-tab="shop"] .stat small { font-size: .56rem; color: #8d8485; }
+/* ② 商品卡、商品板、页签的粗深棕描边改回 v0.6 */
+#panel[data-tab="shop"] .item::before, #panel[data-tab="shop"] .item::after { content: none; }
+#panel[data-tab="shop"] .item { border: .16rem solid #3a2412; border-radius: .8rem; background: linear-gradient(#fffaf0, #fbecc8 60%, #f3d9a4); box-shadow: inset 0 .12rem 0 rgba(255, 255, 255, .8), 0 .22rem 0 rgba(60, 30, 10, .35); filter: none; }
+#panel[data-tab="shop"] .item.can { box-shadow: 0 0 0 .16rem #f6a12a inset, 0 0 .55rem rgba(246, 161, 42, .7), 0 .22rem 0 rgba(60, 30, 10, .35); }
+#panel[data-tab="shop"] .item.wear { box-shadow: 0 0 0 .16rem #e0a81e inset, 0 .22rem 0 rgba(60, 30, 10, .35); }
+#panel[data-tab="shop"] .item.pv { box-shadow: 0 0 0 .16rem #ffd34a inset, 0 0 .6rem #ffd34a; }
+#panel[data-tab="shop"] .items { border: .16rem solid #3a2412; border-top-right-radius: 1rem; box-shadow: inset 0 .3rem .5rem rgba(150, 90, 30, .22), 0 .3rem 0 rgba(20, 8, 2, .45); }
+#panel[data-tab="shop"] .tab { border: .16rem solid #3a2412; border-bottom: 0; }
+#panel[data-tab="shop"] .tab.on { margin-bottom: -.16rem; height: 2.66rem; }
+/* v0.14（用户 16:58）：属性卡面用纸娃娃圆台那种 中间亮、四周更深 的暖色径向渐变（形状仍是 tata 八角框） */
+#panel[data-tab="shop"] .stat::after { border-image: none; clip-path: polygon(.45rem 0, calc(100% - .45rem) 0, 100% .45rem, 100% calc(100% - .45rem), calc(100% - .45rem) 100%, .45rem 100%, 0 calc(100% - .45rem), 0 .45rem); background: radial-gradient(ellipse farthest-corner at 50% 42%, #fffbe8 0%, #f6dda4 42%, #e0aa62 78%, #b77a3c 100%); }
+#panel[data-tab="shop"] .stat::before { background: #b77a3c; box-shadow: 0 5px 11px rgba(30, 12, 2, .55); }
+#panel[data-tab="shop"] .stat b, #panel[data-tab="shop"] .stat small { color: #85613e; }
+#panel[data-tab="shop"] .stat em { color: #4a2c14; }
+
+/* v0.15（用户 17:03）：选中页签也要粗描边；商品区隐藏系统滚动条，滑动时才出现棕色圆头滑块 */
+#panel[data-tab="shop"] .tab.on { border: .16rem solid #3a2412; border-bottom: 0; }
+#panel[data-tab="shop"] .items { scrollbar-width: none; } #panel[data-tab="shop"] .items::-webkit-scrollbar { display: none; }
+#panel[data-tab="shop"] .pbody.shop { position: relative; }
+.sthumb { position: absolute; z-index: 3; width: .38rem; border-radius: .3rem; background: linear-gradient(90deg, #a8703f, #6a3f1c); box-shadow: 0 0 0 .08rem #3a2412, inset .06rem 0 0 rgba(255, 220, 170, .45); opacity: 0; transition: opacity .25s; pointer-events: none; }
+.sthumb.on { opacity: .95; }
+
+/* v0.15（用户 17:04）：属性卡加粗深棕描边（八角形状跟着描），“基础×技能”放到底下一整行居中 */
+#panel[data-tab="shop"] .stat { flex-wrap: wrap; justify-content: center; row-gap: .1rem; padding: .45rem .5rem .4rem; filter: drop-shadow(0 4px 5px rgba(30, 12, 2, .55)); }
+#panel[data-tab="shop"] .stat::before { inset: 0; border-radius: 0; box-shadow: none; background: #3a2412; clip-path: polygon(.5rem 0, calc(100% - .5rem) 0, 100% .5rem, 100% calc(100% - .5rem), calc(100% - .5rem) 100%, .5rem 100%, 0 calc(100% - .5rem), 0 .5rem); }
+#panel[data-tab="shop"] .stat::after { inset: .16rem; clip-path: polygon(.4rem 0, calc(100% - .4rem) 0, 100% .4rem, 100% calc(100% - .4rem), calc(100% - .4rem) 100%, .4rem 100%, 0 calc(100% - .4rem), 0 .4rem); }
+#panel[data-tab="shop"] .stat .sv { flex: 1; }
+#panel[data-tab="shop"] .stat > small { flex-basis: 100%; text-align: center; }
+/* v0.16（用户 17:06）：开始挖掘改成和铁匠铺页签 / 关闭钮同色系的棕色（亮棕渐变面 + 深棕侧面 + 粗深描边 + 奶油字） */
+#go { color: #fff1cc; border: .16rem solid #24140a; background: linear-gradient(#c88a52 0 42%, #a8703f 42%, #84522c); box-shadow: inset 0 .16rem 0 rgba(255, 225, 175, .45), 0 .3rem 0 #5a3519, 0 .3rem 0 .16rem #24140a, 0 .5rem .7rem rgba(20, 8, 2, .5); text-shadow: 0 .1rem 0 #24140a, .07rem 0 0 #24140a, -.07rem 0 0 #24140a, 0 -.07rem 0 #24140a; }
+#go:active { box-shadow: inset 0 .16rem 0 rgba(255, 225, 175, .45), 0 .08rem 0 #5a3519, 0 .08rem 0 .16rem #24140a, 0 .2rem .3rem rgba(20, 8, 2, .5); }
+/* v0.17（用户 17:10）：挖矿时「回地面」改成和「开始挖掘」同色系同风格的棕色（亮棕渐变面 + 深棕侧面 + 粗深描边 + 奶油字），按钮小所以侧面和描边按比例收窄 */
+#back { color: #fff1cc; border: .14rem solid #24140a; border-radius: .9rem; background: linear-gradient(#c88a52 0 42%, #a8703f 42%, #84522c); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .22rem 0 #5a3519, 0 .22rem 0 .14rem #24140a, 0 .4rem .55rem rgba(20, 8, 2, .5); text-shadow: 0 .09rem 0 #24140a, .06rem 0 0 #24140a, -.06rem 0 0 #24140a, 0 -.06rem 0 #24140a; }
+#back:active { transform: translateY(.14rem); box-shadow: inset 0 .13rem 0 rgba(255, 225, 175, .45), 0 .08rem 0 #5a3519, 0 .08rem 0 .14rem #24140a, 0 .15rem .25rem rgba(20, 8, 2, .5); }
