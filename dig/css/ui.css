@@ -658,3 +658,6 @@ nb { white-space: nowrap; }
 #panel .day canvas.si { width: 2.7rem; height: 2.7rem; margin: -.1rem auto -.2rem; }
 /* 图鉴：格子高度跟着自己的内容走，不被同一排更高的格子撑出空块 */
 #panel .grid { align-items: start; }
+/* v0.19 小跳手势（复用铁匠铺教程的光点手势；层级同 #tut，被弹窗盖住） */
+.hoptut { position: absolute; z-index: 34; pointer-events: none; width: 0; height: 0; }
+.hoptut .hand { position: absolute; left: -1.2rem; top: -1.2rem; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: radial-gradient(rgba(255, 255, 255, .95), rgba(255, 240, 160, .7) 45%, rgba(255, 220, 120, 0) 70%); animation: tutm 0.9s infinite ease-in-out; }

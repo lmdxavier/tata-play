@@ -242,11 +242,17 @@
     Goldfish: { name: '泡泡鱼', cat: 'heal', kind: 'stam', fly: 1, cd: 10, stam: 0.05, anim: 'Busking' },        // 吐泡泡回 5% 体力
   };
   const pc = x => Math.round(x * 100) + '%';
-  PET.Pug.desc = `每 ${PET.Pug.cd} 秒刨开身边 1 格（挖掘力 ×${PET.Pug.k}），自动收身边的蜘蛛网`;
-  PET.Bomb.desc = `每 ${PET.Bomb.cd} 秒炸开面前 1 格（方块：挖掘力 ×${PET.Bomb.blk}，怪：攻击 ×${PET.Bomb.mon}）`;
-  PET.Pumpkin.desc = `照亮范围 +${pc(PET.Pumpkin.light - 1)}；每 ${PET.Pumpkin.cd} 秒火光烧身边的怪（攻击 ×${PET.Pumpkin.mon}）`;
-  PET.Flower.desc = `每 ${PET.Flower.cd} 秒回 ${pc(PET.Flower.heal)} 血量`;
-  PET.Goldfish.desc = `每 ${PET.Goldfish.cd} 秒吐泡泡，回 ${pc(PET.Goldfish.stam)} 体力`;
+  // v0.19 说明由参数拼（用户 22:40 定：宠物页显示加上分支后的实际数值）；VIP 卡显示基础值
+  const nf = x => String(Math.round(x * 10) / 10);
+  B.petDesc = P => {
+    const cd = nf(P.cd), two = P.n > 1 ? '，每次 2 下' : '';
+    if (P.kind === 'dig') return `每 ${cd} 秒刨开身边 1 格（挖掘力 ×${nf(P.k)}${two}），自动收身边 ${P.webR || 1} 格内的蜘蛛网`;
+    if (P.kind === 'bomb') return `每 ${cd} 秒炸开面前 1 格（方块：挖掘力 ×${nf(P.blk)}，怪：攻击 ×${nf(P.mon)}${two}）`;
+    if (P.kind === 'fire') return `照亮范围 +${pc(P.light - 1)}；每 ${cd} 秒火光烧身边的怪（攻击 ×${nf(P.mon)}）`;
+    if (P.kind === 'heal') return `每 ${cd} 秒回 ${pc(P.heal)} 血量`;
+    return `每 ${cd} 秒吐泡泡，回 ${pc(P.stam)} 体力`;
+  };
+  for (const k in PET) PET[k].desc = B.petDesc(PET[k]);
   B.PETS = PET;
   B.PET_BOMB_FLY = 0.42;   // 炸弹飞行秒数
   // cat：宠物类别（atk 攻击 / heal 回复 / explore 探索），决定吃哪一支宠物分支

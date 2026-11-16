@@ -142,6 +142,7 @@
     R: () => R, hero, T: () => T, time: () => time, cell: (c, r) => cell(c, r), floorAt: (x, y) => TERRAIN.floorAt(x, y),
     hurt: (m, mult) => hurtHero(m, mult), air: () => hero.hopT > 0.04 && hero.hopT < B.HOP.t - 0.04,
     fx: (k, x, y, sc) => addFx(k, x, y, sc), sfx: (k, v) => SFX.play(k, v), shake: v => { shake = Math.max(shake, v); },
+    hopTip: () => { if (S.tut.hop) return; G.ui.hopTip((hero.x + OX) / dpr, (hero.y - camY - T * 0.9) / dpr); },
     cx: m => ((m.boss ? m.bx : m.c) + 0.5) * T, fy: m => (m.r + 1) * T, cy: m => (m.r + 0.5) * T,
   });
   G.hero = hero;
@@ -208,6 +209,18 @@
     for (const [lo, hi] of [[6, 25], [26, 45]]) {
       const cand = []; for (let ll = lo; ll <= hi; ll++) for (let c = 0; c < W; c++) { const k = rows[ll][c]; if (k.cave && k.t === 0 && !k.web && !mons.some(m => m.c === c && m.l === ll) && !(chest && chest.c === c && chest.l === ll)) cand.push({ c, l: ll }); }
       if (cand.length) dark.push(cand[Math.floor(rnd() * cand.length)]);
+    }
+    // v0.19 蛛丝来源（原来区域 1 只有 1 张蜘蛛网，装备 + 光源一共要 12 根蛛丝）：按固定行号补蜘蛛网，
+    // 优先放进已有洞穴的空格，附近没有就在土里挖 1 格小凹槽；不用随机数，其余布局不变
+    if (a === 0) for (const l0 of [8, 14, 19, 24, 29, 34, 39, 43]) {
+      const free = (c, ll) => !mons.some(m => m.c === c && m.l === ll) && !(chest && chest.c === c && chest.l === ll) && !dark.some(d => d.c === c && d.l === ll);
+      let done = false;
+      for (let ll = l0; ll < l0 + 3 && !done; ll++) for (let c = 0; c < W && !done; c++) if (rows[ll][c].web) done = true;
+      for (let ll = l0; ll < l0 + 3 && !done; ll++) for (let c = 0; c < W && !done; c++) { const k = rows[ll][c]; if (k.cave && k.t === 0 && free(c, ll)) { k.web = 1; done = true; } }
+      for (let ll = l0; ll < l0 + 3 && !done; ll++) for (let i = 0; i < W && !done; i++) {
+        const c = (l0 + i * 3) % W, k = rows[ll][c];
+        if (k.t === 1 && !k.food && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && rows[ll - 1][c].t !== 0 && free(c, ll)) { set(c, ll, { t: 0, cave: 1, web: 1 }); done = true; }
+      }
     }
     return LAYOUT[a] = { rows, mons, chest, dark };
   }
@@ -363,7 +376,7 @@
     setTimeout(() => G.ui.result(R, why), why === 'back' ? 250 : 800);
   }
   G.endRun = endRun;
-  G.revive = () => { R.revived = true; R.over = null; R.on = true; R.hp = R.hpMax; hero.hurtT = 0; hero.hopT = 0; MOBS.calm(1.5); addFx('star', hero.x, hero.y - T * 0.5, T / 70); SFX.play('claim', 0.7); HERO.play('Idle'); };   // 16 节：原地满血继续
+  G.revive = () => { R.revived = true; R.over = null; R.on = true; R.hp = R.hpMax; R.st = R.stMax;   /* v0.19 用户定：复活血量、体力都回满 */ hero.hurtT = 0; hero.hopT = 0; MOBS.calm(1.5); addFx('star', hero.x, hero.y - T * 0.5, T / 70); SFX.play('claim', 0.7); HERO.play('Idle'); };   // 16 节：原地满血继续
   G.giveUp = () => { R.revived = true; G.ui.result(R, 'dead'); };
   G.keepK = () => R.over === 'dead' ? D.keep : 1;
   G.collect = (mult, keep) => {   // mult：结算双倍广告 = 2（金币、宝石、材料都 ×2，琥珀除外）
@@ -656,7 +669,7 @@
     // VIP 法杖：3 格内、中间是空的同一行 / 同一列有怪 → 站定放魔法弹（没输入 / 自动模式 / 输入朝着它时；手动往别处走就不打）
     if (D.staff) { const rm = staffTarget(); if (rm) { const sx = Math.sign(rm.c - hero.c), sy = Math.sign(rm.r - hero.r); if (!manual || (dx === sx && dy === sy)) { swing(dt, 'mon', rm, sy); if (sx) hero.face = sx; return; } } }
     if (!dx && !dy) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); return; }
-    if (dy < 0) { stopSwing(); hero.hopT = B.HOP.t; HERO.play('Jump', { restart: true }); return; }   // 往上：上面没有怪 → 原地小跳（v0.18：躲守卫的冲撞和冲击波；不往上挖）
+    if (dy < 0) { if (!S.tut.hop && G.ui.hopTipOff()) { S.tut.hop = 1; G.save(); } stopSwing(); hero.hopT = B.HOP.t; HERO.play('Jump', { restart: true }); return; }   // 往上：上面没有怪 → 原地小跳（v0.18：躲守卫的冲撞和冲击波；不往上挖）
     if (dx) hero.face = dx;
     const c = hero.c + dx, r = hero.r + dy, k = cell(c, r), m = R.mons.find(q => q.c === c && q.r === r && !q.dead);
     if (m) { swing(dt, 'mon', m, dy); return; }

@@ -74,7 +74,14 @@
     if (tab === 'shop' && $('doll')) G.drawDoll($('doll'), preview ? Object.assign({}, s.gear, { [preview.slot]: preview.t }) : s.gear, null, dt);
   };
   ui.showRun = () => { $('shore').style.display = 'none'; ui.close(true); if (!S().tut.move && !$('tip')) { const d = document.createElement('div'); d.id = 'tip'; d.className = 't'; d.textContent = '按住屏幕拖动：往哪走，就往哪挖'; $('wrap').appendChild(d); } };
-  ui.hideRun = () => { $('bossbar').style.display = 'none'; cache.boss = false; const t = $('tip'); if (t) t.remove(); };
+  ui.hideRun = () => { $('bossbar').style.display = 'none'; cache.boss = false; const t = $('tip'); if (t) t.remove(); ui.hopTipOff(); };
+  // v0.19 守卫第一次出冲撞 / 砸地：主角头顶一个往上划的手势（不写字），玩家第一次小跳后不再出现
+  ui.hopTip = (x, y) => {
+    if ($('hoptut')) return; const d = document.createElement('div'); d.id = 'hoptut'; d.className = 'hoptut'; d.innerHTML = '<i class="hand"></i>';
+    d.style.left = x + 'px'; d.style.top = y + 'px'; d.style.setProperty('--dx', '0px'); d.style.setProperty('--dy', '-3.2rem'); $('wrap').appendChild(d);
+    clearTimeout(ui._hopT); ui._hopT = setTimeout(() => { const e = $('hoptut'); if (e) e.remove(); }, 2600);
+  };
+  ui.hopTipOff = () => { const e = $('hoptut'); if (!e) return false; e.remove(); return true; };
   ui.hideShore = () => { $('shore').style.display = 'none'; ui.close(true); };
   ui.showShore = (gain) => { $('shore').style.display = ''; const t = $('tip'); if (t) t.remove(); ui.refresh(); if (gain) flyGain(gain); };
   ui.refresh = () => {
@@ -126,7 +133,7 @@
     } else if (tab === 'pet') {
       h += head('宠物') + '<div class="pbody">';
       for (const k in B.PETS) { const p = B.PETS[k], own = s.pets.includes(k), v = B.VIP.find(x => x.pet === k), sg = B.SIGN.findIndex(x => x.pet === k);
-        h += `<div class="card pet ${own ? '' : 'unk'}"><div class="ic kslot"><canvas width="160" height="160" data-pet="${k}"></canvas></div><div class="mid"><b>${p.name}</b><span>${p.desc}</span>${own ? '' : `<span class="src">${img('lock')}${v ? 'VIP ' + (B.VIP.indexOf(v) + 1) : '签到第 ' + (sg + 1) + ' 天'}</span>`}</div>${own ? `<button class="buy t ${s.pet === k ? 'no' : 'green'}" data-setpet="${k}">${s.pet === k ? '跟随中' : '带上'}</button>` : ''}</div>`; }
+        h += `<div class="card pet ${own ? '' : 'unk'}"><div class="ic kslot"><canvas width="160" height="160" data-pet="${k}"></canvas></div><div class="mid"><b>${p.name}</b><span>${own ? B.petDesc(B.derive(Object.assign({}, s, { pet: k })).pet || p) : p.desc}</span>${own ? '' : `<span class="src">${img('lock')}${v ? 'VIP ' + (B.VIP.indexOf(v) + 1) : '签到第 ' + (sg + 1) + ' 天'}</span>`}</div>${own ? `<button class="buy t ${s.pet === k ? 'no' : 'green'}" data-setpet="${k}">${s.pet === k ? '跟随中' : '带上'}</button>` : ''}</div>`; }
       h += '</div>';
     } else if (tab === 'codex') {
       h += head('图鉴') + `<div class="tabs"><button class="tab ${ctab === 'mon' ? 'on' : ''}" data-ctab="mon">怪物</button><button class="tab ${ctab === 'mat' ? 'on' : ''}" data-ctab="mat">材料</button></div><div class="pbody"><div class="grid">`;
@@ -314,7 +321,7 @@
     if (G.looping()) setTimeout(() => { if ($('pop').classList.contains('on') && p.querySelector('#r-ok')) ok(); }, 3000);
   };
   ui.revive = () => {
-    const p = pop(`<div class="box"><h2 class="t">血量归零</h2><div class="kboard in"><p>原地复活：血量回满</p><div class="btns"><button class="buy t green" id="v-ad">看广告复活</button><button class="buy t lite" id="v-no">不用了</button></div></div></div>`);
+    const p = pop(`<div class="box"><h2 class="t">血量归零</h2><div class="kboard in"><p>原地复活：血量、体力回满</p><div class="btns"><button class="buy t green" id="v-ad">看广告复活</button><button class="buy t lite" id="v-no">不用了</button></div></div></div>`);
     p.querySelector('#v-ad').onclick = () => G.watchAd('revive', () => { unpop(); G.revive(); });
     p.querySelector('#v-no').onclick = () => { snd('ui_close'); unpop(); G.giveUp(); };
     if (G.looping()) setTimeout(() => { if ($('pop').classList.contains('on') && p.querySelector('#v-no')) p.querySelector('#v-no').click(); }, 3000);   // 挂机循环：3 秒没操作就不复活，照常结算

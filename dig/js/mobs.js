@@ -198,6 +198,7 @@
   function startBoss(m, mv) {
     const BS = B.BOSS; m.move = mv; m.st = 'wind'; m.hit = false; m.bx = m.c;
     m.windT = m.t = PH(m, BS[mv].wind) * (m.combo ? 0.6 : 1); faceHero(m);
+    if ((mv === 'charge' || mv === 'slam') && E.hopTip) E.hopTip();   // v0.19 第一次碰到贴地招式：手势提示“往上划 = 小跳”
     if (mv === 'charge') { m.face = m.dir; E.sfx('boss_growl', 0.8); anim(m, 'Walk', { restart: true, speed: 2.2 }); }
     else if (mv === 'slam') { m.tc = slamTarget(m); anim(m, 'Idle'); }
     else anim(m, 'Idle');
