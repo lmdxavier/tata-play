@@ -224,11 +224,13 @@
         h += `<div class="card pet ${own ? '' : 'unk'}"><div class="ic kslot"><canvas width="160" height="160" data-pet="${k}"></canvas></div><div class="mid"><b>${p.name}</b><span>${own ? B.petDesc(B.derive(Object.assign({}, s, { pet: k })).pet || p) : p.desc}</span>${own ? '' : `<span class="src">${img('lock')}${v ? 'VIP ' + (B.VIP.indexOf(v) + 1) : '签到第 ' + (sg + 1) + ' 天'}</span>`}</div>${own ? `<button class="buy t ${s.pet === k ? 'no' : 'green'}" data-setpet="${k}">${s.pet === k ? '跟随中' : '带上'}</button>` : ''}</div>`; }
       h += '</div>';
     } else if (tab === 'codex') {
+      // v0.21 fixC（375 宽折行）：图标和名字、“35% 掉落”、“58–94 米”这类数字 + 单位不拆到两行（根目录规则：数字不折行）
+      const NW = t => `<span style="white-space:nowrap">${t}</span>`, nwNum = t => t.replace(/(\d)\s(?=米|掉落)|(%)\s(?=掉落)/g, '$1$2\u00a0').replace(/(\d)–(\d)/g, '$1\u2060–\u2060$2');   // 数字和单位之间用不换行空格、范围的“–”两边加连字符（只连不断），不另包 span（包 span 会让括号单独成行）
       h += head('图鉴') + `<div class="tabs"><button class="tab ${ctab === 'mon' ? 'on' : ''}" data-ctab="mon">怪物</button><button class="tab ${ctab === 'mat' ? 'on' : ''}" data-ctab="mat">材料</button></div><div class="pbody"><div class="grid">`;
       if (ctab === 'mon') for (const k of G.MON_KINDS) { const M = B.MON[k], n = s.codex[k] || 0;
-        h += `<div class="cell ${n ? '' : 'unk'}"${M.mat ? ` data-mat="${M.mat}"` : ''}><div class="kslot"><canvas width="160" height="160" data-mon="${k}"></canvas></div><b>${n ? M.name : '？？？'}</b><span>${M.boss ? M.from + ' 米守卫' : (M.from || 0) + ' 米起'}${n ? ' · 击败 ' + f(n) : ''}</span>${M.mat ? `<span class="drop">掉落 ${img(M.mat)}${B.MAT[M.mat].name}${M.boss ? '（首杀必掉）' : ' ' + Math.round((k === 'Slime_Green' ? D.slimeP : M.p) * 100) + '%'}</span>` : ''}</div>`; }
+        h += `<div class="cell ${n ? '' : 'unk'}"${M.mat ? ` data-mat="${M.mat}"` : ''}><div class="kslot"><canvas width="160" height="160" data-mon="${k}"></canvas></div><b>${n ? M.name : '？？？'}</b><span>${M.boss ? M.from + ' 米守卫' : (M.from || 0) + ' 米起'}${n ? ' · 击败 ' + f(n) : ''}</span>${M.mat ? `<span class="drop">掉落 ${M.boss ? NW(img(M.mat) + B.MAT[M.mat].name) + NW('（首杀必掉）') : NW(img(M.mat) + B.MAT[M.mat].name + '\u00a0' + Math.round((k === 'Slime_Green' ? D.slimeP : M.p) * 100) + '%')}</span>` : ''}</div>`; }
       else for (const k of B.MAT_ORDER) { const M = B.MAT[k], seen = s.seen[k] || s.mat[k];
-        h += `<div class="cell mat ${seen ? '' : 'unk'}" data-mat="${k}"><div class="kslot"><img class="big" src="${src(k)}"></div><b>${M.name}</b><span>拥有 ${f(s.mat[k] || 0)}</span><span class="drop">${M.src}</span></div>`; }
+        h += `<div class="cell mat ${seen ? '' : 'unk'}" data-mat="${k}"><div class="kslot"><img class="big" src="${src(k)}"></div><b>${M.name}</b><span>拥有 ${f(s.mat[k] || 0)}</span><span class="drop">${nwNum(M.src)}</span></div>`; }
       h += '</div></div>';
     } else if (tab === 'vip') {   // v0.18（系统与数值 16 节）：顶部 = 当前 VIP + 进度 + 看广告（可连续看）；下面每级一张卡：领取 / 已领 / 穿上·脱下 / 拿上·收起
       const tg = B.VIP.find(v => v.ads > s.vipAds), left = G.adLeft('vip');
@@ -518,7 +520,7 @@
     ${ms.length ? `<div class="gmat t">${ms.map(([k, n]) => `<span>${img(k)}×${fmtNum(n)}</span>`).join('')}</div>` : ''}`; };
   ui.result = (R, why) => {
     const s = S(), dead = why === 'dead', k = dead ? G.keepK() : 1, bst = s.boost > 0 ? 2 : 1;
-    const mat = {}; for (const id in R.mat) mat[id] = Math.max(R.mat[id] > 0 && k >= 0.7 ? 1 : 0, Math.floor(R.mat[id] * k * (id === 'amber' ? 1 : bst)));
+    const mat = {}; for (const id in R.mat) mat[id] = Math.max(R.mat[id] > 0 && k >= 0.7 ? 1 : 0, Math.floor(R.mat[id] * k * (B.MAT[id].boss ? 1 : bst)));
     const p = pop(`<div class="box"><h2 class="t">${dead ? '被打倒了' : why === 'stam' ? '体力耗尽' : '回到地面'}</h2><div class="kboard in"><p class="rstat t">${img('sk/Gear_Weapons_Pickaxe_01.png')}${fmtNum(R.deep)} 米${R.kills ? img('sk/Misc_Crosshair_01_Red.png') + '×' + fmtNum(R.kills) : ''}${R.ate ? img('sk/Consumable_Food_Meat_01.png') + '×' + fmtNum(R.ate) : ''}</p>
       ${gainRow(Math.floor(R.coin * k * bst), Math.floor(R.gem * k * bst), mat, dead && k < 1 ? { coin: Math.ceil(R.coin * (1 - k)), gem: Math.ceil(R.gem * (1 - k)) } : null)}
       ${bst > 1 ? `<p class="bst rstat">${img('boost')}×2${s.boost > 1 ? '　' + img('sk/Item_Hourglass_01_Gold.png') + fmtNum(s.boost - 1) : ''}</p>` : ''}
@@ -607,7 +609,7 @@
   // bfix：T1–T4 缩短（检查报告建议：点收下到顶栏开始涨约 2.8 秒）——落地后停顿 0.85 → 0.6 秒（含弹出 0.34 + 小弹 0.12 + 停 0.14），飞 0.55 秒
   const LT = { T1: 0.34, T2: 0.46, T3: 0.6, T4: 1.15, H: 0.55, gap: 0.045, wave: 0.42, bump: 0.25, roll: 11 };   // 弹出落地 / 落地小弹 / 停一下 / 飞向计数（秒）；H 弹出弧高（格）；gap 相邻图标错开；wave 小镇落地一批放满后下一批晚多少秒；roll 数字追赶速度
   const LOOT = { pend: { coin: 0, gem: 0 }, pendMat: {}, disp: { coin: null, gem: null }, items: [], waits: [], bump: new Map(), sndT: {} };
-  const LOOT_SND = { coin: 'pickup_coin', gem: 'pickup_gem', wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone' };   // 到达音效：一种东西一个固定文件（材料按木 / 石 / 软三类，同游戏里拾取）；入口奖励（宠物 / 装备 / 自动 / 收益 ×2）一律 ding
+  const LOOT_SND = { coin: 'pickup_coin', gem: 'pickup_gem', wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone', iron: 'pick_stone', malachite: 'pick_stone', salt: 'pick_stone', fortstone: 'pick_stone' };   // v0.21 区域 2：矿 / 盐 / 石堡碎块按石头   // 到达音效：一种东西一个固定文件（材料按木 / 石 / 软三类，同游戏里拾取）；入口奖励（宠物 / 装备 / 自动 / 收益 ×2）一律 ding
   // 材料没有字：数量用飞的个数表达（用户「能用画面表达就不写字」），最多 8 个
   const lootN = (k, v) => v <= 0 ? 0 : k === 'coin' ? (v < 40 ? 5 : v < 200 ? 8 : v < 1000 ? 11 : 15) : k === 'gem' ? (v <= 3 ? Math.ceil(v) : v < 15 ? 5 : v < 60 ? 8 : 10) : Math.min(8, Math.ceil(v));   // 数量按收益多少分档
   const lootTc = () => $('wrap').clientWidth / B.W;   // 一格的 CSS 像素

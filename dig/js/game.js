@@ -58,7 +58,17 @@
     return { init, play, create, state: () => ac ? ac.state : 'none', ready: () => Object.keys(buf).length };
   })();
   G.sfx = SFX;
-  const PICK_SFX = { wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone', silk: 'pick_soft', gel: 'pick_soft', pearl: 'pick_soft' };
+  const PICK_SFX = { wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone', silk: 'pick_soft', gel: 'pick_soft', pearl: 'pick_soft',
+    iron: 'pick_stone', malachite: 'pick_stone', salt: 'pick_stone', fortstone: 'pick_stone', lzskin: 'pick_soft', venom: 'pick_soft' };   // v0.21 区域 2：矿 / 盐晶 / 石堡碎块硬（石）、皮和毒液软
+  // v0.21 场景物（走进去 / 宠物顺手就收）：区域 1 蜘蛛网（web = 1）→ 蛛丝；区域 2 盐结晶（web = 'salt'）→ 岩盐
+  const SCN = { 1: { mat: 'silk', img: 'mat/spider_web.png' }, salt: { mat: 'salt', img: 'mat/halite.png' } };
+  // v0.21 每个区域的守卫（第 a 区域 = BOSS_OF[a]，站在本区域倒数第 2 行）；S.boss = 已打败几个守卫（区域 1 = 1、区域 2 = 2）
+  const BOSS_OF = ['Beetle_Red', 'Turtle_Tower'];
+  // 调试：?start=米数 直接从那个深度开局，那以上的守卫都当作已打败（只在本次运行生效，不写存档）
+  const DBG_START = Q.get('start') !== null ? Math.max(0, Math.min(B.AREA * B.AREAS_OPEN - 3, parseInt(Q.get('start'), 10) || 0)) : -1;
+  let dbgBoss = 0;   // 调试开局时打败的守卫只记在这里（不写存档）
+  const bossN = () => Math.max(S.boss || 0, dbgBoss, DBG_START > 0 ? B.areaOf(DBG_START) : 0);
+  G.bossN = bossN;
 
   /* ---------- 画布 ---------- */
   const wrap = $('wrap'), cv = $('cv');
@@ -112,7 +122,7 @@
     DOLL.draw(g, c.width / 2, c.height * 0.9, { scale: c.height / 128 });
   };
   G.dollPlay = a => { if (DOLL) DOLL.play(a, { restart: true, onEnd: () => DOLL.play('Idle') }); };
-  const MON_KINDS = ['Slime_Green', 'Snail_Green', 'Bat_Cave', 'Beetle_Red'];
+  const MON_KINDS = ['Slime_Green', 'Snail_Green', 'Bat_Cave', 'Beetle_Red', 'Lizard_Horn', 'Snake_Bell', 'Beetle_Iron', 'Turtle_Tower'];   // v0.21 + 区域 2 四种
   G.MON_KINDS = MON_KINDS; G.MON_NAME = {}; for (const k in B.MON) G.MON_NAME[k] = B.MON[k].name;
   async function loadPet(name) {
     if (PETS[name]) return PETS[name];
@@ -141,7 +151,7 @@
   MOBS.init({
     R: () => R, hero, T: () => T, time: () => time, cell: (c, r) => cell(c, r), floorAt: (x, y) => TERRAIN.floorAt(x, y),
     hurt: (m, mult) => hurtHero(m, mult), air: () => hero.hopT > 0.04 && hero.hopT < B.HOP.t - 0.04,
-    fx: (k, x, y, sc) => addFx(k, x, y, sc), sfx: (k, v) => SFX.play(k, v), shake: v => { shake = Math.max(shake, v); },
+    fx: (k, x, y, sc) => addFx(k, x, y, sc), sfx: (k, v, r) => SFX.play(k, v, r), shake: v => { shake = Math.max(shake, v); },
     hopTip: () => { if (S.tut.hop || cell(hero.c, hero.r - 1).t !== 0 || monAt(hero.c, hero.r - 1)) return;   // v0.20：只在头顶是空格（往上 = 小跳）时提示
       G.ui.hopTip((hero.x + OX) / dpr, (hero.y - camY - T * 0.9) / dpr); },
     cx: m => ((m.boss ? m.bx : m.c) + 0.5) * T, fy: m => (m.r + 1) * T, cy: m => (m.r + 0.5) * T,
@@ -151,6 +161,7 @@
   const LAYOUT = {};
   function genArea(a) {   // 返回 { rows: [[{t, food, web}]×7]×50, mons: [{c,l,kind}], chest: {c,l}, straw: [] }
     if (LAYOUT[a]) return LAYOUT[a];
+    if (a === 1) return LAYOUT[a] = genSand();   // v0.21 区域 2 沙岩层：自己的布局（见 genSand）；区域 1 下面的代码一行没动
     const rnd = rng(9173 + a * 101), ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)), N = B.AREA;
     const rows = []; for (let l = 0; l < N; l++) { const row = []; for (let c = 0; c < W; c++) row.push({ t: 1 }); rows.push(row); }
     const busy = new Set(), set = (c, l, o) => { if (l < 0 || l >= N || c < 0 || c >= W) return; Object.assign(rows[l][c], o); busy.add(l * 10 + c); }, isBusy = (c, l) => busy.has(l * 10 + c);
@@ -227,27 +238,137 @@
     }
     return LAYOUT[a] = { rows, mons, chest, dark };
   }
+  /* v0.21 区域 2 沙岩层（50–99 米）的地形：和区域 1 的“两侧交替伸叉、S 形往下”玩起来不同——
+   * ① 沉积硬层：整行横着的玄武岩层（砂岩是一层层沉积的），每层留 1–2 格缺口，30% 是“错层”（左右两半差一行）；找缺口绕过去或硬挖穿。
+   * ② 大洞穴：3–5 格宽、2–3 行高的空腔，掉进去落到洞底，洞里有怪（地上 + 蝙蝠）、盐晶、沙漠松露。
+   * ③ 竖裂隙：1 格宽、3–5 行深的竖缝（可以穿过硬层），顺着往下掉一段 = 快速下降的捷径。
+   * ④ 小洞：1–2 格，放怪或盐晶。只用现有格子（土、玄武岩、空腔、矿、食物），都能挖穿；主角只往下 / 左右走，所以不会卡住。
+   * 返回结构同 genArea(0)，行号是区域内的 0–49（newRun 加 50 换成世界行号）。 */
+  function genSand() {
+    const rnd = rng(9173 + 101), ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)), N = B.AREA;
+    const rows = []; for (let l = 0; l < N; l++) { const row = []; for (let c = 0; c < W; c++) row.push({ t: 1 }); rows.push(row); }
+    const busy = new Set(), set = (c, l, o) => { if (l < 0 || l >= N || c < 0 || c >= W) return; Object.assign(rows[l][c], o); busy.add(l * 10 + c); }, isBusy = (c, l) => busy.has(l * 10 + c);
+    const bandRow = new Set();
+    // ① 沉积硬层
+    let l = 3; const bands = [];
+    while (l < N - 9) {
+      const gw = ri(1, 2), g0 = ri(0, W - gw), step = rnd() < 0.3, cut = ri(2, 4), up = rnd() < 0.5;
+      for (let c = 0; c < W; c++) { if (c >= g0 && c < g0 + gw) continue; const ll = step && (up ? c >= cut : c < cut) ? l + 1 : l; set(c, ll, { t: 2 }); bandRow.add(ll); }
+      bands.push({ l, g0, gw, step }); l += ri(6, 9);
+    }
+    const nearBand = ll => bandRow.has(ll) || bandRow.has(ll - 1) || bandRow.has(ll + 1);
+    // ② 大洞穴：目标深度附近找一块不碰硬层的地方
+    const caverns = [];
+    for (const t0 of [6, 17, 27, 37]) {
+      let done = false;
+      for (let d = 0; d < 6 && !done; d++) for (const lt of [t0 + d, t0 - d]) {
+        if (done) break; const h = ri(2, 3), w = ri(3, 5), c0 = ri(0, W - w);
+        if (lt < 2 || lt + h >= N - 6) continue;
+        let ok = true; for (let ll = lt - 1; ll <= lt + h && ok; ll++) if (bandRow.has(ll)) ok = false;
+        for (let ll = lt; ll < lt + h && ok; ll++) for (let c = c0; c < c0 + w; c++) if (isBusy(c, ll)) ok = false;
+        if (!ok) continue;
+        for (let ll = lt; ll < lt + h; ll++) for (let c = c0; c < c0 + w; c++) set(c, ll, { t: 0, cave: 1 });
+        for (let c = c0; c < c0 + w; c++) if (rows[lt + h][c].t === 0) rows[lt + h][c].t = 1;
+        caverns.push({ lt, h, w, c0 }); done = true;
+      }
+    }
+    // ③ 竖裂隙（可穿过硬层；底下保证是实心）
+    const fissures = [];
+    for (const t0 of [12, 23, 33]) {
+      const len = ri(3, 5), c = ri(0, W - 1), lt = t0 + ri(-1, 1);
+      if (lt + len >= N - 6) continue;
+      let ok = true; for (let ll = lt; ll < lt + len; ll++) if (rows[ll][c].cave) ok = false;
+      if (!ok) continue;
+      for (let ll = lt; ll < lt + len; ll++) set(c, ll, { t: 0, cave: 1 });
+      if (rows[lt + len][c].t === 0) rows[lt + len][c].t = 1;
+      fissures.push({ c, lt, len });
+    }
+    // ④ 小洞（1–2 格），间隔 4–7 行，不贴硬层
+    const pockets = [];
+    for (l = 4; l < N - 7; l += ri(4, 7)) {
+      if (nearBand(l)) continue;
+      const w = ri(1, 2), c0 = ri(0, W - w); let ok = true; for (let c = c0; c < c0 + w; c++) if (isBusy(c, l) || isBusy(c, l - 1) || isBusy(c, l + 1)) ok = false;
+      if (!ok) continue;
+      for (let c = c0; c < c0 + w; c++) set(c, l, { t: 0, cave: 1 });
+      pockets.push({ l, c0, w });
+    }
+    // 怪：按固定深度表放进最近的洞穴 / 小洞空格（地上的怪要脚下实心，蝙蝠在大洞穴的上半）；附近没有就在土里挖一个 2 格小洞
+    const mons = [], taken = new Set(), tk = (c, ll) => taken.has(ll * 10 + c);
+    const floorOk = (c, ll) => rows[ll][c].t === 0 && rows[ll + 1] && rows[ll + 1][c].t !== 0 && !tk(c, ll);
+    const airOk = (c, ll) => rows[ll][c].t === 0 && rows[ll][c].cave && !tk(c, ll) && caverns.some(v => ll >= v.lt && ll < v.lt + v.h && c >= v.c0 && c < v.c0 + v.w);
+    const PLAN = [[3, 'Lizard_Horn'], [7, 'Lizard_Horn'], [9, 'Bat_Cave'], [12, 'Snake_Bell'], [16, 'Lizard_Horn'], [19, 'Bat_Cave'], [22, 'Beetle_Iron'], [26, 'Snake_Bell'], [29, 'Bat_Cave'], [32, 'Lizard_Horn'], [35, 'Beetle_Iron'], [38, 'Snake_Bell'], [41, 'Bat_Cave'], [43, 'Snake_Bell']];
+    for (const [t0, kind] of PLAN) {
+      const fly = B.MON[kind].fly, ok = fly ? airOk : floorOk; let put = null;
+      for (let d = 0; d <= 3 && !put; d++) for (const ll of [t0 + d, t0 - d]) { if (put || ll < 1 || ll >= N - 6) continue; for (let i = 0; i < W && !put; i++) { const c = (t0 * 3 + i) % W; if (ok(c, ll) && !mons.some(m => m.l === ll && Math.abs(m.c - c) < 2)) put = { c, l: ll }; } }
+      if (!put && !fly) for (let ll = t0; ll < t0 + 4 && !put; ll++) for (let i = 0; i < 6 && !put; i++) {   // 挖一个 2 格小洞
+        const c0 = (t0 * 3 + i) % 6, okc = c => rows[ll][c].t === 1 && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && rows[ll - 1][c].t !== 0;
+        if (!okc(c0) || !okc(c0 + 1) || mons.some(m => Math.abs(m.l - ll) < 2)) continue;
+        set(c0, ll, { t: 0, cave: 1 }); set(c0 + 1, ll, { t: 0, cave: 1 }); put = { c: c0 + (ll % 2), l: ll };
+      }
+      if (put) { mons.push({ c: put.c, l: put.l, kind }); taken.add(put.l * 10 + put.c); }
+    }
+    // 场景物 岩盐：洞穴 / 小洞里没怪的空格（贴地），附近没有就挖 1 格小凹槽；按固定深度表放 8 处
+    for (const t0 of [4, 9, 14, 19, 24, 29, 35, 41]) {
+      let done = false;
+      for (let ll = t0; ll < t0 + 3 && !done; ll++) for (let c = 0; c < W && !done; c++) if (rows[ll][c].web) done = true;
+      for (let d = 0; d < 3 && !done; d++) for (let i = 0; i < W && !done; i++) { const ll = t0 + d, c = (t0 + i * 2) % W, k = rows[ll][c]; if (k.cave && floorOk(c, ll)) { k.web = 'salt'; taken.add(ll * 10 + c); done = true; } }
+      for (let d = 0; d < 3 && !done; d++) for (let i = 0; i < W && !done; i++) {
+        const ll = t0 + d, c = (t0 + i * 3) % W, k = rows[ll][c];
+        if (k.t === 1 && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && rows[ll - 1][c].t !== 0 && !tk(c, ll)) { set(c, ll, { t: 0, cave: 1, web: 'salt' }); taken.add(ll * 10 + c); done = true; }
+      }
+    }
+    // 矿：铁矿成团（2–44 米段）；孔雀石少、深（22–44），另外在深处两层硬层的正下方各嵌 1 块（矿脉夹在硬层下）
+    const clump = (t, lo, hi, n, sz) => { for (let i = 0; i < n; i++) { let c = ri(0, W - 1), ll = ri(lo, hi); for (let k = 0; k < sz(); k++) { if (rows[ll] && rows[ll][c] && rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t }); if (rnd() < 0.5) c = Math.max(0, Math.min(W - 1, c + (rnd() < 0.5 ? -1 : 1))); else ll++; } } };
+    clump(7, 2, 44, 8, () => ri(2, 3)); clump(8, 22, 44, 3, () => ri(1, 2));
+    for (const b of bands.filter(b => b.l >= 20).slice(0, 2)) { for (let i = 0; i < W; i++) { const c = (b.l + i * 2) % W, ll = b.l + (b.step ? 2 : 1); if (ll < N - 6 && rows[ll][c].t === 1 && !isBusy(c, ll) && rows[ll - 1][c].t === 2) { set(c, ll, { t: 8 }); break; } } }
+    // 食物：白蚁每 4–6 行、兵蚁每 10–12 行（嵌在土里）；沙漠松露长在第 2、4 个大洞穴的洞壁上（值得绕路），硬层缺口下面 18% 再有一个
+    const food = (kind, lo, step) => { for (let ll = lo; ll < N - 4; ll += step()) { const c = ri(0, W - 1); if (rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t: 6, food: kind }); } };
+    food('termite', 2, () => ri(4, 6)); food('soldier', 8, () => ri(10, 12));
+    for (const v of [caverns[1], caverns[3]]) { if (!v) continue; const ll = v.lt + v.h - 1; for (const c of [v.c0 - 1, v.c0 + v.w]) { if (c >= 0 && c < W && rows[ll][c].t === 1 && !isBusy(c, ll)) { set(c, ll, { t: 6, food: 'truffle' }); break; } } }
+    for (const b of bands) { if (b.l < 6 || rnd() >= 0.18) continue; const ll = b.l + (b.step ? 2 : 1), c = b.g0 + b.gw < W ? b.g0 + b.gw : b.g0 - 1; if (c >= 0 && c < W && ll < N - 6 && rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t: 6, food: 'truffle' }); }
+    // 守卫房（比区域 1 宽：中间 5 格，给堡垒龟打滚冲撞留出跑道）、守卫门
+    for (let c = 0; c < W; c++) { rows[N - 3][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 2][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 1][c] = { t: 3 }; }
+    for (let ll = N - 6; ll < N - 3; ll++) for (let c = 0; c < W; c++) if (rows[ll][c].t === 2) rows[ll][c].t = 1;
+    return { rows, mons, chest: null, dark: [], bands, caverns, fissures };
+  }
   // 图鉴 / 材料“去哪拿”里的深度从区域 1 的真实地形算（怪最浅出现在哪一行、材料方块 / 蜘蛛网出现在哪几行），不手写
-  (function () {
-    const L = genArea(0), mon = {}, mat = {}, add = (k, l) => { const r = mat[k] || (mat[k] = [l, l]); r[0] = Math.min(r[0], l); r[1] = Math.max(r[1], l); };
-    for (const m of L.mons) mon[m.kind] = Math.min(mon[m.kind] === undefined ? 1e9 : mon[m.kind], m.l);
-    mon.Beetle_Red = B.AREA - 2;   // 守卫站的那一行（同 newRun 里的 spawn）
-    L.rows.forEach((row, l) => row.forEach(k => { if (k.t === 4) add('wood', l); if (k.t === 5) add('copper', l); if (k.web) add('silk', l); }));
+  (function () {   // v0.21：所有开放的区域一起算（区域 2 的行号 + 50 = 世界行号 = 米数）
+    const mon = {}, mat = {}, add = (k, l) => { const r = mat[k] || (mat[k] = [l, l]); r[0] = Math.min(r[0], l); r[1] = Math.max(r[1], l); };
+    for (let a = 0; a < B.AREAS_OPEN; a++) {
+      const L = genArea(a), O = a * B.AREA;
+      for (const m of L.mons) mon[m.kind] = Math.min(mon[m.kind] === undefined ? 1e9 : mon[m.kind], m.l + O);
+      mon[BOSS_OF[a]] = O + B.AREA - 2;   // 守卫站的那一行（同 newRun 里的 spawn）
+      L.rows.forEach((row, l) => row.forEach(k => { const cm = B.CELL[k.t] && B.CELL[k.t].mat; if (cm) add(cm, l + O); if (k.web) add(SCN[k.web].mat, l + O); }));
+    }
     B.fillDepths({ mon, mat });
   })();
   function newRun(fade) {
     TERRAIN.reset(fade); bolts.length = 0; clearPetFx(); MOBS.reset();
     R = { rows: new Map(), mons: [], st: D.stam, stMax: D.stam, hp: D.hp, hpMax: D.hp, coin: 0, gem: 0, mat: {}, t: 0, deep: 0, on: false, over: null, revived: false, petT: 0, kills: 0, blocks: 0, auto: null, autoStop: 0, swings: 0, ate: 0, firstBoss: false };
-    const L = genArea(0);
-    L.rows.forEach((row, l) => R.rows.set(l, row.map(k => { const t = k.t, hp = t === 3 || t === 0 ? 0 : B.cellHp(t, l); return { t, hp, max: hp, food: k.food, web: k.web, cave: k.cave, shaft: k.shaft, v: (l * 7 + 3) % 4 }; })));
-    for (const m of L.mons) spawn(m.c, m.l, m.kind, false);
-    if (!S.boss) spawn(3, B.AREA - 2, 'Beetle_Red', true);
+    const L = genArea(0), bn = bossN();
+    // v0.21 世界连续：所有开放区域的格子都铺上（区域 2 = 世界第 50–99 行，守卫门锁着时下面看得见、过不去）；
+    //   怪和守卫只放已经打通的区域（打败上一区域守卫后当场补上，见 openArea）
+    for (let a = 0; a < B.AREAS_OPEN; a++) { const La = genArea(a), O = a * B.AREA;
+      La.rows.forEach((row, l) => { const rr = l + O; R.rows.set(rr, row.map(k => { const t = k.t, hp = t === 3 || t === 0 ? 0 : B.cellHp(t, rr); return { t, hp, max: hp, food: k.food, web: k.web, cave: k.cave, shaft: k.shaft, v: (rr * 7 + 3) % 4 }; })); }); }
+    for (let a = 0; a < B.AREAS_OPEN; a++) if (bn >= a) openArea(a, bn, true);
     if (D.chest && L.chest) { const k = R.rows.get(L.chest.l)[L.chest.c]; k.chest = 1; }
     if (D.dark) { const M = B.MECH.lamp, n = Math.min(L.dark.length, M.dark[0] + Math.floor(Math.random() * (M.dark[1] - M.dark[0] + 1))); for (let i = 0; i < n; i++) R.rows.get(L.dark[i].l)[L.dark[i].c].dchest = 1; }   // 暗格宝箱：每趟 1–2 个（浅的那个每趟都有）
     R.boom = { t: D.boom ? D.boom.cd : 0, fly: [] };   // 回旋镐：冷却计时 + 飞行中的镐（n 把）
     if (HERO && HERO.idx) HERO.nodeScale = D.giant ? { [HERO.idx.Tool_Pick]: D.giant.pick } : null;
     fx.length = nums.length = drops.length = bits.length = 0;
   }
+  // v0.21 打通第 a 个区域：放怪；守卫没打败就放守卫，打败了就把本区域的守卫门变成能挖的（下一区域还没开放的门一直锁着）
+  function openArea(a, bn, quiet) {
+    const O = a * B.AREA, L = genArea(a);
+    for (const m of L.mons) spawn(m.c, m.l + O, m.kind, false);
+    if (bn <= a) spawn(3, O + B.AREA - 2, BOSS_OF[a], true); else unlockGate(a, quiet);
+  }
+  function unlockGate(a, quiet) {
+    if (a + 1 >= B.AREAS_OPEN) return;   // 最后一个开放区域的门：锁住（只有锁图标，不写开发进度文字）
+    const r = (a + 1) * B.AREA - 1, row = R.rows.get(r); if (!row) return;
+    for (let c = 0; c < W; c++) { const k = row[c]; if (k.t !== 3) continue; k.hp = k.max = B.cellHp(3, r); if (!quiet) TERRAIN.cellChanged(c, r); }
+  }
+  const gateOpen = k => k.t === 3 && k.hp > 0;   // 能挖的守卫门（守卫已打败）
   function spawn(c, r, kind, boss) {
     const m = MLIB.create(kind); m.play('Idle'); m.update(Math.random());
     const mo = { c, r, kind, hp: B.monHp(kind, r), max: B.monHp(kind, r), atk: B.monAtk(kind, r), boss, m, at: 0.6, flash: 0, dead: 0, face: -1 };
@@ -328,6 +449,11 @@
     D = B.derive(S); newRun(); heroLook(false);
     trans = { k: 'dive', t: 0, x0: hero.x, cam0: camY }; hero.face = 1; HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.6);
   }
+  function dbgJump(r) {   // 调试 ?start=米数：把主角放到第 r 行（那格和头顶挖空），镜头直接跟过去
+    for (const rr of [r - 1, r]) { const k = cell(3, rr); if (k.t !== 9 && k.t !== 3) { k.t = 0; k.hp = 0; k.food = null; TERRAIN.cellChanged(3, rr); } }
+    hero.c = 3; hero.r = r; place(); R.deep = B.depthM(r); camY = runCam();
+  }
+  G._dbgJump = r => dbgJump(r);
   function updateDive(dt) {
     trans.t += dt; const t = trans.t, hx = (TL.hole.x0 + 0.5) * T;
     if (t < 0.2) { hero.y = 0; }
@@ -338,6 +464,7 @@
     if (hero.y >= T && !trans.landed) { trans.landed = t; addFx('puff', hero.x, T * 0.95, T / 110); SFX.play('land', 0.9); shake = 0.12; HERO.play('Idle'); }
     if (trans.landed && t > 1.12) {
       trans = null; mode = 'run'; hero.c = 3; hero.r = 0; place(); R.on = true; G.ui.showRun(); S.runs++;
+      if (DBG_START > 0) dbgJump(DBG_START);
       // v0.20 去掉落地后的“表土层 0 米”横幅：深度顶栏本来就显示，区域看地层就知道（全线规则：能用画面表达的不加字）
     }
   }
@@ -414,8 +541,8 @@
   G.collect = (mult, keep) => {   // mult：结算双倍广告 = 2（金币、宝石、材料都 ×2，琥珀除外）
     const k = (R.over === 'dead' && !keep) ? D.keep : 1, boost = S.boost > 0 ? 2 : 1, m = k * (mult || 1) * boost;
     const c = Math.floor(R.coin * m), g = Math.floor(R.gem * m), mat = {};
-    for (const id in R.mat) { mat[id] = Math.floor(R.mat[id] * k * (id === 'amber' ? 1 : boost * (mult || 1))) || (R.mat[id] > 0 && k >= 0.7 ? 1 : 0); S.mat[id] = (S.mat[id] || 0) + mat[id]; if (mat[id]) S.seen[id] = 1; }
-    if (R.mat.amber) { mat.amber = R.mat.amber; }
+    for (const id in R.mat) { mat[id] = Math.floor(R.mat[id] * k * (B.MAT[id].boss ? 1 : boost * (mult || 1))) || (R.mat[id] > 0 && k >= 0.7 ? 1 : 0); S.mat[id] = (S.mat[id] || 0) + mat[id]; if (mat[id]) S.seen[id] = 1; }
+    for (const id in R.mat) if (B.MAT[id].boss && R.mat[id]) mat[id] = R.mat[id];   // 守卫材料（虫珀、石堡碎块）不受双倍 / 倒下折损影响（显示用）
     S.coin += c; S.gem += g; if (S.boost > 0) S.boost--;
     S.lastRun = { coin: Math.floor(R.coin), gem: Math.floor(R.gem) }; S.best = Math.max(S.best, R.deep);
     G.lastGain = { coin: c, gem: g, mat }; G.save(); rise();
@@ -438,17 +565,18 @@
     return d;
   }
   function hitBlock(c, r, dmg, quiet, mute) {   // mute：不放普通挖土声（巨镐那一下统一放 giant_hit）
-    const k = cell(c, r); if (!(k.t === 1 || k.t === 2 || k.t === 4 || k.t === 5 || k.t === 6)) return;
+    const k = cell(c, r); if (!(solid(k.t) || gateOpen(k))) return;
     k.hp -= dmg; const x = (c + 0.5) * T, y = (r + 0.5) * T;
     const hx = x + (hero.x - x) * 0.45, hy = y + (hero.y - T * 0.45 - y) * 0.45;
     if (k.hp <= 0) {
-      const t = k.t, info = B.CELL[t]; chips(c, r, x, y, t === 2 ? 9 : 6, 1); k.t = 0; R.blocks++;
-      addFx('puff', x, y, T / 110); SFX.play(t === 2 ? 'chunk_fall' : 'dig_rock_block', t === 2 ? 1 : 0.8); if (t === 2) shake = 0.18;
-      const v = B.dirtCoin(r) * info.coin * D.coinM; if (v > 0) { drop('coin', x, y, t === 5 ? 4 : 2); gain('coin', v, x, y); }
+      const t = k.t, info = B.CELL[t], hard = t === 2 || t === 3; chips(c, r, x, y, hard ? 9 : 6, 1); k.t = 0; R.blocks++;
+      addFx('puff', x, y, T / 110); SFX.play(hard ? 'chunk_fall' : 'dig_rock_block', hard ? 1 : 0.8); if (hard) shake = t === 3 ? 0.26 : 0.18;
+      const v = B.dirtCoin(r) * info.coin * D.coinM; if (v > 0) { drop('coin', x, y, info.coin >= 5 ? 4 : 2); gain('coin', v, x, y); }
       if (info.mat) gainMat(info.mat, 1 + D.oreX, x, y);
       if (t === 6 && k.food) { const h = B.foodHeal(k.food, r); R.st = Math.min(R.stMax, R.st + h); R.ate++; drop('f_' + k.food, x, y, 1); addNum(x, y - T * 0.65, '+' + B.fmt(Math.max(1, h)), '#7cf06a', true); SFX.play('eat', 0.9); addFx('star', x, y, T / 90); k.food = null; }
       if (k.chest) openChest(c, r);
-    } else if (!quiet) { if (!mute) SFX.play('dig_dirt', 0.7, k.t === 2 ? 0.8 : 1); chips(c, r, hx, hy, 3, 0.6); }
+    } else if (!quiet) { if (!mute) SFX.play('dig_dirt', 0.7, k.t === 2 || k.t === 3 ? 0.8 : 1); chips(c, r, hx, hy, k.t === 3 ? 5 : 3, 0.6);
+      if (k.t === 3 && !R.heavyHit) { addFx('ring', hx, hy, T / 150); addFx('puff', hx, hy, T / 170); shake = Math.max(shake, 0.06); } }   // v0.21 fixC：能挖的守卫门每挨一下 = 冲击环（同巨镐那一下的 ring，缩小）+ 多崩碎块 + 小团扬尘 + 微震（试过整格闪白：方块盖不住门的不规则边、还压到下面的土，不用）（裂纹 / 凹进由 terrain.js 那条线做）
     if (R.heavyHit && !quiet) { addFx('ring', hx, hy, T / 120); shake = Math.max(shake, 0.1); }
     TERRAIN.cellChanged(c, r);
   }
@@ -477,7 +605,9 @@
       if (D.kill) { const h = B.KILL_SEC * B.drain(m.r); R.st = Math.min(R.stMax, R.st + h); addNum(x, y - T * 0.9, '+' + B.fmt(Math.max(1, h)), '#7cf06a'); }
       if (m.boss) {
         addFx('star', x, y, T / 50); shake = 0.35; SFX.play('chunk_fall');
-        if (!S.boss) { S.boss = 1; R.firstBoss = true; gainMat('amber', 1, x, y); G.ui.banner('红甲虫王 已击败', ''); }
+        const ba = B.areaOf(m.r);
+        if (bossN() < ba + 1) { if (DBG_START > 0) dbgBoss = ba + 1; else S.boss = ba + 1; R.firstBoss = true; gainMat(M.mat, 1, x, y); G.ui.banner(M.name + ' 已击败', ''); if (ba + 1 < B.AREAS_OPEN) openArea(ba + 1, ba + 1); }   // 首杀：守卫材料 + 横幅；下一区域的怪 / 守卫当场放好
+        unlockGate(ba);   // 守卫门当场变成能挖的（门下面就是下一区域）
         D = B.derive(S); G.save();
       } else if (M.mat) {
         const p = M.mat === 'gel' ? D.slimeP : M.p, pk = S.pity[M.mat] || 0;
@@ -494,7 +624,7 @@
 
   /* ---------- v0.18 挖掘机制线：巨镐、回旋镐、光源（强度全在 B.MECH，区域 1 只开第一形态） ---------- */
   const monAt = (c, r) => R.mons.find(q => !q.dead && q.c === c && q.r === r);
-  const solid = t => t === 1 || t === 2 || t === 4 || t === 5 || t === 6;
+  const solid = t => t === 1 || t === 2 || (t >= 4 && t <= 8);   // v0.21 加铁矿 7、孔雀石 8
   // 巨镐：主格照常（上面已打），挥击方向的两侧各 side 格吃 sideK；rows > 1（以后的 3×3 进化）时往前再打几排。d = 主格这一下的伤害（含重击），null = 这一下是打怪
   function giantSwing(c, r, d) {
     const G2 = D.giant, dx = c - hero.c, dy = r - hero.r, px = dy ? 1 : 0, py = dy ? 0 : 1;   // 往下挖 → 左右；往旁边挖 → 上下
@@ -568,11 +698,11 @@
   function darkVis(c, r) { const d = Math.hypot((c + 0.5) * T - hero.x, (r + 0.5) * T - (hero.y - T * 0.5)) / T; return Math.max(0, Math.min(1, (D.lampR - d) / 0.6 + 0.0001)); }
   function neediest() {   // “最缺”的区域 1 材料：下一件装备 / 还没点的机制节点里差得最多的那种；都不缺就给手里最少的
     const have = k => (S.mat[k] || 0) + (R.mat[k] || 0), short = {};
-    const add = m => { for (const k in m || {}) { if (k === 'amber') continue; const lack = m[k] - have(k); if (lack > 0) short[k] = Math.max(short[k] || 0, lack); } };
+    const add = m => { for (const k in m || {}) { if (B.MAT[k].boss) continue; const lack = m[k] - have(k); if (lack > 0) short[k] = Math.max(short[k] || 0, lack); } };
     for (const sl of B.SLOTS) { const g = B.GEAR[sl][(S.gear[sl] || 0) + 1]; if (g && !g.next) add(g.mat); }
     for (const n of B.SK) if (n.mat && (S.skill[n.id] || 0) < n.max) add(n.mat);
     const ks = Object.keys(short); if (ks.length) return ks.sort((a, b) => short[b] - short[a])[0];
-    return B.MAT_ORDER.filter(k => k !== 'amber').sort((a, b) => have(a) - have(b))[0];
+    return B.MAT_ORDER.filter(k => !B.MAT[k].boss && !B.MAT[k].area).sort((a, b) => have(a) - have(b))[0];   // v0.21：兜底只给区域 1 的材料（暗格宝箱只在区域 1）
   }
   G.neediest = () => neediest();
   function openDark(c, r) {
@@ -707,7 +837,7 @@
       if (hero.r > 0 && solid(ku.t)) { hero.upAct = 1; swing(dt, 'block', { c: hero.c, r: hero.r - 1 }, -1); return; }
       if (ku.t !== 0 || hero.r <= 0 || hero.upAct) {
         stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle');
-        if (ku.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); if (!S.boss) G.ui.toast('先击败守卫“红甲虫王”'); }   // v0.20 tfix：往上碰守卫门和往下 / 往旁边碰门一样的反馈
+        if (ku.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); gateTip(hero.r - 1); }   // v0.20 tfix：往上碰守卫门和往下 / 往旁边碰门一样的反馈
         return;
       }
       if (!S.tut.hop && G.ui.hopTipOff()) { S.tut.hop = 1; G.save(); } stopSwing(); hero.hopT = B.HOP.t; HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.4); return;   // v0.20 tfix：小跳起跳也有声音（同回地面 / 下矿起跳的 jump_A），落地 land 成对
@@ -715,10 +845,13 @@
     if (dx) hero.face = dx;
     const c = hero.c + dx, r = hero.r + dy, k = cell(c, r), m = R.mons.find(q => q.c === c && q.r === r && !q.dead);
     if (m) { swing(dt, 'mon', m, dy); return; }
-    if (k.t === 9 || k.t === 3) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); if (k.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); if (!S.boss) G.ui.toast('先击败守卫“红甲虫王”'); } return; }
-    if (k.t === 1 || k.t === 2 || k.t >= 4) { swing(dt, 'block', { c, r }, dy); return; }
+    if (k.t === 9 || (k.t === 3 && !gateOpen(k))) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); if (k.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); gateTip(r); } return; }
+    if (solid(k.t) || gateOpen(k)) { swing(dt, 'block', { c, r }, dy); return; }
     if (R.mons.some(q => q.dead && q.c === c && q.r === r)) return;
     stopSwing(); move(dx, dy);
+  }
+  function gateTip(r) {   // 碰到锁着的守卫门：守卫还在 → 提示先打守卫；守卫已打败（最后一个开放区域的门）→ 只有闷响和锁图标
+    const a = B.areaOf(r); if (bossN() < a + 1) G.ui.toast('先击败守卫“' + B.MON[BOSS_OF[a]].name + '”');
   }
   function move(dx, dy) {
     hero.fx = hero.x; hero.fy = hero.y; hero.c += dx; hero.r += dy; hero.tx = (hero.c + 0.5) * T; hero.ty = (hero.r + 1) * T; hero.mv = 0.15;
@@ -726,7 +859,7 @@
   }
   function arrive() {   // 走进一格：蜘蛛网、宝箱
     const k = cell(hero.c, hero.r);
-    if (k.web) { k.web = 0; gainMat('silk', 1 + D.oreX, hero.x, hero.y - T * 0.5); addFx('puff', hero.x, hero.y - T * 0.5, T / 140); }
+    if (k.web) { const id = SCN[k.web].mat; k.web = 0; gainMat(id, 1 + D.oreX, hero.x, hero.y - T * 0.5); addFx('puff', hero.x, hero.y - T * 0.5, T / 140); }
     if (k.dchest && darkVis(hero.c, hero.r) > 0) openDark(hero.c, hero.r);
     if (k.chest) openChest(hero.c, hero.r);   // v0.20：幸运宝箱放在洞穴空格里，原来只有“挖碎方块”时才开 → 永远开不了；走进去就开
   }
@@ -866,7 +999,7 @@
     const wr = D.pet.webR || 1;   // v0.18 探索类「收集范围」：1 → 2 格
     for (let dy = -wr; dy <= wr; dy++) for (let dx = -wr; dx <= wr; dx++) {
       if (!dx && !dy) continue; const c = hero.c + dx, r = hero.r + dy; if (c < 0 || c >= W) continue; const k = cell(c, r);
-      if (k.web && k.t === 0) { k.web = 0; const x = (c + 0.5) * T, y = (r + 0.5) * T; gainMat('silk', 1 + D.oreX, x, y); addFx('puff', x, y, T / 140); petAct('Attack'); return; }
+      if (k.web && k.t === 0) { const id = SCN[k.web].mat; k.web = 0; const x = (c + 0.5) * T, y = (r + 0.5) * T; gainMat(id, 1 + D.oreX, x, y); addFx('puff', x, y, T / 140); petAct('Attack'); return; }
     }
   }
 
@@ -877,7 +1010,7 @@
     if (!ST || !SK) return; const an = SK.data.findAnimation(a); if (!an) return;
     ST.setAnimation(0, a, false); ST.addAnimation(0, 'Idle', true, 0); pet.anim = a; pet.actT = Math.min(an.duration, 1.1);   // Busking 是一段长舞，最多播 1.1 秒就回 Idle
   }
-  const digOk = k => k.t === 1 || k.t === 2 || k.t === 4 || k.t === 5 || k.t === 6;
+  const digOk = k => solid(k.t);
   function petBlockTarget(ex) {   // 主角正在挖的那格 → 脚下 → 面朝的一边 → 背后；ex = 已选过的格（双爪 / 连环炸的第 2 个目标用）
     const no = (c, r) => ex && ex.c === c && ex.r === r;
     const sw = hero.swinging; if (sw && sw.startsWith('block')) { const [c, r] = sw.slice(5).split(',').map(Number); if (digOk(cell(c, r)) && !no(c, r)) return { c, r }; }
@@ -974,13 +1107,15 @@
       const row = R.rows.get(r); if (!row) continue;
       for (let c = 0; c < W; c++) {
         const k = row[c], x = ox + (c + 0.5) * T, y = (r + 0.5) * T - cy;
-        if (k.t === 3 && c === 3) { const lw = T * 0.46, lh = lw * A.img.lock.height / A.img.lock.width; ctx.drawImage(A.img.lock, Math.round(x - lw / 2), Math.round(y - lh / 2), Math.round(lw), Math.round(lh)); }
+        if (k.t === 3 && c === 3 && !gateOpen(k)) { const lw = T * 0.46, lh = lw * A.img.lock.height / A.img.lock.width; ctx.drawImage(A.img.lock, Math.round(x - lw / 2), Math.round(y - lh / 2), Math.round(lw), Math.round(lh)); }
         let im = null, z = 0.62, rot = 0;
         if (k.t === 4) { im = matImg(c % 2 ? 'mat/branch.png' : 'mat/branch_dead.png'); z = 0.78; rot = ((c * 7 + r * 3) % 5 - 2) * 0.35; }
         else if (k.t === 5) { im = matImg('mat/copper.png'); z = 0.58; rot = ((c + r) % 3 - 1) * 0.3; }
         else if (k.t === 6 && k.food) { im = matImg(B.FOOD[k.food].img); z = 0.56; }
+        else if (k.t === 7 || k.t === 8) { const ci = B.CELL[k.t]; im = matImg(ci.img); z = ci.z; rot = ((c + r) % 3 - 1) * 0.3; }   // v0.21 铁矿、孔雀石（同铜矿的嵌法）
         if (im && im.width) { const hh = ((c * 73856093) ^ (r * 19349663)) >>> 0, jx = ((hh % 7) - 3) * T * 0.06, jy = (((hh >> 3) % 7) - 3) * T * 0.05, js = 0.85 + ((hh >> 6) % 5) * 0.07; rot += (((hh >> 9) % 9) - 4) * 0.12; if (k.t === 4 && (hh >> 12) % 2) rot += Math.PI * 0.5; const q = 0.55 + 0.45 * Math.max(0, k.hp / k.max), s = T * z * q * js; ctx.save(); ctx.translate(Math.round(x + jx), Math.round(y + jy)); ctx.rotate(rot); ctx.globalAlpha = k.t === 4 ? 0.92 : 1; ctx.drawImage(im, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; }
-        if (k.web) { const w = matImg('mat/spider_web.png'); if (w.width) { const s = T * 0.82, left = c === 0 || cell(c - 1, r).t !== 0; ctx.save(); ctx.translate(Math.round(x + (left ? -1 : 1) * T * 0.1), Math.round(y - T * 0.08)); if (!left) ctx.scale(-1, 1); ctx.globalAlpha = 0.88; ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; } }
+        if (k.web === 'salt') { const w = matImg(SCN.salt.img); if (w.width) { const s = T * 0.62, hh = ((c * 92821) ^ (r * 68917)) >>> 0, fl = hh % 2 ? -1 : 1; ctx.save(); ctx.translate(Math.round(x + (((hh >> 2) % 5) - 2) * T * 0.05), Math.round(y + T * 0.5 - s * 0.42)); ctx.scale(fl, 1); ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); } }   // v0.21 岩盐：盐晶长在洞底（底边落在地面上），左右随机翻
+        else if (k.web) { const w = matImg('mat/spider_web.png'); if (w.width) { const s = T * 0.82, left = c === 0 || cell(c - 1, r).t !== 0; ctx.save(); ctx.translate(Math.round(x + (left ? -1 : 1) * T * 0.1), Math.round(y - T * 0.08)); if (!left) ctx.scale(-1, 1); ctx.globalAlpha = 0.88; ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; } }
         if (k.dchest || k.dopen) {   // v0.18 暗格宝箱：只在头灯半径内显形；第一次照到冒星星；打开后开盖图淡出
           const ch = k.dchest ? A.img.dchest : A.img.dchestOpen, vis = k.dchest ? darkVis(c, r) : Math.max(0, 1 - (time - k.dopen) / 0.9);
           if (k.dchest && vis > 0 && !k.dseen) { k.dseen = 1; addFx('star', x - ox, y + cy, T / 110); }
@@ -1158,15 +1293,15 @@
     for (const d of [-1, 1]) { const k = cell(h.c + d, h.r); if ((k.t === 6 && k.food) || k.web || k.chest) return [d, 0]; }
     const adj = R.mons.find(m => !m.dead && Math.abs(m.c - h.c) + Math.abs(m.r - h.r) === 1); if (adj) return [adj.c - h.c, adj.r - h.r];
     const near = R.mons.find(m => !m.dead && !m.boss && m.r === h.r && Math.abs(m.c - h.c) <= 4); if (near) return [Math.sign(near.c - h.c), 0];
-    if (h.r >= B.AREA - 3 && R.mons.some(m => m.boss && !m.dead)) { const bm = R.mons.find(m => m.boss && !m.dead); if (bm.r === h.r + 1 && Math.abs(bm.c - h.c) > 0) return [Math.sign(bm.c - h.c), 0]; }
+    { const bm = R.mons.find(m => m.boss && !m.dead && m.r - h.r >= 0 && m.r - h.r <= 2); if (bm && bm.r === h.r + 1 && Math.abs(bm.c - h.c) > 0) return [Math.sign(bm.c - h.c), 0]; }
     for (const d of [-1, 1]) { const k = cell(h.c + d, h.r + 1); if (k.web) return [d, 0]; }
-    if (b === 3) return h.c === 3 ? [0, 0] : [h.c > 3 ? -1 : 1, 0];
+    if (b === 3 && !gateOpen(cell(h.c, h.r + 1))) return h.c === 3 ? [0, 0] : [h.c > 3 ? -1 : 1, 0];
     if (b === 2 && !G.botStraight) { for (let d = 1; d < 7; d++) for (const sg of [-1, 1]) { const c = h.c + sg * d; if (c >= 0 && c < W && cell(c, h.r + 1).t !== 2 && cell(c, h.r).t !== 2) return [sg, 0]; } }
     return [0, 1];
   };
   G.state = () => ({ mode, R, hero, D, T, camY, trans, VH, VW, bolts, pet, pbombs, petQ });
   // 测试用：跳过过渡直接开始 / 结算（数值机器人用）
-  G._quickStart = () => { D = B.derive(S); newRun(); trans = null; mode = 'run'; hero.c = 3; hero.r = 0; place(); R.on = true; S.runs++; G.ui.showRun(); };
+  G._quickStart = () => { D = B.derive(S); newRun(); trans = null; mode = 'run'; hero.c = 3; hero.r = 0; place(); R.on = true; S.runs++; G.ui.showRun(); if (DBG_START > 0) dbgJump(DBG_START); };
   G._quickCollect = () => { const k = R.over === 'dead' ? D.keep : 1; S.coin += Math.floor(R.coin * k); S.gem += Math.floor(R.gem * k); for (const id in R.mat) { const n = Math.floor(R.mat[id] * k) || (R.mat[id] ? 1 : 0); S.mat[id] = (S.mat[id] || 0) + n; S.seen[id] = 1; } S.best = Math.max(S.best, R.deep); const out = { deep: R.deep, t: R.t, coin: R.coin, gem: R.gem, mat: Object.assign({}, R.mat), over: R.over, kills: R.kills }; $('pop').classList.remove('on'); toShore(false); return out; };
   G._testSpawn = (c, r, kind) => spawn(c, r, kind, false);   // 测试用：放一只怪（截图定位）
   G.townCam = townCam;
@@ -1185,6 +1320,8 @@
     // v0.18 修（守卫受击姿势歪）：LayerLab 甲虫类的 Hit 片段里有 4 条只有一个关键帧的常量轨道（Body_bone / Head_bone 转 9.5°、头挪位），
     // 受击期间整只歪着、头缩进壳里；而攻击间隔 < 片段长 0.58 秒，打守卫时一直处在 Hit 里，看起来一直是歪的。
     // 其他 6 类怪的 Hit 都只有后退 + 压扁 + 闪白、结束回原位。这里统一去掉 Hit 里“单关键帧的位置 / 旋转 / 缩放轨道”，只留闪白和弹性动作。
+    // v0.21 区域 2 的怪物数据（assets/monsters/monsters_r2.js）：本线不改 index.html，启动时动态加载；合并时可改成 index.html 里直接写 <script>
+    if (!window.ENEMY_MONSTER_DATA.monsters.Turtle_Tower) await new Promise(ok => { const sc = document.createElement('script'); sc.src = 'assets/monsters/monsters_r2.js?v=21'; sc.onload = sc.onerror = ok; document.head.appendChild(sc); });
     for (const c of Object.values(window.ENEMY_MONSTER_DATA.categories)) { const h = c.anims.Hit; if (h) h.tracks = h.tracks.filter(t => t.k === 'on' || t.k === 'spr' || t.c.length > 1); }
     MLIB = await EnemyMonsters.load(window.ENEMY_MONSTER_DATA, 'assets/monsters/');
     petCv = document.createElement('canvas'); petCv.width = petCv.height = Math.ceil(T * 1.6); petG = petCv.getContext('2d'); SR = new spine.SkeletonRenderer(petG); SR.triangleRendering = true;

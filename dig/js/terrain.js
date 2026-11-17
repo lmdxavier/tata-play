@@ -16,8 +16,11 @@
   /* ---------- 阶段外观（每 20 米换：材质、边缘、地形起伏、远景色、环境光、光源道具） ---------- */
   // noise：[起伏幅度, 起伏尺度（世界像素）, 尖棱（ridged）]；bg：远景颜色；amb：环境光（颜色 × 强度）；props：光源道具
   const STAGES = [
-    { name: '表土', body: 'dirt', rim: 'e_dirtrim', top: 'e_dirttop', spur: 'basalt', spurRim: 'e_gate', noise: [0.22, 46, 0], bg: [0.62, 0.86, 1.15], amb: [1.0, 0.96, 0.9, 0.9], props: ['mushroom', 'crystal2'] },
-    { name: '沙岩', body: 'sand', rim: 'e_sand', top: null, spur: 'basalt', spurRim: 'e_gate', noise: [0.16, 78, 0], bg: [1.15, 0.92, 0.62], amb: [1.0, 0.92, 0.78, 0.8], props: ['fire', 'mushroom'] },
+    { name: '表土', body: 'dirt', rim: 'e_dirtrim', top: 'e_dirttop', spur: 'basalt', spurRim: 'e_gate', noise: [0.22, 46, 0], bg: [0.62, 0.86, 1.15], amb: [1.0, 0.96, 0.9, 0.9], ambEnd: 0.8, props: ['mushroom', 'crystal2'] },
+    // v0.21 区域 2 沙岩（美术线）：自己的贴图 / 土壳 / 顶条（Simple Sidescroll map18_02、map06_06、map07_05，tools/build_terrain.py --area2）；
+    //   起伏横向拉长 2.6 倍 + 软台阶（层状沉积、风蚀圆滑，不尖棱）；远景用自己的一套（bgSet: 's2'，map07 琥珀洞穴，不再叠阶段色）；
+    //   环境光暖琥珀、比区域 1 暗一档；光源 = 火把 + 琥珀色晶簇，其余洞底放沙堆 / 碎石 / 风化岩块（deco，不发光）
+    { name: '沙岩', body: 'sstone2', rim: 'e_sstone', top: 'e_sstop', spur: 'basalt2', spurRim: 'e_gate', noise: [0.2, 64, 0, 2.6, 0.55], bg: [1.15, 0.92, 0.62], bgSet: 's2', bgTint: 0, amb: [1.0, 0.84, 0.62, 0.76], props: ['fire', 'amber', 'amber'], propP: 0.4, deco: ['mound', 'pebbles', 'spireL', 'spireR', 'pebbles'], decoP: 0.7, room: ['mound', 'pebbles'] },
     { name: '根须红土', body: 'deep', rim: 'e_dirtrim', top: 'e_dirttop', spur: 'basalt', spurRim: 'e_gate', noise: [0.24, 40, 0], bg: [1.05, 0.7, 0.58], amb: [1.0, 0.86, 0.74, 0.68], props: ['fire', 'mushroom'] },
     { name: '苔藓洞', body: 'moss', rim: 'e_moss', top: 'e_mosstop', spur: 'basalt', spurRim: 'e_gate', noise: [0.24, 34, 0], bg: [0.66, 1.0, 0.7], amb: [0.86, 1.0, 0.8, 0.62], props: ['mushroom', 'crystal'] },
     { name: '紫晶岩', body: 'rock', rim: 'e_rock', top: null, spur: 'basalt', spurRim: 'e_gate', noise: [0.27, 36, 1], bg: [0.92, 0.7, 1.15], amb: [0.92, 0.84, 1.0, 0.6], props: ['crystal', 'crystal2'] },
@@ -33,9 +36,9 @@
   STAGES.forEach(s => MAT.push({ tex: s.body, rim: s.rim, top: s.top }));
   STAGES.forEach(s => MAT.push({ tex: s.spur, rim: s.spurRim, top: null }));
   MAT.push({ tex: 'gate', rim: 'e_gate', top: null });
-  const GATE = 21;
-  const RIM_T = { e_dirtrim: 22, e_rock: 18, e_sand: 14, e_bed: 20, e_moss: 22, e_ice: 18, e_teal: 22, e_grey: 18, e_ruin: 20, e_gate: 18 };
-  const TOPSTRIP = { e_grass: { s: 0.26, base: 156, h0: 220 }, e_dirttop: { s: 0.34, base: 52, h0: 113 }, e_mosstop: { s: 0.34, base: 52, h0: 113 } };
+  const GATE = 21, NST = STAGES.length;   // NST：1..NST 是各区域的土
+  const RIM_T = { e_dirtrim: 22, e_rock: 18, e_sand: 14, e_sstone: 16, e_bed: 20, e_moss: 22, e_ice: 18, e_teal: 22, e_grey: 18, e_ruin: 20, e_gate: 18 };
+  const TOPSTRIP = { e_grass: { s: 0.26, base: 156, h0: 220 }, e_dirttop: { s: 0.34, base: 52, h0: 113 }, e_mosstop: { s: 0.34, base: 52, h0: 113 }, e_sstop: { s: 0.17, base: 214, h0: 300 } };   // e_sstop：沙岩台面（沙堆 + 碎石往上伸）
   const TEX_S = 0.5;   // 内部贴图：1 素材像素 = 0.5 世界像素（和 dig 一样）
 
   // 光源道具（素材来自 dig）：c = 光的颜色，k = 强度，r = 照多远（世界像素）
@@ -45,6 +48,12 @@
     crystal:  { img: 'crystal_big', s: 0.13, c: [0.55, 1.0, 0.4], k: 0.85, r: 200 },
     crystal2: { img: 'crystal_small', s: 0.18, c: [0.55, 1.0, 0.4], k: 0.5, r: 130 },
     ice:      { img: 'Ice_Flower_05', s: 0.62, c: [0.45, 0.85, 1.0], k: 0.6, r: 160 },
+    amber:    { img: 'crystal_amber2', s: 0.09, c: [1.0, 0.7, 0.32], k: 0.45, r: 120, glowA: 0.32 },   // v0.21 区域 2：琥珀色晶簇（比区域 1 的水晶弱）
+    // 不发光的装饰（k = 0）：区域 2 洞底的沙堆、碎石、风化岩块（Simple Sidescroll map07_05 / map13_04、05）
+    mound:    { img: 's2_mound', s: 0.17, k: 0 },
+    pebbles:  { img: 's2_pebbles', s: 0.2, k: 0 },
+    spireL:   { img: 's2_spireL', s: 0.2, k: 0 },
+    spireR:   { img: 's2_spireR', s: 0.2, k: 0 },
   };
   TR.PROP = PROP;
 
@@ -67,7 +76,8 @@
     if (c < 0 || c >= COLS) return 1;
     const k = G.cell(c, r), t = k.t;
     if (t === 0) return 0;
-    if (t !== 3 && k.hp < k.max) { const q = Math.max(0, k.hp / k.max); return TH + 0.1 + (1 - TH - 0.1) * Math.pow(q, 0.85); }
+    // fixR（review 8）：能挖的守卫门（hp / max 只在守卫打败后才有）也按剩余血量往里凹；锁着的门没有 hp，不受影响
+    if (k.hp < k.max) { const q = Math.max(0, k.hp / k.max); return TH + 0.1 + (1 - TH - 0.1) * Math.pow(q, 0.85); }
     return 1;
   }
   function cellMat(c, r) {
@@ -93,15 +103,25 @@
     else { fillRow(r, row, -2, COLS + 1); if (clean) PM.set(r, { sig, m: row.m.slice() }); }
     return row;
   }
+  // 一个阶段的起伏值。noise = [幅度, 尺度, 尖棱, 横向拉长, 台阶]：横向拉长 > 1 = 起伏横着走（层状沉积）；台阶 0..1 = 软台阶的比重（v0.21 沙岩）
+  function stageNoise(s, x, y) {
+    const [A, L, ridge, ax = 1, strata = 0] = STAGES[s].noise;
+    let v = fbm(x / (L * ax), y / L, 11 + s) * 2 - 1;
+    if (ridge) v = (1 - Math.abs(v) * 2) * 0.9 + (vnoise(x / 9, y / 9, 5) - 0.5) * 0.25;   // 尖棱：岩石、冰
+    if (strata) { const q = (v + 1) * 2.5, f = q - Math.floor(q); v = v * (1 - strata) + ((Math.floor(q) + sm(smooth(0.3, 0.7, f))) / 2.5 - 1) * strata; }   // 软台阶：一层层的平台，台阶边是圆滑的坡
+    return v * A;
+  }
   function makeNoise(r) {
     const N = NS * NXF, n = new Float32Array(N), wx = new Int8Array(N), wy = new Int8Array(N);
-    const st = STAGES[stageOf(r)], [A, L, ridge] = st.noise;
+    const AR = window.BAL.AREA, s = stageOf(r), b = Math.round(r / AR) * AR;   // b：最近的区域交界（行）
+    const sA = stageOf(b - 1), sB = stageOf(b), blend = b > 0 && sA !== sB && Math.abs(r + 0.5 - b) < 2.5;   // v0.21：交界前后各 2 行起伏渐变（以前在交界处一刀切换，开门后洞壁有一道横向错位）
     for (let j = 0; j < NS; j++) for (let i = 0; i < NXF; i++) {
       const x = (IC0 + i + 0.5) * SUB, y = (r * NS + j + 0.5) * SUB, q = j * NXF + i;
-      let v = fbm(x / L, y / L, 11 + stageOf(r)) * 2 - 1;
-      if (ridge) v = (1 - Math.abs(v) * 2) * 0.9 + (vnoise(x / 9, y / 9, 5) - 0.5) * 0.25;   // 尖棱：岩石、冰
-      let a = A; if (y < 70) a *= 0.25 + 0.75 * smooth(10, 70, y);                        // 地表平缓
-      n[q] = v * a;
+      let v;
+      if (blend) { const t = smooth(b - 1.5, b + 1.5, y / CELL); v = stageNoise(sA, x, y) * (1 - t) + stageNoise(sB, x, y) * t; }
+      else v = stageNoise(s, x, y);
+      if (y < 70) v *= 0.25 + 0.75 * smooth(10, 70, y);                        // 地表平缓
+      n[q] = v;
       wx[q] = Math.round((fbm(x / 34, y / 34, 31) - 0.5) * 60); wy[q] = Math.round((fbm(x / 34, y / 34, 47) - 0.5) * 60);
     }
     return { n, wx, wy };
@@ -146,7 +166,7 @@
       const th = RIM_T[n] ? RIM_T[n] * 4 : Math.round(TOPSTRIP[n].h0 * TOPSTRIP[n].s * 4);
       RIMPXF[n] = prefilter(im, th);
     }));
-    await Promise.all(['l1_wall', 'l2_prop01', 'l3_prop02', 'l4_stones', 'l5_crystals'].map(async n => { IMG[n] = await load('assets/bg/' + n + '.png?v=3'); }));
+    await Promise.all([...new Set(Object.values(BGSETS).flat().map(l => l[0]))].map(async n => { IMG[n] = await load('assets/bg/' + n + '.png?v=3'); }));
     await Promise.all(Object.values(PROP).map(async p => { if (!IMG[p.img]) IMG[p.img] = await load('assets/props/' + p.img + '.png'); }));
     IMG.glow = await load('assets/ui/glow_white.png');
   };
@@ -195,23 +215,23 @@
     }
     return { f, Nx, Ny, i0, j0, ni, nj };
   }
-  function contour(F, path) {
+  function contour(F, path, th = 0.5) {   // th：等值线取哪一档（< 0.5 = 往外扩一点）
     const { f, Nx, i0, j0, ni, nj } = F;
     const v = (i, j) => f[(j + 1) * Nx + i + 1];
     for (let j = -1; j <= nj; j++) {
       let run = -99;
       for (let i = -1; i <= ni + 1; i++) {
-        const full = i <= ni && v(i, j) >= 0.5 && v(i + 1, j) >= 0.5 && v(i + 1, j + 1) >= 0.5 && v(i, j + 1) >= 0.5;
+        const full = i <= ni && v(i, j) >= th && v(i + 1, j) >= th && v(i + 1, j + 1) >= th && v(i, j + 1) >= th;
         if (full) { if (run === -99) run = i; continue; }
         if (run !== -99) { path.rect((i0 + run + 0.5) * SUB, (j0 + j + 0.5) * SUB, (i - run) * SUB, SUB); run = -99; }
         if (i > ni) continue;
         const c = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]], val = c.map(([a, b]) => v(a, b));
-        if (val.every(q => q < 0.5)) continue;
+        if (val.every(q => q < th)) continue;
         const pts = [];
         for (let k = 0; k < 4; k++) {
           const a = val[k], b = val[(k + 1) & 3], pa = c[k], pb = c[(k + 1) & 3];
-          if (a >= 0.5) pts.push((i0 + pa[0] + 0.5) * SUB, (j0 + pa[1] + 0.5) * SUB);
-          if ((a >= 0.5) !== (b >= 0.5)) { const t = (0.5 - a) / (b - a); pts.push((i0 + pa[0] + 0.5 + (pb[0] - pa[0]) * t) * SUB, (j0 + pa[1] + 0.5 + (pb[1] - pa[1]) * t) * SUB); }
+          if (a >= th) pts.push((i0 + pa[0] + 0.5) * SUB, (j0 + pa[1] + 0.5) * SUB);
+          if ((a >= th) !== (b >= th)) { const t = (th - a) / (b - a); pts.push((i0 + pa[0] + 0.5 + (pb[0] - pa[0]) * t) * SUB, (j0 + pa[1] + 0.5 + (pb[1] - pa[1]) * t) * SUB); }
         }
         path.moveTo(pts[0], pts[1]); for (let k = 2; k < pts.length; k += 2) path.lineTo(pts[k], pts[k + 1]); path.closePath();
       }
@@ -330,9 +350,9 @@
     return ch;
   }
   // 用贴图铺满路径：按路径裁剪，再按世界坐标整像素铺（跨块无缝）
-  function fillTex(g, path, key, dx0, dy0, cx0, cy0, w, h) {
+  function fillTex(g, clips, key, dx0, dy0, cx0, cy0, w, h) {   // clips：一条或几条路径（几条 = 取交集）
     const P = PAT[key]; if (!P) return;
-    g.save(); g.setTransform(CQ, 0, 0, CQ, -cx0, -cy0); g.clip(path); g.setTransform(1, 0, 0, 1, 0, 0);
+    g.save(); g.setTransform(CQ, 0, 0, CQ, -cx0, -cy0); for (const c of clips) g.clip(c); g.setTransform(1, 0, 0, 1, 0, 0);
     const pw = P.ww * CQ, ph = P.wh * CQ;
     const i0 = Math.floor(dx0 / pw), i1 = Math.floor((dx0 + w) / pw), j0 = Math.floor(dy0 / ph), j1 = Math.floor((dy0 + h) / ph);
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -341,10 +361,11 @@
     }
     g.restore();
   }
+  const DIL = 0.25;   // 多材质时每种材质自己的平滑场取 0.25 等值线（比 0.5 往外扩约 2 世界像素，交界处下面那层是实心）
   const MP = 32;   // 距离场在重画区域四周多算的余量（世界像素）：土壳 + 往外伸的顶条
   let statT = 0, statN = 0; const PF = { fill: 0, dist: 0, crust: 0, top: 0 }, ST = { cpu: 0, hitN: 0, hitLat: 0, hitLatMax: 0 };   // ST：地形重画的纯 CPU 时间、挖一下到画面更新的延迟
   const half = (a, i, fx, fy, stride) => (a[i] * (1 - fx) + a[i + 1] * fx) * (1 - fy) + (a[i + stride] * (1 - fx) + a[i + stride + 1] * fx) * fy;
-  const CAP = { e_grass: 12, e_dirttop: 8, e_mosstop: 8 };
+  const CAP = { e_grass: 12, e_dirttop: 8, e_mosstop: 8, e_sstop: 9 };
   // 重画世界像素矩形 [X0,X1)×[Y0,Y1)：只算一次（跨两块画布时两块都贴），土壳 / 顶条在 1 像素 = 1 世界像素的层上算，放大贴上
   function* renderRegion(X0, Y0, X1, Y1) {
     const t0 = performance.now();
@@ -366,11 +387,27 @@
     const cnt = new Map();
     for (let j = j0; j < j0 + nj; j++) for (let i = i0; i < i0 + ni; i++) { const m = at(i, j); if (m) cnt.set(m, (cnt.get(m) || 0) + 1); }
     if (!cnt.size) { for (const ch of targets) clipTo(ch, (g, cx0, cy0, x, y, w, h) => g.clearRect(x - cx0, y - cy0, w, h)); return; }
-    // 底色按材质编号固定取最小的（土 < 叉 < 门），不按区域里谁多：否则挖掉一格后底色可能翻转，整块重画区域里的交界都跟着变形
-    const mats = [...cnt.keys()].sort((a, b) => a - b), base = mats[0];
+    // v0.21 fixR：画面不能取决于重画区域里有哪些材质（以前“底色 = 区域里编号最小的材质、铺满整个实心”，
+    //   区域里有区域 1 的土时，区域 2 土 / 守卫门的交界抗锯齿缝里会透出区域 1 的土；没有时透出的是区域 2 的土）。
+    //   现在每种材质 m 按编号从小到大（全局固定顺序）铺，裁剪 = 「m 自己的平滑场往外扩一点（DIL 等值线）」∩「编号 ≥ m 的所有实心（0.5 等值线）」：
+    //   · 往编号大的材质里多铺约 2 世界像素 → 交界 X < Y 处 X 是实心，Y 的抗锯齿边（就在真实交界上）整条落在 X 上：结果 = X·(1−c) + Y·c；
+    //   · 朝空气、朝编号小的材质那边仍是真实边界（不出彩边）；不在附近的材质这块是空的、画不画都一样 → 每个像素只取决于附近的格子。
+    //   土壳：区域的土（1..NST）一律按“到空气的距离”走普通分支；叉 / 门（> NST）沿自己整圈边界画边。
+    const mats = [...cnt.keys()].sort((a, b) => a - b);
     const FU = fieldBlock(i0, j0, ni, nj, m => m > 0), pu = new Path2D(); contour(FU, pu);
-    const sec = [];
-    for (const m of mats) { if (m === base) continue; const Fm = fieldBlock(i0, j0, ni, nj, q => q === m), pm = new Path2D(); contour(Fm, pm); sec.push({ m, path: pm, rim: MAT[m].rim }); }
+    const fills = [], sec = []; let low = null;
+    for (const m of mats) {
+      if (mats.length === 1) { fills.push({ m, clips: [pu] }); if (m > NST) sec.push({ m, path: pu, rim: MAT[m].rim }); continue; }
+      const Fm = fieldBlock(i0, j0, ni, nj, q => q === m), pl = new Path2D();
+      if (m === mats[0]) { contour(Fm, pl, DIL); low = Float32Array.from(Fm.f); }
+      else {   // 场里直接取交集（一条路径一次裁剪）：min(自己往外扩, 不进编号更小的材质)；场是“是不是这种材质”的加权平均、可以相加 → 编号更小的场 = 前面几种的和（low）
+        const hf = new Float32Array(Fm.f.length);
+        for (let q = 0; q < hf.length; q++) { hf[q] = Math.min(Fm.f[q] + 0.5 - DIL, 1 - low[q]); low[q] += Fm.f[q]; }
+        contour(Object.assign({}, Fm, { f: hf }), pl);
+      }
+      fills.push({ m, clips: [pl] });
+      if (m > NST) { const pe = new Path2D(); contour(Fm, pe); sec.push({ m, path: pe, rim: MAT[m].rim }); }   // 叉 / 门的土壳按自己 0.5 的真实边界
+    }
     PF.fill += performance.now() - t0; yield; let t1 = performance.now();
     // 2) 距离场（1 像素 = 1 世界像素）、最近轮廓点（半分辨率）
     const mw = wx1 - wx0, mh = wy1 - wy0, hw = mw >> 1, hh = mh >> 1, N = mw * mh;
@@ -390,7 +427,7 @@
       const wx = wx0 + (i % hw) * 2 + 1, wy = wy0 + ((i / hw) | 0) * 2 + 1;
       const gr = gradAt(FU, wx, wy), gl = Math.hypot(gr[0], gr[1]) || 1, nx = -gr[0] / gl, ny = -gr[1] / gl;
       NY[i] = ny;
-      let m = at(Math.floor((wx - nx * 3) / SUB), Math.floor((wy - ny * 3) / SUB)); if (!m) m = at(Math.floor((wx - nx * 7) / SUB), Math.floor((wy - ny * 7) / SUB)); if (!m) m = base;
+      let m = at(Math.floor((wx - nx * 3) / SUB), Math.floor((wy - ny * 3) / SUB)); if (!m) m = at(Math.floor((wx - nx * 7) / SUB), Math.floor((wy - ny * 7) / SUB)); if (!m) m = 1 + stageOf(Math.floor(wy / CELL));
       SM[i] = m; SURF[i] = wy < 40 ? 1 : 0;
       TW[i] = (SURF[i] || MAT[m].top) ? smooth(0.45, 0.75, -ny) : 0;
       if (TW[i] > 0.02) anyTop = true;
@@ -419,7 +456,7 @@
           const fv = fieldAt(FU, wx, wy), gr = gradAt(FU, wx, wy), gl = Math.hypot(gr[0], gr[1]) / (2 * SUB);
           if (gl > 1e-4) { const de = Math.max(0, (fv - 0.5) / gl), t = Math.max(0, (d - 3) / 2); d = de * (1 - t) + d * t; }
         }
-        if (si) { const sc = sec[si - 1]; name = sc.rim; const ds = half(sc.d, k, fxx, fyy, mw); if (ds < d) { d = ds; secEdge = true; } }
+        if (si) { const sc = sec[si - 1]; name = sc.rim; const ds = half(sc.d, k, fxx, fyy, mw); if (ds < d) { d = ds; secEdge = true; } }   // 叉 / 门沿自己整圈边界画边；两个区域的土相接不画土壳（土永远不进 sec）
         else {
           let m = at(Math.floor(wx / SUB), Math.floor(wy / SUB)); if (!m) m = SM[sk];
           name = MAT[m].rim;
@@ -470,8 +507,8 @@
     tmpG.putImageData(img, 0, 0);
     for (const ch of targets) { if (chunks.get(ch.k) !== ch) continue; clipTo(ch, (g, cx0, cy0, x, y, w, h) => {
       g.clearRect(x - cx0, y - cy0, w, h);
-      fillTex(g, pu, MAT[base].tex, x, y, cx0, cy0, w, h);
-      for (const sc of sec) fillTex(g, sc.path, MAT[sc.m].tex, x, y, cx0, cy0, w, h);
+      for (const fl of fills) fillTex(g, fl.clips, MAT[fl.m].tex, x, y, cx0, cy0, w, h);
+      if (fills.length > 1) { g.save(); g.globalCompositeOperation = 'destination-in'; g.setTransform(CQ, 0, 0, CQ, -cx0, -cy0); g.fillStyle = '#fff'; g.fill(pu); g.restore(); }   // 朝空气那边多铺的裁掉：外形 = 所有实心的轮廓
       g.imageSmoothingEnabled = true; g.drawImage(tmpCv, 0, 0, IW, IH, (X0 - 1) * CQ - cx0, (Y0 - 1) * CQ - cy0, IW * CQ, IH * CQ);
     }); }
     PF.top += performance.now() - t3; statT += performance.now() - t0; statN++;
@@ -538,6 +575,7 @@
   // 格子变了（挖了一下 / 挖碎了）：重算附近细格，重画附近一块
   TR.cellChanged = function (c, r) {
     DIRTY.add(r); spanDirty(r); LVER++;
+    for (const p of TR.props) if (p.fv && Math.abs(p.r - r) <= 3) p.fv = 0;   // fixR：只让附近的道具重新取地表（原来每挖一下所有看得见的道具都重算 5 次 floorAt，Canvas 2D 下 7–13ms）
     for (let rr = r - 1; rr <= r + 1; rr++) { const row = FR.get(rr); if (row) fillRow(rr, row, c - 1, c + 1); }
     const pad = 64; dirtyRect(c * CELL - pad, r * CELL - pad, (c + 1) * CELL + pad, (r + 1) * CELL + pad);
     if (G.cell(c, r).t === 0) for (const p of TR.props) if (!p.gone && p.c === c && p.r === r) p.gone = 1;   // 道具所在的那格挖碎了：道具一起没
@@ -577,6 +615,15 @@
   };
 
   /* ---------- 光源道具：放在怪物洞、守卫房的地面和墙上 ---------- */
+  // fixR（review 6）：地面道具横向收进这一行实际空出的范围（左右各留 PW_M 世界像素给土壳），放不下就不放——以前偏向一侧时会伸进洞壁、被洞口边切一刀
+  const PW_M = 12;
+  function fitX(kind, c, r, x) {
+    const P = PROP[kind], im = IMG[P.img]; if (!im) return x;
+    const hw = (P.frames ? im.width / P.frames : im.width) * P.s * 0.5;
+    let c0 = c, c1 = c; while (c0 > 0 && G.cell(c0 - 1, r).t === 0) c0--; while (c1 < COLS - 1 && G.cell(c1 + 1, r).t === 0) c1++;
+    const a = c0 * CELL + PW_M + hw, b = (c1 + 1) * CELL - PW_M - hw;
+    return a > b ? null : Math.max(a, Math.min(b, x));
+  }
   function buildProps(k) {
     if (buildProps.done.has(k)) return; buildProps.done.add(k);
     for (let r = k * 4; r < k * 4 + 4; r++) {
@@ -584,12 +631,24 @@
       for (let c = 0; c < COLS; c++) {
         const cell = G.cell(c, r); if (cell.t !== 0 || r < 1) continue;
         const below = G.cell(c, r + 1);
-        if ((below.t === 1 || below.t === 4) && !cell.web && !cell.mon && hash2(c, r, 3) < 0.75) {   // 怪物洞地面：蘑菇 / 水晶 / 火堆等
-          const kind = st.props[(hash2(c, r, 4) * st.props.length) | 0], side = hash2(c, r, 5) < 0.5 ? -1 : 1;
-          TR.props.push({ kind, c, r: r + 1, on: 'floor', x: (c + 0.5 + side * 0.3) * CELL, y: (r + 1) * CELL, ph: hash2(c, r, 6) * 10 });
+        const floor = (below.t === 1 || below.t === 4) && !cell.web && !cell.mon, side = hash2(c, r, 5) < 0.5 ? -1 : 1;
+        if (floor && hash2(c, r, 3) < (st.propP || 0.75)) {   // 怪物洞地面：蘑菇 / 水晶 / 火堆等（发光）
+          const kind = st.props[(hash2(c, r, 4) * st.props.length) | 0], x = fitX(kind, c, r, (c + 0.5 + side * 0.3) * CELL);
+          if (x !== null) TR.props.push({ kind, c, r: r + 1, on: 'floor', x, y: (r + 1) * CELL, ph: hash2(c, r, 6) * 10 });
+        } else if (floor && st.deco && hash2(c, r, 7) < st.decoP && l < window.BAL.AREA - 3) {   // v0.21：没放光源的洞底放这个区域的装饰（沙堆 / 碎石 / 风化岩块），偏向格子一侧，不挡格子中间站人的位置
+          const kind = st.deco[(hash2(c, r, 8) * st.deco.length) | 0], x = fitX(kind, c, r, (c + 0.5 + side * 0.24) * CELL);
+          if (x !== null) TR.props.push({ kind, c, r: r + 1, on: 'floor', x, y: (r + 1) * CELL, ph: 0 });
         }
-        if (l === window.BAL.AREA - 2 && (c === 2 || c === 4)) {   // 守卫房两侧：火把
-          TR.props.push({ kind: 'fire', c: c === 2 ? 1 : 5, r, on: 'wall', x: (c === 2 ? 2 : 5) * CELL + (c === 2 ? 8 : -8), y: (r + 0.62) * CELL, ph: c, torch: true });
+        if (l === window.BAL.AREA - 2) {   // 守卫房两侧：火把挂在左右墙上（v0.21：按这一行实际空出的范围找墙，区域 2 的房间 5 格宽）
+          let c0 = c, c1 = c; while (c0 > 0 && G.cell(c0 - 1, r).t === 0) c0--; while (c1 < COLS - 1 && G.cell(c1 + 1, r).t === 0) c1++;
+          if (c === c0 || c === c1) {
+            const L = c === c0;
+            TR.props.push({ kind: 'fire', c: L ? c0 - 1 : c1 + 1, r, on: 'wall', x: (L ? c0 : c1 + 1) * CELL + (L ? 8 : -8), y: (r + 0.62) * CELL, ph: c, torch: true });
+            if (st.room) {   // 守卫房地面两角按区域换装饰（区域 2：沙堆），站在守卫门上
+              const kind = st.room[L ? 0 : 1];
+              TR.props.push({ kind, c, r: r + 1, on: 'floor', x: (c + (L ? 0.36 : 0.64)) * CELL, y: (r + 1) * CELL, ph: 0, room: true });
+            }
+          }
         }
       }
     }
@@ -600,7 +659,10 @@
       if (p.gone) continue; const P = PROP[p.kind], im = IMG[P.img]; if (!im) continue;
       let x = p.x * CQ, y = p.y * CQ;
       if (y - camY < -260 || y - camY > VH + 260) continue;   // v0.20：先按大致位置剔掉屏幕外的（原来每个道具每帧都先算一次 floorAt，道具随深度越积越多）
-      if (p.on === 'floor') y = TR.floorAt(x, y) + 5 * CQ;   // 往地里埋一点
+      if (p.on === 'floor') {   // 往地里埋一点。v0.21：按道具底边宽度（±0.42 宽）取的真实地表、5 个点里最低的那个（底边每一处都踩在土上，不悬空），按地形版本缓存（不再每帧算 floorAt）
+        if (!p.fv || p.fq !== CQ) { const hw = (P.frames ? im.width / P.frames : im.width) * P.s * CQ * (p.torch ? 0.75 : 1) * 0.42; let f = -1e9; for (const k of [-1, -0.5, 0, 0.5, 1]) f = Math.max(f, TR.floorAt(x + hw * k, y)); p.fy = f / CQ; p.fv = 1; p.fq = CQ; p.hw = hw / CQ; }
+        y = p.fy * CQ + 5 * CQ;
+      }
       const sy = y - camY; if (sy < -200 || sy > VH + 200) continue;
       if (P.frames) {
         const fw = im.width / P.frames, f = Math.floor(time * 12 + p.ph * 7) % P.frames, w = fw * P.s * CQ * (p.torch ? 0.75 : 1), h = im.height * P.s * CQ * (p.torch ? 0.75 : 1);
@@ -615,18 +677,44 @@
   /* ---------- 远景：洞穴剪影（灰度）× 阶段颜色，竖向视差 ---------- */
   const BG_TINT = 0.35;   // 阶段色调强度（0 = 原图颜色）
   // [图, 视差, 宽度比例, 镜像平铺]：l1_wall 上暗下亮的渐变、l4_stones 上透明下实心，首尾直接相接会出一道水平硬边（v0.20 review 一般-5，每 5.3 格一道）→ 每隔一张上下翻转（接缝两边是同一行像素）
-  const BGL = [['l1_wall', 0.06, 1.0, 1], ['l2_prop01', 0.16, 0.95, 0], ['l3_prop02', 0.28, 0.9, 0], ['l5_crystals', 0.36, 0.85, 0], ['l4_stones', 0.44, 0.9, 1]];
+  // v0.21：每个区域可以有自己的一套远景（STAGES[s].bgSet，默认 cave = dig 的洞穴 5 层）。第一层必须不透明（盖满）。
+  //   s2 = 区域 2 沙岩：map07 琥珀洞穴的洞壁（镜像平铺）/ 暗色岩台 / 沙台 / 光柱（光柱层两端已淡出、上下透明，直接平铺），4 层（不超过区域 1 的 5 层）
+  const BGSETS = {
+    cave: [['l1_wall', 0.06, 1.0, 1, 0.25], ['l2_prop01', 0.16, 0.95, 0], ['l3_prop02', 0.28, 0.9, 0], ['l5_crystals', 0.36, 0.85, 0], ['l4_stones', 0.44, 0.9, 1]],
+    s2: [['s2_wall', 0.06, 1.0, 1, 0.8], ['s2_shelf', 0.16, 0.95, 0, 0.7], ['s2_ledge', 0.28, 0.9, 0, 0.8], ['s2_rays', 0.36, 0.85, 0, 0.5]],
+  };
+  // 第 5 项 = 存成画布时的清晰度（默认 1）：两套远景同屏（区域交界）时显存 / 画布缓存要装下两套。实测 Canvas 2D（软件渲染）两套原尺寸约 41MB 时
+  //   超出缓存、远景每帧 0.2 → 3.5ms，压到约 30MB 就恢复。l1_wall 是纯渐变（1/4 清晰度看不出差别），区域 2 的洞壁 / 岩台 / 沙台本来就柔和
+  const BGK = {}; for (const L of Object.values(BGSETS)) for (const l of L) BGK[l[0]] = l[4] || 1;
+  const bgSetOf = s => STAGES[s].bgSet || 'cave';
   const BGM = {};   // 镜像平铺用的“原图 + 上下翻转”两张拼成一张（加载后做一次）
-  function bgImg(n, mir) {
-    const im = IMG[n]; if (!im || !mir) return im; if (BGM[n]) return BGM[n];
-    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height * 2; const g = c.getContext('2d');
-    g.drawImage(im, 0, 0); g.setTransform(1, 0, 0, -1, 0, im.height * 2); g.drawImage(im, 0, 0);
+  // v0.21：每层都先画进一张画布（按 BGK 缩放，镜像层上下拼两份），远景只从这些画布取图
+  //   fixR：画布宽不超过这一层在屏幕上实际画出的宽（bgW，随屏幕宽变，resize 时重建）。Canvas 2D 下交界处两套远景同屏时缓存装不下、
+  //   地形层 draw 每帧 9–10ms（只画一套时 < 0.5ms），按屏幕大小存后两套合计约少 1/3。
+  let BGVW = 0;
+  const bgW = (li, sc) => BGVW * 1.5 * sc;   // 和 drawSet 里的层宽同一个式子（v0.20 的大小：层高、竖向平铺的相位都和 v0.20 一样）
+  function bgImg(n, mir, li, sc) {
+    const im = IMG[n]; if (!im) return im; if (BGM[n]) return BGM[n];
+    const K = Math.min(BGK[n] || 1, BGVW ? Math.ceil(bgW(li, sc)) / im.width : 1), w = Math.round(im.width * K), h = Math.round(im.height * K), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(im, 0, 0, w, h);   // 镜像层不再存“原图 + 翻转”两份，画的时候翻（省一半）
     return (BGM[n] = c);
   }
-  function stageMix(yw, key) {   // 跨阶段时颜色渐变（门那一行前后各 2 行）
-    const r = yw / CELL, s = stageOf(Math.floor(r)), l = r - s * 20;
-    const a = STAGES[s][key]; if (l < 18 || s >= STAGES.length - 1) return a;
-    const b = STAGES[s + 1][key], t = smooth(18, 21, l); return a.map((v, i) => v + (b[i] - v) * t);
+  // 跨区域时渐变：交界（第 AREA×k 行）到后 3 行（区域 1→2 = 50–53 米；守卫房和守卫门保持本区域的样子，v0.21 合并时定）。
+  //   v0.21 修：原来按每阶段 20 行写死（l = r − s×20），区域改成 50 行后，区域 1 的 21–49 米其实一直用的是区域 2 的远景色和环境光
+  function mixT(r) {   // → [上一区域, 下一区域, 渐变 0..1]；不在交界附近时两个相同
+    const AR = window.BAL.AREA, b = Math.round(r / AR) * AR, sA = stageOf(b - 1), sB = stageOf(b);
+    if (b <= 0 || sA === sB || r < b || r > b + 3) { const s0 = stageOf(Math.floor(r)); return [s0, s0, 0]; }
+    return [sA, sB, smooth(b, b + 3, r)];
+  }
+  // fixR（review 4）：ambEnd = 这个区域最底一行的环境光强度；区域内从 amb[3] 按深度线性降到 ambEnd（越往下越暗，深处主角光圈看得出）
+  function stageVal(s, key, r) {
+    const st = STAGES[s], a = st[key]; if (key !== 'amb' || st.ambEnd === undefined) return a;
+    const AR = window.BAL.AREA, f = Math.max(0, Math.min(1, (r - s * AR) / (AR - 1)));
+    return [a[0], a[1], a[2], a[3] + (st.ambEnd - a[3]) * f];
+  }
+  function stageMix(yw, key) {
+    const r = yw / CELL, [sA, sB, t] = mixT(r), a = stageVal(sA, key, r); if (!t) return a;
+    const b = stageVal(sB, key, r); return a.map((v, i) => v + (b[i] - v) * t);
   }
   // v0.20 tfix（review 严重-1 过度绘制）：远景只画在看得见的空腔里。原来每帧先整屏 #16304c、再 5 层整屏远景、再整屏 multiply 色调（7 屏），
   //   而屏幕大部分被不透明的土挡住。现在按细网格算出每一横条（5 细格 = 20 世界像素高）里有空气的列，左右上下各多留 2 细格（8 世界像素，
@@ -654,6 +742,41 @@
     SPAN.set(r, s); return s;
   }
   const spanDirty = r => { for (let q = r - 2; q <= r + 2; q++) SPAN.delete(q); };
+  // 一套远景画进一个屏幕矩形 R：阶段 s 的那一套（bgSet）、透明度 alpha；色调（bgTint，默认 BG_TINT；独立的一套写 0 = 原图颜色）WebGL 下精灵着色，Canvas 2D 下由 tintSet 另画
+  function nextEdge(r) {   // r 之后下一个交界渐变区的边（行）
+    const AR = window.BAL.AREA, b0 = Math.floor(r / AR) * AR; let e = Infinity;
+    for (const b of [b0, b0 + AR]) for (const q of [b, b + 3]) if (b > 0 && q > r && q < e) e = q;
+    return e;
+  }
+  function setTint(s, cMix) {   // 阶段 s 远景的色调 [r, g, b]（0..255）
+    const st = STAGES[s], k = st.bgTint === undefined ? BG_TINT : st.bgTint, c = cMix || st.bg, cm = Math.max(c[0], c[1], c[2]), tint = v => Math.round(255 * (1 - k + k * v / cm));   // 远景保留原图的颜色，阶段色只轻叠一层
+    return [tint(c[0]), tint(c[1]), tint(c[2])];
+  }
+  function tintSet(ctx, s, alpha, R, cMix) {   // Canvas 2D：multiply 盖一层色调。半透明（交界渐变）时会把下面那套也乘一点点色——只在交界 7 行里、而且独立的一套 bgTint = 0 不乘
+    const [tr, tg, tb] = setTint(s, cMix); if (tr === 255 && tg === 255 && tb === 255) return;
+    ctx.globalAlpha = alpha; ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${tr},${tg},${tb})`; ctx.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+  function drawSet(ctx, s, alpha, R, camY, VW, top, gpu, cMix) {
+    if (gpu) { const [tr, tg, tb] = setTint(s, cMix); ctx.__tint = (tr << 16) | (tg << 8) | tb; }
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    // 一个矩形画完全部层（第一层不透明，矩形重叠处等于重画一遍，结果不变）
+    BGSETS[bgSetOf(s)].forEach(([n, f, sc, mir], li) => {
+      if (VW !== BGVW) { BGVW = VW; for (const k in BGM) { BGM[k].width = 0; delete BGM[k]; } }
+      const im0 = IMG[n]; if (!im0) return; const im = bgImg(n, mir, li, sc);
+      const w = bgW(li, sc), h = w * im0.height / im0.width, th = mir ? h * 2 : h, X0 = Math.max(Math.round(-VW * (0.12 + 0.08 * li)), Math.round(VW + 2 - w)), X1 = Math.round(X0 + w);   // 右边要盖到屏幕边（原来最后一层只到 0.91 屏宽、露竖直硬边）：fixR 改成把层往右挪，不再放大层（放大会改变层高和竖向相位，区域 1 守卫房一带远景变空，review 3）
+      const xa = Math.max(R[0], X0), xb = Math.min(R[2], X1); if (xb <= xa) return;
+      const kx = im.width / (X1 - X0);
+      for (let y = top - ((camY * f) % th + th) % th - (li % 2) * h * 0.45; y < R[3]; y += th) {
+        const Y0 = Math.round(y), Ym = Math.round(y + h), ya = Math.max(R[1], Y0), yb = Math.min(R[3], Ym);
+        if (yb > ya) { const ky = im.height / (Ym - Y0); ctx.drawImage(im, (xa - X0) * kx, (ya - Y0) * ky, (xb - xa) * kx, (yb - ya) * ky, xa, ya, xb - xa, yb - ya); }
+        if (!mir) continue;
+        const Y1 = Math.round(y + th), fa = Math.max(R[1], Ym), fb = Math.min(R[3], Y1); if (fb <= fa) continue;   // 下半段：上下翻转（屏幕 d 行 = 图的 (Y1 − d) 行）
+        const ky = im.height / (Y1 - Ym);
+        ctx.save(); ctx.translate(0, fa + fb); ctx.scale(1, -1); ctx.drawImage(im, (xa - X0) * kx, (Y1 - fb) * ky, (xb - xa) * kx, (fb - fa) * ky, xa, fa, xb - xa, fb - fa); ctx.restore();
+      }
+    });
+    ctx.globalAlpha = 1;
+  }
   TR.legacyBG = false;   // 测试开关：true = 原来的整屏画法（同一帧前后对比用）
   const BGR = [];        // 本帧要画远景的屏幕矩形
   TR.drawBG = function (ctx, camY, VW, VH, ox) {
@@ -684,22 +807,29 @@
       if (cx1 < VW) BGR.push([Math.max(0, Math.floor(cx1) - 1), top, VW, VH]);
     }
     TR.bgArea = 0; for (const R of BGR) TR.bgArea += (R[2] - R[0]) * (R[3] - R[1]); TR.bgRects = BGR.length;
-    const c = stageMix(camY / CQ + VH / CQ * 0.5, 'bg'), cm = Math.max(c[0], c[1], c[2]), tint = v => Math.round(255 * (1 - BG_TINT + BG_TINT * v / cm));   // 远景保留 dig 原图的颜色，阶段色只轻叠一层
-    const tr = tint(c[0]), tg = tint(c[1]), tb = tint(c[2]), gpu = !TR.legacyBG && '__tint' in ctx;   // WebGL：每张远景精灵直接乘这个颜色（Pixi tint），和画完再整屏 multiply 结果相同（“盖上去”对颜色是线性的），省掉一屏混合
-    if (gpu) ctx.__tint = (tr << 16) | (tg << 8) | tb;
-    // 一个矩形画完全部 5 层再画下一个（l1_wall 不透明，矩形重叠处等于重画一遍，结果不变）
+    const gpu = !TR.legacyBG && '__tint' in ctx;   // WebGL：每张远景精灵直接乘阶段色（Pixi tint），和画完再整屏 multiply 结果相同（“盖上去”对颜色是线性的），省掉一屏混合
+    // 区域交界（前 5 行到后 2 行）里两套远景不同：先画上一区域的整套，再按渐变比例盖下一区域的整套（只在这 7 行里多画一套）。
+    //   渐变比例按每个空腔矩形的中心取（空腔之间隔着土，看不出台阶）；高过 2 行的矩形（竖井）按 1 行一段切开。
+    //   不切成细横条：细条每条边上远景图会采样到邻近像素，交界处出现一道道横线（v0.21 自查发现）
+    const rowPx = CELL * CQ;
+    //   Canvas 2D 下先画完所有不透明的那一套（含 multiply 色调），最后再画半透明盖上去的那一套：multiply 和半透明交替画会让画布反复刷新（软件渲染下交界处远景从 0.2ms 涨到 4.7ms）
+    const J0 = [], J1 = [];   // [阶段, 透明度, 矩形, 混合色调]：J0 不透明、J1 半透明（交界里下一区域那套）
+    const paint = (S, r) => {
+      const [sA, sB, t] = mixT(r);
+      if (sA === sB) J0.push([sA, 1, S]);
+      else if (bgSetOf(sA) === bgSetOf(sB)) J0.push([sA, 1, S, STAGES[sA].bg.map((v, i) => v + (STAGES[sB].bg[i] - v) * t)]);   // 同一套远景：只画一次，色调渐变（和原来一样）
+      else if (t >= 0.997) J0.push([sB, 1, S]);
+      else { J0.push([sA, 1, S]); if (t > 0.003) J1.push([sB, t, S]); }
+    };
     for (const R of BGR) {
-      BGL.forEach(([n, f, sc, mir], li) => {
-        const im0 = IMG[n]; if (!im0) return; const im = bgImg(n, mir);
-        const w = VW * 1.5 * sc, h = w * im0.height / im0.width, th = mir ? h * 2 : h, X0 = Math.round(-VW * (0.12 + 0.08 * li)), X1 = Math.round(-VW * (0.12 + 0.08 * li) + w);
-        const xa = Math.max(R[0], X0), xb = Math.min(R[2], X1); if (xb <= xa) return;
-        for (let y = top - ((camY * f) % th + th) % th - (li % 2) * h * 0.45; y < R[3]; y += th) {
-          const Y0 = Math.round(y), Y1 = Math.round(y + th), ya = Math.max(R[1], Y0), yb = Math.min(R[3], Y1); if (yb <= ya) continue;
-          const kx = im.width / (X1 - X0), ky = im.height / (Y1 - Y0);
-          ctx.drawImage(im, (xa - X0) * kx, (ya - Y0) * ky, (xb - xa) * kx, (yb - ya) * ky, xa, ya, xb - xa, yb - ya);
-        }
-      });
-      if (!gpu) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${tr},${tg},${tb})`; ctx.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]); ctx.globalCompositeOperation = 'source-over'; }
+      const ra = (R[1] + camY) / rowPx, rb = (R[3] + camY) / rowPx, mA = mixT(ra), mB = mixT(rb);
+      if (mA[0] === mA[1] && mB[0] === mB[1] && mA[0] === mB[0] && nextEdge(ra) >= rb) { J0.push([mA[0], 1, R]); continue; }
+      if (rb - ra <= 2) { paint(R, (ra + rb) / 2); continue; }
+      for (let r = ra; r < rb;) { const re = Math.min(rb, Math.floor(r + 1e-6) + 1), yi = Math.round(r * rowPx - camY), yo = Math.round(re * rowPx - camY); if (yo > yi) paint([R[0], yi, R[2], yo], (r + re) / 2); r = re; }
+    }
+    for (const J of [J0, J1]) {
+      for (const [s, a, S, cm] of J) drawSet(ctx, s, a, S, camY, VW, top, gpu, cm);   // WebGL：层 + 色调一起（精灵着色）
+      if (!gpu) for (const [s, a, S, cm] of J) tintSet(ctx, s, a, S, cm);                    // Canvas 2D：这一批的 multiply 色调放在一起画
     }
     if (gpu) ctx.__tint = 0xffffff;
     if (gy > 0) { const gr = ctx.createLinearGradient(0, gy, 0, gy + 60 * CQ); gr.addColorStop(0, 'rgba(10,6,18,0.6)'); gr.addColorStop(1, 'rgba(10,6,18,0)'); ctx.fillStyle = gr; ctx.fillRect(0, gy, VW, 60 * CQ); }
@@ -771,9 +901,10 @@
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   };
+  TR.propBox = p => p.fy === undefined ? null : { x0: p.x - p.hw, x1: p.x + p.hw, y: p.fy + 5 };   // 测试用（落地检查）：地面道具底边（世界像素）
   TR.propLights = function (time) {
     const out = [];
-    for (const p of TR.props) { if (p.gone) continue; const P = PROP[p.kind]; out.push({ x: p.x, y: p.y - (p.on === 'floor' ? 18 : 10), r: P.r, k: P.k, c: P.c, flicker: p.kind === 'fire', glow: p.kind === 'fire' ? 70 : 46, glowA: 0.5 }); }
+    for (const p of TR.props) { if (p.gone) continue; const P = PROP[p.kind]; if (!P.k) continue; out.push({ x: p.x, y: p.y - (p.on === 'floor' ? 18 : 10), r: P.r, k: P.k, c: P.c, flicker: p.kind === 'fire', glow: p.kind === 'fire' ? 70 : 46, glowA: P.glowA || 0.5 }); }   // k = 0 的装饰不发光
     return out;
   };
   /* ---------- 碎土块：这格材质的贴图剪成不规则小块，外圈描一道它土壳最深的颜色 ---------- */
