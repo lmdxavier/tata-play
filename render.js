@@ -498,8 +498,8 @@ const FX = {
   // 巴哥咬 T2：局部顿帧（巴哥 + 被咬的怪）
   bite(pet, e){ COMBO.play('咬-命中-T2', atE(e), {freeze:[visOf(pet,true), VIS.get(e)]}); hitFx(e,true); },
   // 火蜥蜴喷火 T2：火焰从嘴前沿前进方向铺 2 格；命中小火爆在第 2 格
-  fire(pet, hits){ const m=feet(pet.lane,pet.col+0.8), far=hits.length?hits.reduce((a,b)=>b.p>a.p?b:a):null;   // 命中火爆放在打到的最远那只怪身上；没打到就只播火焰
-    COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:fwd(), target2:far?atE(far):null}, {freeze:[visOf(pet,true), ...hits.map(e=>VIS.get(e))]});
+  fire(pet, hits, k=1){ const m=feet(pet.lane,pet.col+0.8), far=hits.length?hits.reduce((a,b)=>b.p>a.p?b:a):null;   // 命中火爆放在打到的最远那只怪身上；没打到就只播火焰
+    COMBO.play('喷火-T2', {x:m.x, y:m.y-L.cs*0.3, dir:fwd(), target2:far?atE(far):null}, {scale:k, freeze:[visOf(pet,true), ...hits.map(e=>VIS.get(e))]});
     for(const e of hits) hitFx(e,false); },
   // 怪死亡 T2；精英升 T4（全屏顿帧 + 震屏），特效放大 1.5 倍
   // 61 版（用户 2026-11-14「Boss 死亡不需要震屏」）：精英死亡仍用 T4 的全屏顿帧，但不震屏
@@ -532,7 +532,7 @@ HOOKS.push((type, d)=>{
     case 'ringEnd': petPlay(d.pet,'Idle'); break;
     case 'melee': {
       const p=d.pet; const v=visOf(p,true); v.lunge=0.15;   // 动画已在起手时开始，这里是出手那一帧
-      if(p.key==='lizard') FX.fire(p, d.hits);
+      if(p.key==='lizard') FX.fire(p, d.hits, p.reach>p.def.reach ? p.reach/p.def.reach : 1);   // 90 版：2 星喷 3 格，火焰按格数放大
       else if(p.def.sweep){ const f=feet(p.lane,p.col+1.45); COMBO.play('狐爪-横扫', {x:f.x, y:f.y-L.cs*0.35, dir:fwd()}, {freeze:[v, ...d.hits.map(e=>VIS.get(e))], rot:Math.atan2(L.forward.y,L.forward.x)}); for(const e of d.hits) hitFx(e,true); }   // 第2章角色 v1：迅火狐横扫 3 路
       else if(p.key==='bear'){ const f=feet(p.lane,p.col+1.4); COMBO.play('Boss-重击', {x:f.x, y:f.y-L.cs*0.2, gx:f.x, gy:f.y, dir:fwd()}); vfxXY('ring_shockwave_white', f.x, f.y-L.cs*0.15, 1.1); for(const e of d.hits){ FX.bite(p, e); } if(d.hits.length) shakeDir(0.03,0.2,fwd()); }   // 格鲁姆（宠物）拍击 + 击退
       else for(const e of d.hits){ FX.bite(p, e); if(d.heavy){ COMBO.play('咬-命中-T2', atE(e), {scale:1.5}); shakeDir(0.035,0.2,fwd()); floatText(e.lane, e.p, '重咬', '#ffb14a', 12); } }   // 咬空了不出声、不出特效；73 版：2 星重咬加大一号的咬特效 + 震屏
@@ -821,7 +821,7 @@ function drawPet(pet, dt){
   const hpF=pet.hp/pet.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   if(hpF<1 && pet.def.shape!=='mine') hpBar(f.x, f.y-cs*0.06, cs*0.5, hpF, 'green', 7);   // 宠物血条在脚下，和怪物头顶的血条分开
   BONUS.drawLabel(pet, f);   // 75 版：「+N%」标签由 bonus.js 画（被弹中时数字往上滚）
-  if(pet.def.shape==='mine' && pet.armT>0) text('装填 '+Math.ceil(pet.armT), f.x, f.y-cs*0.5, cs*0.15, '#fff');
+  if(pet.def.shape==='mine' && pet.armT>0) text('装填 '+Math.ceil(pet.armT-1e-6), f.x, f.y-cs*0.5, cs*0.15, '#fff');
   if(dancing){ const b=G.t*Math.PI*2; drawImgC(img('hero/PictoIcon_Music.png'), f.x+cs*0.22+Math.sin(b)*cs*0.04, f.y-(v.dh||cs*0.8)-cs*0.02-Math.abs(Math.sin(b))*cs*0.08, cs*0.34); }
   if(pet.spored>0) COMBO.drawLoop('晕眩', f.x, f.y-(v.dh||cs*0.8)*0.82, G.t);
 }
@@ -1147,7 +1147,7 @@ function rangeCells(def, lane, col){
   const out=[]; let block=null;
   const line=(to)=>{ for(let c=col+1;c<=Math.min(COLS-1,to);c++){ if(propAlive(cellAt(lane,c))){ block=[lane,c]; break; } out.push([lane,c]); } };
   if(def.shape==='shooter') line(COLS-1);
-  else if(def.shape==='melee'){ line(col+def.reach); if(def.sweep) for(const l of [lane-1,lane+1]) if(inGrid(l,col+1) && laneOn(l)) out.push([l,col+1]); }   // 第2章角色 v1：迅火狐横扫上下两路
+  else if(def.shape==='melee'){ line(col+def.reach+(def===DATA.pets.lizard && starOf('lizard')>=2 ? STAR2.lizardReach : 0)); if(def.sweep) for(const l of [lane-1,lane+1]) if(inGrid(l,col+1) && laneOn(l)) out.push([l,col+1]); }   // 第2章角色 v1：迅火狐横扫上下两路
   else if(def.shape==='support'){ for(let l=lane-1;l<=lane+1;l++) for(let c=col-1;c<=col+1;c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 菇背羊（宠物）回血范围
   else if(def.shape==='mine'){ for(let l=lane-1;l<=lane+1;l++) for(let c=col-1;c<=col+1;c++) if(inGrid(l,c)) out.push([l,c]); }
   return {out, block};

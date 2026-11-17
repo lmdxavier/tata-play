@@ -58,10 +58,11 @@ const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
   goldfish:['每次连发 2 颗水弹（同一路）','命中溅射周围 0.5 格，溅射伤害 40%'],
   pug:['每第 4 口变重咬：伤害 ×2，击退 0.5 格','攻击范围 前方 1 格 → 1×2'],
-  lizard:['喷火范围 2 格 → 3 格','地面留火 2 秒，每秒 30% 伤害'],
-  bomb:['装填时间 -30%','爆炸范围 3×3 → 5×3'],
-  flower:['产能 +25%','每次产出 20% 概率双倍'],
-  pumpkin:['生命 +40%','被咬时反弹 20% 伤害'],
+  lizard:['喷火范围 前方 2 格 → 3 格','地面留火 2 秒，每秒 30% 伤害'],
+  bomb:['装填时间 3 秒 → 2.1 秒','爆炸范围 3×3 → 5×3'],
+  flower:['产能 +25%：每次 25 → 31 能量','每次产出 20% 概率双倍'],
+  pumpkin:['生命 +40%：2000 → 2800','被咬时反弹 20% 伤害'],
+  fox:['横扫附带灼烧：每秒 6 点，持续 3 秒'],   // 90 版：用户 2026-11-15 定；3 星没定
 };
 const RAR_RANK = {legend:3, epic:2, rare:1, common:0};
 // 稀有度配色：角色区 top / glow / bot 取自 Fantasy Hero 的 Collection_Detail_1~4 预制体；
@@ -137,7 +138,7 @@ const shardHave = k => (typeof OWNED!=='undefined' && OWNED[k]) || 0;
 const petVis = k => PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k]||ENEMY_MON[k],'Idle');   // 65 版：没召唤的宠物也用它自己的样子（原来未获得的一律当怪物）
 const canSummon = k => !!DATA.pets[k] && !PROFILE.owned[k] && shardHave(k) >= RAR[DATA.pets[k].rarity||'common'].need;
 // 69 版：升星。只开放战斗里已经做出变化的星级（其余的先不让升，免得花了碎片没效果）；所需碎片数先用召唤数
-const STAR_OPEN = {goldfish:2, pug:2};
+const STAR_OPEN = {goldfish:2, pug:2, flower:2, pumpkin:2, bomb:2, lizard:2, fox:2};   // 90 版：花 / 南瓜 / 波姆 / 喷火蜥 / 迅火狐开放 2 星
 const starNeed = k => RAR[DATA.pets[k].rarity||'common'].need;
 const starOpen = k => !!PROFILE.owned[k] && starOf(k) < (STAR_OPEN[k]||1);
 const canStarUp = k => !!DATA.pets[k] && starOpen(k) && shardHave(k) >= starNeed(k);

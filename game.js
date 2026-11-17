@@ -68,6 +68,8 @@ const DATA = {
   },
 };
 // ---------- 65 版：关卡按 id 读取（数据在 levels.js），宠物拥有 / 机制解锁存档 ----------
+// 90 版：2 星效果数值（和 meta.js STAR_ROUTE 的文字一致，改一处要两处一起改）
+const STAR2 = {flowerProd:1.25, pumpkinHp:1.4, bombArm:0.7, lizardReach:1, foxBurn:{dps:6, t:3}};
 const PET_ORDER = ['flower','goldfish','pug','pumpkin','bomb','lizard','snail','fox','mushgoat','bear'];   // 第2章角色 v1：+ 迅火狐、菇背羊、格鲁姆
 const PET_NEED = {common:10, rare:15, epic:25, legend:40};   // 召唤一只宠物要的碎片（和 render.js 的 RAR.need 一致）
 let PROFILE = {owned:{flower:1, goldfish:1}, unlock:{}};
@@ -305,7 +307,7 @@ function damageProp(c, dmg, byPet){
   G.fx.push({kind:'pop',lane:c.lane,p:c.col+0.5,t:0,life:0.4,color:'#b07a45'}); recalcResonance();
 }
 // 近战要不要打道具：道具在攻击范围内，并且被标记了、或者后面有怪（攻击被它挡住）
-function meleeProp(pet){ const pr=propAhead(pet.lane,pet.col+1,pet.col+pet.def.reach); if(!pr) return null;
+function meleeProp(pet){ const pr=propAhead(pet.lane,pet.col+1,pet.col+(pet.reach||pet.def.reach)); if(!pr) return null;
   return (pr.marked || G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&e.p>pr.col)) ? pr : null; }
 const inGrid = (lane,col)=>lane>=0&&lane<LANES&&col>=0&&col<COLS;
 function elemMult(att, def){ if(BEATS[att]===def) return 1.5; if(BEATS[def]===att) return 0.7; return 1; }
@@ -363,8 +365,11 @@ function placePet(key,lane,col){
   if(G.energy<def.cost || G.cooldown[key]>0 || !canPlaceAt(lane,col)) return false;
   { const ts=tutCur(); if(ts && ts.key!==key) return false; if(G.demo && !ts) return false; }   // 67 版：演示里只能按提示放，不能自己加宠物（用户加了一只把怪打死，演示卡住）
   G.energy -= def.cost; G.cooldown[key] = def.cd;
-  const pet={key, def, lane, col, hp:def.hp, maxHp:def.hp, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
-               stun:0, armT: def.arm||0, flash:0, move:null, star:starOf(key)};
+  const star=starOf(key), S2=star>=2;   // 90 版：2 星效果（vfx-design.md 9.1；迅火狐按用户 2026-11-15 定）
+  const hp0 = def.hp*(key==='pumpkin'&&S2 ? STAR2.pumpkinHp : 1);
+  const pet={key, def, lane, col, hp:hp0, maxHp:hp0, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
+               stun:0, armT: (def.arm||0)*(key==='bomb'&&S2 ? STAR2.bombArm : 1), flash:0, move:null, star,
+               reach: (def.reach||0)+(key==='lizard'&&S2 ? STAR2.lizardReach : 0)};
   G.pets.push(pet);
   G.stats.placed++; emit('place',{pet});
   recalcResonance();
@@ -433,9 +438,9 @@ function killEnemy(e, silent){
 
 // ---------- 攻击出手（前摇结束那一帧）----------
 // 近战覆盖「前方 reach 格」：按怪物身体边缘判断，体型大的怪站得远也打得到
-function meleeHits(pet){ const lo=pet.col+0.3, pr=propAhead(pet.lane,pet.col+1,pet.col+pet.def.reach), hi=pr ? pr.col+0.2 : pet.col+1+pet.def.reach;   // 道具挡住：道具后面的怪打不到
+function meleeHits(pet){ const R=pet.reach||pet.def.reach, lo=pet.col+0.3, pr=propAhead(pet.lane,pet.col+1,pet.col+R), hi=pr ? pr.col+0.2 : pet.col+1+R;   // 道具挡住：道具后面的怪打不到
   const lanes = pet.def.sweep ? [pet.lane-1,pet.lane,pet.lane+1] : [pet.lane];   // 第2章角色 v1：迅火狐横扫本路和上下相邻两路
-  return G.enemies.filter(e=>!e.dead&&lanes.includes(e.lane)&&!isFly(e)&&e.p>=lo&&e.p-e.def.r<=(e.lane===pet.lane?hi:pet.col+1+pet.def.reach)); }
+  return G.enemies.filter(e=>!e.dead&&lanes.includes(e.lane)&&!isFly(e)&&e.p>=lo&&e.p-e.def.r<=(e.lane===pet.lane?hi:pet.col+1+R)); }
 // ===== 第2章角色 v1（_dev，未合并）：通用小工具 =====
 const isFly = e => !!e.def.fly && !e.landed;                       // 掠空鸟、巨喙鸟（扑空落地前）：近战打不到、不被挡、不踩响波姆
 const isTank = p => p.def.shape==='wall' || !!p.def.tank;          // 能挡住践踏的宠物
@@ -463,6 +468,7 @@ function petRelease(pet){
   } else if(d.shape==='melee'){
     const hits=meleeHits(pet), prop=meleeProp(pet); pet.swing=0.18;
     let burn = d.burn || null;
+    if(pet.key==='fox' && pet.star>=2) burn = STAR2.foxBurn;   // 90 版：迅火狐 2 星，横扫附带灼烧
     let heavy = false; if(pet.key==='pug' && pet.star>=2 && hits.length){ pet.bites=(pet.bites||0)+1; if(pet.bites%4===0) heavy=true; }   // 73 版：火牙犬 2 星，每第 4 口变重咬（伤害 ×2，击退 0.5 格）
     if(pet.group && pet.group.el==='fire' && pet.group.size>=3) burn = {dps:Math.max(4,(burn||{}).dps||0), t:3};
     emit('melee',{pet,hits,prop,heavy});   // 出手时目标走开了也照样挥空（动画已经播了）
@@ -617,6 +623,7 @@ function update(dt){
       if(pet.timer<=0){
         let mul = (cellAt(pet.lane,pet.col)||{}).type==='flower' ? 1.2 : 1;
         if(pet.group && pet.group.el==='grass' && pet.group.size>=5) mul*=1.2;
+        if(pet.key==='flower' && pet.star>=2) mul*=STAR2.flowerProd;   // 90 版：聚能花 2 星产能 +25%
         pet.timer = d.prodInt;
         G.orbs.push({lane:pet.lane,p:pet.col+0.5,value:Math.round(d.prod*mul),life:0,fall:0,pop:0.3,produced:true}); emit('produce',{pet});
       }

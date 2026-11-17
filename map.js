@@ -324,7 +324,7 @@ const CHAPTER_MAP = (()=>{
   // ---------- 下方信息卡 ----------
   function drawCard(c, g, u, l){
     /* 53 版：去掉路数后，没有精英 / Boss / 解锁的关卡第二行是空的 → 卡片矮 34（下沿不动、上沿下移），不留一行空白 */
-    const cut=(l.boss||l.elite||l.unlock)?0:34, w=Math.min(c.w-24*u, 420*u), x=c.x+(c.w-w)/2, y=c.y+(g.cardTop+cut)*u, h=(CARD_H-cut)*u, done=!!P.cleared[l.id];
+    const cut=0,   /* 90 版：第二行总有「查看敌人」，不再变矮 */ w=Math.min(c.w-24*u, 420*u), x=c.x+(c.w-w)/2, y=c.y+(g.cardTop+cut)*u, h=(CARD_H-cut)*u, done=!!P.cleared[l.id];
     btnShadow(x, y, w, h, 16*u); ctx.save(); rr(x,y,w,h,16*u); ctx.fillStyle=MT_UI.panel; ctx.fill(); ctx.lineWidth=2.5; ctx.strokeStyle=MT_UI.border||'#4f4644'; ctx.stroke(); ctx.restore();
     addHit({x,y,w,h}, ()=>{});   // 卡片上点空白处不穿透到地图
     // 第一行：关卡号 + 名字；右边状态
@@ -343,6 +343,13 @@ const CHAPTER_MAP = (()=>{
     if(l.boss||l.elite){ const key=l.boss||l.elite, nm=(DATA.enemies[key]&&DATA.enemies[key].cn||key).replace(/ · .*/,'');
       chip(`${l.boss?'Boss':'精英'} ${nm}`, (px,py)=>{ const pc=MONPORT[key]; if(pc) ctx.drawImage(pc, px-12*u, py-14*u, 24*u, 24*u); }); }
     if(l.unlock) chip(`通关解锁：${l.unlock}`);
+    // 90 版（用户 2026-11-15 定）：「查看敌人」按钮，靠右；前面叠着本关前 3 只敌人的头像
+    { const foes=foeList(l.id); if(foes.length){ const n3=Math.min(3,foes.length), lw=(14+n3*14)*u; ctx.font=`800 ${13*u}px ${FONT}`;
+        const bw=ctx.measureText('查看敌人').width+22*u+lw, bh=30*u, bx=x+w-bw-14*u, by=cy-bh/2;
+        ctx.save(); rr(bx, by, bw, bh, bh/2); ctx.fillStyle=MT_UI.boxHi; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=MT_UI.gold; ctx.stroke(); ctx.restore();
+        for(let i=n3-1;i>=0;i--){ const pc=MONPORT[foes[i]]; if(pc) ctx.drawImage(pc, bx+(4+i*14)*u, cy-15*u, 26*u, 26*u); }
+        text('查看敌人', bx+lw+(bw-lw)/2+2*u, cy+1, 13*u, MT_UI.txt, 'center', 800, false);
+        addHit({x:bx-4*u,y:by-6*u,w:bw+8*u,h:bh+12*u}, ()=>{ sfx('ui'); S.foes={id:l.id, list:foes}; }); } }
     // 第三行：奖励 + 开始按钮
     const rw = done ? l.again : l.first;
     if((rw||[]).length) text(done?'再次通关':'首次通关', x+18*u, y+(102-cut)*u, 12*u, MT_UI.sub, 'left', 800, false);
@@ -352,11 +359,35 @@ const CHAPTER_MAP = (()=>{
     addHit({x:bx,y:by,w:bw,h:bh}, ()=>start(l.id));
   }
 
+  // 90 版：本关出场的敌人（按第一次出场的顺序），Boss / 精英排最前
+  function foeList(id){ const lv=(window.LEVELS||{})[id]; if(!lv || !lv.spawns) return [];
+    const seen=[]; for(const sp of lv.spawns.slice().sort((a,b)=>a[0]-b[0])){ const k=sp[1]; if(DATA.enemies[k] && !seen.includes(k)) seen.push(k); }
+    const big=k=>{ const r=DATA.enemies[k].role; return DATA.enemies[k].boss||r==='elite' ? 1 : 0; };
+    return seen.sort((a,b)=>big(b)-big(a)); }
+  const foeDrops = k => (DATA.enemies[k].drop||0)>0 && !!DATA.pets[k];   // 打它会掉碎片（能变成宠物的怪）
+  function drawFoes(){
+    const F=S.foes; if(!F) return; const u=S.geo?S.geo.u:1, list=F.list, n=list.length;
+    const cols=Math.min(4,n), rows=Math.ceil(n/cols), tw=76*u, th=92*u, gap=8*u, pad=16*u, head=40*u;
+    const pw=cols*tw+(cols-1)*gap+pad*2, ph=head+rows*th+(rows-1)*gap+pad, px=(W-pw)/2, py=Math.max((lay0().top||0)+10*u, H*0.44-ph/2);
+    ctx.save(); ctx.globalAlpha=0.6; ctx.fillStyle='#0a0c1a'; ctx.fillRect(0,0,W,H); ctx.restore();
+    btnShadow(px, py, pw, ph, 16*u); ctx.save(); rr(px,py,pw,ph,16*u); ctx.fillStyle=MT_UI.panel; ctx.fill(); ctx.lineWidth=2.5; ctx.strokeStyle=MT_UI.border||'#4f4644'; ctx.stroke(); ctx.restore();
+    text(`${F.id} 敌人`, px+pw/2, py+22*u, 16*u, MT_UI.txt, 'center', 800, false);
+    list.forEach((k,i)=>{ const E=DATA.enemies[k], cx=px+pad+(i%cols)*(tw+gap), cy=py+head+Math.floor(i/cols)*(th+gap), big=E.boss||E.role==='elite';
+      ctx.save(); rr(cx,cy,tw,th,12*u); ctx.fillStyle=MT_UI.box; ctx.fill(); if(big){ ctx.lineWidth=2; ctx.strokeStyle=MT_UI.gold; ctx.stroke(); } ctx.restore();
+      const pc=MONPORT[k]; if(pc) ctx.drawImage(pc, cx+(tw-62*u)/2, cy+4*u, 62*u, 62*u);
+      const nm=(E.cn||k).replace(/ · .*/,''); let fs=12*u; ctx.font=`800 ${fs}px ${FONT}`; while(ctx.measureText(nm).width>tw-8*u && fs>8*u){ fs-=0.5*u; ctx.font=`800 ${fs}px ${FONT}`; }
+      text(nm, cx+tw/2, cy+th-14*u, fs, big?MT_UI.gold:MT_UI.txt, 'center', 800, false);
+      if(foeDrops(k)) shardIcon(k, cx+tw-14*u, cy+14*u, 24*u); });
+    addHit({x:0,y:0,w:W,h:H}, ()=>{ S.foes=null; sfx('ui'); });
+  }
+  const lay0 = () => S.lay || {};
+
   // ---------- 操作 ----------
-  function start(id){ S.playing=id; sfx('ui'); if(typeof CHAPTER_MAP.onStart==='function') CHAPTER_MAP.onStart(id); }
+  function start(id){ S.foes=null; S.playing=id; sfx('ui'); if(typeof CHAPTER_MAP.onStart==='function') CHAPTER_MAP.onStart(id); }
   function tapAt(x, y){
     const g=S.geo, c=S.lay&&S.lay.content; if(!g||!c) return; const u=g.u, camS=S.cam;
     if(S.popup){ S.popup=false; return; }
+    if(S.foes){ S.foes=null; return; }
     let best=null, bd=1e9;
     for(const n of g.nodes){ const sx=c.x+(n.x-camS)*u, sy=c.y+n.y*u, d=Math.hypot(x-sx, (y-sy)*1.3); if(d<bd){ bd=d; best=n; }
       if(n.l.elite||n.l.boss||n.l.newPet){ const by=sy-40*u; const d2=Math.hypot(x-sx, y-by); if(d2<bd){ bd=d2; best=n; } } }
@@ -388,6 +419,7 @@ const CHAPTER_MAP = (()=>{
   //   shut：宝箱弹进来、一跳一跳等玩家点 → open：宝箱一抖炸开（效果组合「胜利」），奖励从宝箱里依次弹到一排 → 点「领取」
   //   → fly：奖励图标沿弧线飞进右上资源栏，到了才加数、资源图标鼓一下 → 全部到齐关掉浮窗
   function drawOverlay(lay, dt){
+    drawFoes();
     const B=S.box; if(!B) return; B.t=(performance.now()-B.t0)/1000; const u=S.geo?S.geo.u:1, cx=W/2, cy=H*0.42;   // 按真实时间走，掉帧时节奏不变
     const fade=B.ph==='fly' ? Math.max(0, 1-(B.t-(B.flyT||0))*1.6) : Math.min(1, B.t/0.2);
     ctx.save(); ctx.globalAlpha=0.72*fade; ctx.fillStyle='#0a0c1a'; ctx.fillRect(0,0,W,H); ctx.restore();
