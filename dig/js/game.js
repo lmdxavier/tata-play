@@ -35,7 +35,7 @@
   /* ---------- 音效：一个动作一个固定文件（用户 2026-11-16 规则） ---------- */
   const SFX = (() => {
     let ac = null, unlocked = false; const buf = {}, last = {};
-    const data = () => Object.assign({}, window.SFX_DATA || {}, window.SFX_COMBAT_DATA || {}, window.SFX_EXTRA_DATA || {}, window.SFX_PET_DATA || {}, window.SFX_MECH_DATA || {}, window.SFX_MON_DATA || {});
+    let DATA = null; const data = () => DATA || (DATA = Object.assign({}, window.SFX_DATA || {}, window.SFX_COMBAT_DATA || {}, window.SFX_EXTRA_DATA || {}, window.SFX_PET_DATA || {}, window.SFX_MECH_DATA || {}, window.SFX_MON_DATA || {}, window.SFX_V20_DATA || {}));   // v0.20 tfix：合并一次（原来每放一个音效都把全部音效数据合并一遍）
     function create() {   // 启动时就建好并解码（v0.4 等第一次点画布才建，界面按钮不触发，开头几个音效还没解码就丢了）
       if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
       const d = data();
@@ -67,10 +67,10 @@
     dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.round(wrap.clientWidth * dpr), h = Math.round(wrap.clientHeight * dpr);
     if (w === VW && h === VH) return;
-    VW = w; VH = h; cv.width = w; cv.height = h; T = Math.floor(w / W); OX = (w - T * W) >> 1;
+    const wChanged = w !== VW; VW = w; VH = h; cv.width = w; cv.height = h; T = Math.floor(w / W); OX = (w - T * W) >> 1;
     document.documentElement.style.fontSize = (wrap.clientWidth / 24) + 'px';
     if (A.img.coin) A.bake(T);
-    if (TERRAIN.ready) TERRAIN.resize(T, OX, w);
+    if (TERRAIN.ready && wChanged) TERRAIN.resize(T, OX, w);   // v0.20：只变高度（iPhone Safari 地址栏伸缩）时地形不用整个重画
     if (TW.ready) TW.bake(T, w, h - T * 1.9);   // 第三个参数 = 小镇视角地面以上露出的高度（远景要盖满）
   }
 
@@ -142,7 +142,8 @@
     R: () => R, hero, T: () => T, time: () => time, cell: (c, r) => cell(c, r), floorAt: (x, y) => TERRAIN.floorAt(x, y),
     hurt: (m, mult) => hurtHero(m, mult), air: () => hero.hopT > 0.04 && hero.hopT < B.HOP.t - 0.04,
     fx: (k, x, y, sc) => addFx(k, x, y, sc), sfx: (k, v) => SFX.play(k, v), shake: v => { shake = Math.max(shake, v); },
-    hopTip: () => { if (S.tut.hop) return; G.ui.hopTip((hero.x + OX) / dpr, (hero.y - camY - T * 0.9) / dpr); },
+    hopTip: () => { if (S.tut.hop || cell(hero.c, hero.r - 1).t !== 0 || monAt(hero.c, hero.r - 1)) return;   // v0.20：只在头顶是空格（往上 = 小跳）时提示
+      G.ui.hopTip((hero.x + OX) / dpr, (hero.y - camY - T * 0.9) / dpr); },
     cx: m => ((m.boss ? m.bx : m.c) + 0.5) * T, fy: m => (m.r + 1) * T, cy: m => (m.r + 0.5) * T,
   });
   G.hero = hero;
@@ -185,18 +186,20 @@
       }
       l += ri(3, 6);
     }
-    // 树根（0–25 米）、铜矿（12–45 米）：成团
+    // v0.20：幸运宝箱位兜底——区域 1 的种子 30% 抽签一次都没中，技能“幸运宝箱”买了什么都不出；没抽中就放进 18–36 米第一个空着的洞穴格（不用随机数）
+    if (!chest) for (let ll = 18; ll <= 36 && !chest; ll++) for (let c = 0; c < W && !chest; c++) { const k = rows[ll][c]; if (k.cave && k.t === 0 && !k.web && !mons.some(m => m.c === c && m.l === ll)) chest = { c, l: ll }; }
+    // 树根（2–12 米；bfix 原 0–25 米：树根长在浅处，24 米有树根不合常识，也让前几趟更早攒够木头）、铜矿（12–45 米）：成团
     const clump = (t, lo, hi, n, sz) => { for (let i = 0; i < n; i++) { let c = ri(0, W - 1), ll = ri(lo, hi); for (let k = 0; k < sz(); k++) { if (rows[ll] && rows[ll][c] && rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t }); if (rnd() < 0.5) c = Math.max(0, Math.min(W - 1, c + (rnd() < 0.5 ? -1 : 1))); else ll++; } } };
-    clump(4, 1, 25, 6, () => ri(2, 4)); clump(5, 12, 45, 8, () => ri(2, 3));
+    clump(4, 2, 12, 6, () => ri(2, 4)); clump(5, 12, 45, 8, () => ri(2, 3));
     // 食物：蘑菇每 4–6 行、苹果每 10–12 行
     const food = (kind, lo, step) => { for (let ll = lo; ll < N - 4; ll += step()) { const c = ri(0, W - 1); if (rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t: 6, food: kind }); } };
     food('mushroom', 2, () => ri(4, 6)); food('apple', 8, () => ri(10, 12));
     // 守卫房、守卫门
     for (let c = 0; c < W; c++) { rows[N - 3][c] = { t: c >= 2 && c <= 4 ? 0 : 1 }; rows[N - 2][c] = { t: c >= 2 && c <= 4 ? 0 : 1 }; rows[N - 1][c] = { t: 3 }; }
     for (let ll = N - 6; ll < N - 3; ll++) for (let c = 0; c < W; c++) if (rows[ll][c].t === 2) rows[ll][c].t = 1;
-    // v0.18 加怪（区域 1 原来只有 4 只、21 米以下没有怪）：洞穴蝙蝠 3 只 + 绿蜗牛 1 只，各自挖一个 2 格的小洞；
+    // v0.18 加怪（区域 1 原来只有 4 只、21 米以下没有怪）：洞穴蝙蝠 3 只 + 绿蜗牛 1 只；v0.20 再加 24 米史莱姆、42 米蜗牛（深处打怪要成为血量 / 防御的考验）。各自挖一个 2 格的小洞；
     // 不用随机数（按固定行号往下找能放的位置），地形其余布局不变
-    for (const [l0, kind] of [[13, 'Bat_Cave'], [28, 'Bat_Cave'], [33, 'Snail_Green'], [38, 'Bat_Cave']]) {
+    for (const [l0, kind] of [[13, 'Bat_Cave'], [24, 'Slime_Green'], [28, 'Bat_Cave'], [33, 'Snail_Green'], [38, 'Bat_Cave'], [42, 'Snail_Green']]) {
       let done = false;
       for (let ll = l0; ll < l0 + 4 && !done; ll++) for (let c0 = (l0 * 3) % 6, i = 0; i < 6 && !done; i++, c0 = (c0 + 1) % 6) {
         const okc = c => rows[ll][c].t === 1 && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && !rows[ll][c].food && rows[ll - 1][c].t !== 0;
@@ -232,8 +235,8 @@
     L.rows.forEach((row, l) => row.forEach(k => { if (k.t === 4) add('wood', l); if (k.t === 5) add('copper', l); if (k.web) add('silk', l); }));
     B.fillDepths({ mon, mat });
   })();
-  function newRun() {
-    TERRAIN.reset(); bolts.length = 0; clearPetFx(); MOBS.reset();
+  function newRun(fade) {
+    TERRAIN.reset(fade); bolts.length = 0; clearPetFx(); MOBS.reset();
     R = { rows: new Map(), mons: [], st: D.stam, stMax: D.stam, hp: D.hp, hpMax: D.hp, coin: 0, gem: 0, mat: {}, t: 0, deep: 0, on: false, over: null, revived: false, petT: 0, kills: 0, blocks: 0, auto: null, autoStop: 0, swings: 0, ate: 0, firstBoss: false };
     const L = genArea(0);
     L.rows.forEach((row, l) => R.rows.set(l, row.map(k => { const t = k.t, hp = t === 3 || t === 0 ? 0 : B.cellHp(t, l); return { t, hp, max: hp, food: k.food, web: k.web, cave: k.cave, shaft: k.shaft, v: (l * 7 + 3) % 4 }; })));
@@ -335,26 +338,55 @@
     if (hero.y >= T && !trans.landed) { trans.landed = t; addFx('puff', hero.x, T * 0.95, T / 110); SFX.play('land', 0.9); shake = 0.12; HERO.play('Idle'); }
     if (trans.landed && t > 1.12) {
       trans = null; mode = 'run'; hero.c = 3; hero.r = 0; place(); R.on = true; G.ui.showRun(); S.runs++;
-      G.ui.banner(B.AREA_NAME[B.areaOf(hero.r)], B.depthM(B.areaOf(hero.r) * B.AREA) + ' 米'); SFX.play('banner', 0.6);   // 横幅 = 区域起点深度，和顶部深度同一口径（B.depthM）
+      // v0.20 去掉落地后的“表土层 0 米”横幅：深度顶栏本来就显示，区域看地层就知道（全线规则：能用画面表达的不加字）
     }
   }
-  // 回地面：镜头快速往上拉（中段速度线遮住跳切），主角从洞口跳出来，收获飞到顶部
+  // 回地面（v0.20 重做，分镜见 docs/v0.20各线笔记/trans.md）：主角原地一跳化成一团烟消失 → 镜头一条缓入缓出的曲线从当前深度一路往上平移到小镇视角（经过这一趟挖开的地层，不跳切、不白闪）
+  // → 主角从洞口跳出来（这一下烟尘里地形换回没挖过的样子）→ 落在洞边，收获飞到顶部（ui.showShore）
+  // 回地面镜头（v0.20 tfix，review 一般-4）：峰值速度 ≤ 1.5 屏/秒（原来 45 米时 4.2 屏/秒，土层看不清）；深的时候不从最深处平移：
+  //   先快速暗下（0.08–0.2 秒，正好盖住化烟），镜头切到离小镇视角 RISE.far 屏处，再亮起平移上去。平移是“缓起 → 匀速 → 缓停”（速度梯形），
+  //   同样的最高速度下比整段缓入缓出走得远。最深的情况：0.2 秒切 + 平移 1.15 秒 + 跳出 0.45 秒 = 1.8 秒落地；画面上没有主角约 1.15 秒（原来 45 米 1.4 秒）。
+  const RISE = { vanish: 0.22, pan0: 0.12, pop: 0.45, vmax: 1.5, ta: 0.25, P: 1.15, f0: 0.08, cut: 0.2, fin: 0.14 };   // vmax 屏/秒；ta 起停各几秒；P 深时平移时长；f0→cut 暗下、cut→cut+fin 亮起
+  RISE.far = RISE.vmax * (RISE.P - RISE.ta);   // 深时从离小镇视角几屏处开始（1.35 屏）
+  const rampS = x => x * x * x - x * x * x * x / 2;   // smoothstep 的积分（0→0.5）
+  function panFrac(t, P, ta) {   // 速度梯形（两头 smoothstep）走过的比例 0..1
+    if (t <= 0) return 0; if (t >= P) return 1; const L = P - ta;
+    const d = t < ta ? ta * rampS(t / ta) : t <= P - ta ? ta * 0.5 + (t - ta) : L - ta * rampS((P - t) / ta);
+    return d / L;
+  }
   function rise() {
-    mode = 'rise'; trans = { k: 'rise', t: 0, cam0: camY, cut: false }; SFX.play('whoosh', 0.8); G.ui.hideRun(); if (R && R.boom) R.boom.fly.length = 0;   // 回地面：飞行中的回旋镐清掉
+    mode = 'rise'; trans = { k: 'rise', t: 0, cam0: camY, y0: hero.y };
+    { const D = Math.max(0, camY - townCam()) / VH;   // 要走几屏
+      if (D > RISE.far) { trans.cut = 1; trans.p0 = RISE.cut; trans.dur = RISE.P; }
+      else { trans.p0 = RISE.pan0; trans.dur = Math.max(0.6, RISE.ta + D / RISE.vmax); } }
+    G.ui.hideRun(); if (R && R.boom) R.boom.fly.length = 0;   // 回地面：飞行中的回旋镐清掉
+    HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.5); stopSwing(); pet.riseA = 1;
   }
   function updateRise(dt) {
-    trans.t += dt; const t = trans.t, tc = townCam();
-    if (t < 0.3) { const u = t / 0.3; camY = trans.cam0 - u * u * VH * 1.3; }
-    else {
-      if (!trans.cut) { trans.cut = true; newRun(); hero.x = (TL.hole.x0 + 0.5) * T; hero.y = T; hero.lvl = 0; hero.alpha = 1; pet.x = hero.x; pet.y = T; TERRAIN.update(tc + VH, VH); }
-      const u = Math.min(1, (t - 0.3) / 0.45); camY = tc + VH * 1.0 * Math.pow(1 - u, 3);
+    trans.t += dt; const t = trans.t, tc = townCam(), tp = trans.p0 + trans.dur, hx = (TL.hole.x0 + 0.5) * T;
+    if (trans.pop) TERRAIN.fadeStep(dt, RISE.pop * 0.9);   // 跳出洞口这 0.4 秒里，上一趟挖开的洞淡出（土填回去），和洞口烟尘同时
+    // 1) 消失：原地往上跳一小段并淡出，0.1 秒处冒一团烟
+    if (t < RISE.vanish) { const u = t / RISE.vanish; hero.y = trans.y0 - Math.sin(u * Math.PI * 0.5) * T * 0.35; hero.alpha = 1 - u * u; pet.riseA = hero.alpha; }
+    else if (!trans.pop) { hero.alpha = 0; pet.riseA = 0; }
+    if (t >= 0.1 && !trans.puff) { trans.puff = 1; addFx('puff', hero.x, hero.y - T * 0.45, T / 95); SFX.play('poof', 0.6); if (SK) addFx('puff', pet.x, pet.y - T * 0.3, T / 130); }
+    // 2) 平移：速度梯形（缓起 → 匀速 ≤ 1.5 屏/秒 → 缓停）往上到小镇视角；深时先暗下切到离小镇 RISE.far 屏处再亮起
+    if (t >= RISE.pan0 && !trans.wh) { trans.wh = 1; SFX.play('whoosh', 0.7); }
+    if (trans.cut) {   // 深：先暗下，切到离小镇 RISE.far 屏处，再亮起
+      trans.dark = t < RISE.f0 ? 0 : t < RISE.cut ? (t - RISE.f0) / (RISE.cut - RISE.f0) : Math.max(0, 1 - (t - RISE.cut) / RISE.fin);
+      if (t >= RISE.cut && !trans.cam1) trans.cam1 = tc + RISE.far * VH;
     }
-    if (t >= 0.75 && !trans.pop) { trans.pop = 1; HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.6); heroLook(); }
-    if (trans.pop) { const u = Math.min(1, (t - 0.75) / 0.45), hx = (TL.hole.x0 + 0.5) * T; hero.x = hx + (TL.hole.x0 - 0.45 - TL.hole.x0 - 0.5) * T * u; hero.face = -1; hero.y = T * (1 - u) - Math.sin(u * Math.PI) * T * 1.3; }
-    if (t >= 1.2 && !trans.land) { trans.land = 1; hero.y = 0; addFx('puff', hero.x, -T * 0.05, T / 120); SFX.play('land', 0.8); HERO.play('Idle'); toShore(true); }   // toShore 里清 trans（v0.4 漏了，上岸后所有点击被挡住）
+    const c0 = trans.cut ? (trans.cam1 || trans.cam0) : trans.cam0;
+    camY = t < trans.p0 ? trans.cam0 : c0 + (tc - c0) * panFrac(t - trans.p0, trans.dur, Math.min(RISE.ta, trans.dur / 2));
+    // 3) 跳出洞口：这一刻换成新的一趟（地形回到没挖过的样子），洞口烟尘盖住这一下
+    if (t >= tp && !trans.pop) {
+      trans.pop = 1; newRun(true); hero.x = hx; hero.y = T; hero.lvl = 0; hero.alpha = 1; pet.x = hx; pet.y = T; pet.riseA = 1;
+      addFx('puff', hx, T * 0.05, T / 90); HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.6); heroLook();
+    }
+    if (trans.pop) { const v = Math.min(1, (t - tp) / RISE.pop); hero.x = hx + (TL.hole.x0 - 0.45 - TL.hole.x0 - 0.5) * T * v; hero.face = -1; hero.y = T * (1 - v) - Math.sin(v * Math.PI) * T * 1.3; }
+    if (trans.pop && t >= tp + RISE.pop && !trans.land) { trans.land = 1; hero.y = 0; addFx('puff', hero.x, -T * 0.05, T / 120); SFX.play('land', 0.8); HERO.play('Idle'); pet.riseA = undefined; toShore(true); }   // toShore 里清 trans（v0.4 漏了，上岸后所有点击被挡住）
   }
   function toShore(fromRise) {
-    mode = 'shore'; trans = null; D = B.derive(S); clearPetFx(); if (ST) { ST.setAnimation(0, 'Idle', true); pet.anim = 'Idle'; } if (!fromRise) { newRun(); hero.x = (TL.hole.x0 - 0.45) * T; hero.y = 0; hero.lvl = 0; camY = townCam(); pet.x = hero.x - T * 0.9; pet.y = 0; HERO.play('Idle'); }
+    TERRAIN.fadeStep(1, 1); if (TERRAIN.trim) TERRAIN.trim(); mode = 'shore'; trans = null; D = B.derive(S); clearPetFx(); if (ST) { ST.setAnimation(0, 'Idle', true); pet.anim = 'Idle'; } if (!fromRise) { newRun(); hero.x = (TL.hole.x0 - 0.45) * T; hero.y = 0; hero.lvl = 0; camY = townCam(); pet.x = hero.x - T * 0.9; pet.y = 0; HERO.play('Idle'); }
     heroLook(); hero.alpha = 1; hero.path = null; G.ui.showShore(fromRise ? G.lastGain : null);
     if (G.looping() && fromRise) setTimeout(() => { if (mode === 'shore' && !trans && G.looping() && !document.getElementById('pop').classList.contains('on') && !G.ui.tab()) G.dive(); }, 1800);
   }
@@ -392,17 +424,17 @@
   function addFx(k, x, y, sc, o) { fx.push(Object.assign({ k, x, y, t: 0, sc: sc || 1 }, o || {})); if (fx.length > 60) fx.shift(); }   // o：rot 旋转、flip 横翻、add 叠加混合（v0.18 巨镐弧线）
   function drop(kind, x, y, n) { for (let i = 0; i < Math.min(6, n); i++) drops.push({ kind, x, y, vx: (Math.random() - 0.5) * T * 5, vy: -T * (3 + Math.random() * 3), t: -i * 0.03 }); if (drops.length > 80) drops.splice(0, drops.length - 80); }
   function gain(kind, v, x, y) { if (kind === 'coin') R.coin += v; else R.gem += v; addNum(x, y - T * 0.3, '+' + B.fmt(v), kind === 'coin' ? '#ffd84a' : '#e58bff'); }
-  function gainMat(id, n, x, y) { R.mat[id] = (R.mat[id] || 0) + n; drop('m_' + id, x, y, 1); addNum(x, y - T * 0.65, '+' + n + ' ' + B.MAT[id].name, '#9df07a'); SFX.play(PICK_SFX[id] || 'pick_soft', 0.8); }
+  function gainMat(id, n, x, y) { R.mat[id] = (R.mat[id] || 0) + n; drop('m_' + id, x, y, 1); addNum(x, y - T * 0.65, '+' + n, '#9df07a');   /* v0.20 tfix：飘字只留数字（材料图标本身会飞出来），不写名字 */ SFX.play(PICK_SFX[id] || 'pick_soft', 0.8); }
   G.gainMat = gainMat;
 
   function baseDig(k, r, mult) {   // 一下对这格的挖掘伤害（不算重击）；mult = 机制倍数（回旋镐 60%、巨镐侧格 50%），表土制霸照样一下碎
     let d = D.dig * (D.full && R.st > R.stMax * 0.5 ? 1 + B.P.fullBonus : 1) * (mult || 1);
-    if (B.areaOf(r) === 0 && k.t !== 2) { d *= D.soil; if (D.soilx) d = Math.max(d, k.max); }
+    if (B.areaOf(r) === 0) { if (k.t !== 2) d *= D.soil; if (D.soilx) d = Math.max(d, k.max); }   // v0.20：表土制霸连玄武岩叉也一下碎（原来不含玄武岩，买到时普通土早就一下碎了 = 白买）
     return d;
   }
   function digDmg(k, r) {
     let d = baseDig(k, r);
-    R.swings++; if (D.heavy && R.swings % 4 === 0) { d *= D.heavy; R.heavyHit = true; } else R.heavyHit = false;
+    R.swings++; if (D.heavy && R.swings % B.P.heavyN === 0) { d *= D.heavy; R.heavyHit = true; } else R.heavyHit = false;
     return d;
   }
   function hitBlock(c, r, dmg, quiet, mute) {   // mute：不放普通挖土声（巨镐那一下统一放 giant_hit）
@@ -414,14 +446,14 @@
       addFx('puff', x, y, T / 110); SFX.play(t === 2 ? 'chunk_fall' : 'dig_rock_block', t === 2 ? 1 : 0.8); if (t === 2) shake = 0.18;
       const v = B.dirtCoin(r) * info.coin * D.coinM; if (v > 0) { drop('coin', x, y, t === 5 ? 4 : 2); gain('coin', v, x, y); }
       if (info.mat) gainMat(info.mat, 1 + D.oreX, x, y);
-      if (t === 6 && k.food) { const F = B.FOOD[k.food], h = R.stMax * F.heal; R.st = Math.min(R.stMax, R.st + h); R.ate++; drop('f_' + k.food, x, y, 1); addNum(x, y - T * 0.65, '+' + Math.round(F.heal * 100) + '% 体力', '#7cf06a', true); SFX.play('eat', 0.9); addFx('star', x, y, T / 90); k.food = null; }
+      if (t === 6 && k.food) { const h = B.foodHeal(k.food, r); R.st = Math.min(R.stMax, R.st + h); R.ate++; drop('f_' + k.food, x, y, 1); addNum(x, y - T * 0.65, '+' + B.fmt(Math.max(1, h)), '#7cf06a', true); SFX.play('eat', 0.9); addFx('star', x, y, T / 90); k.food = null; }
       if (k.chest) openChest(c, r);
     } else if (!quiet) { if (!mute) SFX.play('dig_dirt', 0.7, k.t === 2 ? 0.8 : 1); chips(c, r, hx, hy, 3, 0.6); }
     if (R.heavyHit && !quiet) { addFx('ring', hx, hy, T / 120); shake = Math.max(shake, 0.1); }
     TERRAIN.cellChanged(c, r);
   }
   function openChest(c, r) {
-    const x = (c + 0.5) * T, y = (r + 0.5) * T, v = B.dirtCoin(r) * 10 * D.coinM; cell(c, r).chest = 0;
+    const x = (c + 0.5) * T, y = (r + 0.5) * T, v = B.dirtCoin(r) * B.CHEST_K * D.coinM; cell(c, r).chest = 0;
     addFx('coinburst', x, y, T / 70); drop('coin', x, y, 6); gain('coin', v, x, y); SFX.play('chest', 0.9);
   }
   function chips(c, r, x, y, n, pow) {
@@ -441,11 +473,11 @@
       const row = R.rows.get(m.r); if (row) row[m.c].mon = 0;
       S.codex[m.kind] = (S.codex[m.kind] || 0) + 1; S.seen[m.kind] = 1;
       const M = B.MON[m.kind];
-      drop('gem', x, y, m.boss ? 6 : 2); gain('gem', M.gem * D.gemM, x, y - T * 0.25); gain('coin', B.monCoin(m.kind, m.r) * D.coinM, x, y + T * 0.05); addFx('smoke', x, y, T / 150);
-      if (D.kill) { R.st = Math.min(R.stMax, R.st + R.stMax * 0.08); addNum(x, y - T * 0.9, '+8% 体力', '#7cf06a'); }
+      drop('gem', x, y, m.boss ? 6 : 2); gain('gem', B.monGem(m.kind, m.r) * D.gemM, x, y - T * 0.25); gain('coin', B.monCoin(m.kind, m.r) * D.coinM, x, y + T * 0.05); addFx('smoke', x, y, T / 150);
+      if (D.kill) { const h = B.KILL_SEC * B.drain(m.r); R.st = Math.min(R.stMax, R.st + h); addNum(x, y - T * 0.9, '+' + B.fmt(Math.max(1, h)), '#7cf06a'); }
       if (m.boss) {
         addFx('star', x, y, T / 50); shake = 0.35; SFX.play('chunk_fall');
-        if (!S.boss) { S.boss = 1; R.firstBoss = true; gainMat('amber', 1, x, y); G.ui.banner('红甲虫王 已击败', '获得 甲虫琥珀 · 前方：沙岩层（下个版本开放）'); }
+        if (!S.boss) { S.boss = 1; R.firstBoss = true; gainMat('amber', 1, x, y); G.ui.banner('红甲虫王 已击败', ''); }
         D = B.derive(S); G.save();
       } else if (M.mat) {
         const p = M.mat === 'gel' ? D.slimeP : M.p, pk = S.pity[M.mat] || 0;
@@ -475,7 +507,7 @@
     }
     const hx = (c + 0.5) * T - dx * T * 0.2, hy = (r + 0.5) * T - dy * T * 0.2;   // 月牙的实体在鼓起那一侧，中心往主角方向挪，弧线正好扫过目标那一排
     // 弧线素材本身是往右鼓的月牙：往下挖转 90° 变成脚下横扫三格，朝左就先横翻
-    const left = dy ? hero.face < 0 : dx < 0, rot = dy ? (left ? -1 : 1) * Math.PI / 2 : 0;
+    const left = dy ? hero.face < 0 : dx < 0, rot = dy ? Math.sign(dy) * (left ? -1 : 1) * Math.PI / 2 : 0;
     addFx('arc', hx, hy, T * 3.2 / 173, { rot, flip: left, add: 1, sx: 0.45 });   // 弦长约 3.2 格盖住三格，鼓出深度压到约 1.8 格
     SFX.play('giant_hit', 0.75); shake = Math.max(shake, 0.06);
   }
@@ -485,7 +517,7 @@
     for (let i = 1; i <= B0.range; i++) {
       const c = hero.c + dx * i, r = hero.r + dy * i, k = cell(c, r), m = monAt(c, r);
       if (m) { hits.push({ i, m }); end = i; if (hits.length > B0.pierce) break; continue; }
-      if (k.t === 9 || k.t === 3) { end = i - 0.45; break; }
+      if (k.t === 9 || k.t === 3 || r < 0) { end = i - 0.45; break; }
       if (k.t === 2 && !B0.basalt) { hits.push({ i, c, r, clink: 1 }); end = i - 0.35; break; }
       if (solid(k.t)) { hits.push({ i, c, r }); end = i; if (hits.length > B0.pierce) break; continue; }
       end = i;
@@ -661,19 +693,29 @@
     const below = cell(hero.c, hero.r + 1);
     if (below.t === 0 && !R.mons.some(q => !q.dead && q.c === hero.c && q.r === hero.r + 1)) { move(0, 1); return; }
     let [dx, dy] = dir();
+    if (dy >= 0) hero.upAct = 0;   // v0.20 tfix：松开 ↑ 才清；按住 ↑ 打怪 / 往上挖时记下，打完挖穿后继续按住不立刻小跳（要重新按一下）
     const manual = !!(dx || dy);
     if (!manual && S.auto && R.auto) { const a = autoDir(); if (a) [dx, dy] = a; }
     // 身边有怪：没输入（或自动模式）时自动打，包括正上方
     const adjM = R.mons.find(q => !q.dead && Math.abs(q.c - hero.c) + Math.abs(q.r - hero.r) === 1);
-    if (adjM && (!manual || (dx === adjM.c - hero.c && dy === adjM.r - hero.r))) { swing(dt, 'mon', adjM, adjM.r - hero.r); if (adjM.c !== hero.c) hero.face = adjM.c > hero.c ? 1 : -1; return; }
+    if (adjM && (!manual || (dx === adjM.c - hero.c && dy === adjM.r - hero.r))) { if (dy < 0) hero.upAct = 1; swing(dt, 'mon', adjM, adjM.r - hero.r); if (adjM.c !== hero.c) hero.face = adjM.c > hero.c ? 1 : -1; return; }
     // VIP 法杖：3 格内、中间是空的同一行 / 同一列有怪 → 站定放魔法弹（没输入 / 自动模式 / 输入朝着它时；手动往别处走就不打）
-    if (D.staff) { const rm = staffTarget(); if (rm) { const sx = Math.sign(rm.c - hero.c), sy = Math.sign(rm.r - hero.r); if (!manual || (dx === sx && dy === sy)) { swing(dt, 'mon', rm, sy); if (sx) hero.face = sx; return; } } }
+    if (D.staff) { const rm = staffTarget(); if (rm) { const sx = Math.sign(rm.c - hero.c), sy = Math.sign(rm.r - hero.r); if (!manual || (dx === sx && dy === sy)) { if (dy < 0) hero.upAct = 1; swing(dt, 'mon', rm, sy); if (sx) hero.face = sx; return; } } }
     if (!dx && !dy) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); return; }
-    if (dy < 0) { if (!S.tut.hop && G.ui.hopTipOff()) { S.tut.hop = 1; G.save(); } stopSwing(); hero.hopT = B.HOP.t; HERO.play('Jump', { restart: true }); return; }   // 往上：上面没有怪 → 原地小跳（v0.18：躲守卫的冲撞和冲击波；不往上挖）
+    if (dy < 0) {   // v0.20 往上按头顶那格：怪（上面已处理）→ 打；能挖的实心格 → 往上挖；守卫门 / 墙 → 不动；空格 → 原地小跳（躲守卫的冲撞和冲击波）
+      const ku = cell(hero.c, hero.r - 1);
+      if (hero.r > 0 && solid(ku.t)) { hero.upAct = 1; swing(dt, 'block', { c: hero.c, r: hero.r - 1 }, -1); return; }
+      if (ku.t !== 0 || hero.r <= 0 || hero.upAct) {
+        stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle');
+        if (ku.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); if (!S.boss) G.ui.toast('先击败守卫“红甲虫王”'); }   // v0.20 tfix：往上碰守卫门和往下 / 往旁边碰门一样的反馈
+        return;
+      }
+      if (!S.tut.hop && G.ui.hopTipOff()) { S.tut.hop = 1; G.save(); } stopSwing(); hero.hopT = B.HOP.t; HERO.play('Jump', { restart: true }); SFX.play('jump_A', 0.4); return;   // v0.20 tfix：小跳起跳也有声音（同回地面 / 下矿起跳的 jump_A），落地 land 成对
+    }
     if (dx) hero.face = dx;
     const c = hero.c + dx, r = hero.r + dy, k = cell(c, r), m = R.mons.find(q => q.c === c && q.r === r && !q.dead);
     if (m) { swing(dt, 'mon', m, dy); return; }
-    if (k.t === 9 || k.t === 3) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); if (k.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); G.ui.toast(S.boss ? '前方：沙岩层（下个版本开放）' : '先击败守卫“红甲虫王”'); } return; }
+    if (k.t === 9 || k.t === 3) { stopSwing(); if (HERO.state !== 'Idle') HERO.play('Idle'); if (k.t === 3 && time - (hero.bumpT || 0) > 1.5) { hero.bumpT = time; SFX.play('dig_dirt', 0.5, 0.6); if (!S.boss) G.ui.toast('先击败守卫“红甲虫王”'); } return; }
     if (k.t === 1 || k.t === 2 || k.t >= 4) { swing(dt, 'block', { c, r }, dy); return; }
     if (R.mons.some(q => q.dead && q.c === c && q.r === r)) return;
     stopSwing(); move(dx, dy);
@@ -684,14 +726,15 @@
   }
   function arrive() {   // 走进一格：蜘蛛网、宝箱
     const k = cell(hero.c, hero.r);
-    if (k.web) { k.web = 0; gainMat('silk', 1 + (D.oreX ? 1 : 0), hero.x, hero.y - T * 0.5); addFx('puff', hero.x, hero.y - T * 0.5, T / 140); }
+    if (k.web) { k.web = 0; gainMat('silk', 1 + D.oreX, hero.x, hero.y - T * 0.5); addFx('puff', hero.x, hero.y - T * 0.5, T / 140); }
     if (k.dchest && darkVis(hero.c, hero.r) > 0) openDark(hero.c, hero.r);
+    if (k.chest) openChest(hero.c, hero.r);   // v0.20：幸运宝箱放在洞穴空格里，原来只有“挖碎方块”时才开 → 永远开不了；走进去就开
   }
   function stopSwing() { if (hero.swinging) { hero.swinging = null; hero.sw = 0; HERO.aim = 0; } }
   function swing(dt, kind, tg, dy) {
     const key = kind + tg.c + ',' + tg.r;
     if (hero.swinging !== key) { hero.swinging = key; hero.sw = 0; heroLook(kind === 'mon'); HERO.play('Attack', { range: [0.75, 1.2], speed: 0.45 * D.freq, restart: true }); SFX.play('swing', 0.35); }
-    HERO.aim = dy > 0 ? -62 : dy < 0 ? 70 : 0; hero.dig = dy > 0 ? [0, 1] : dy < 0 ? hero.dig : [tg.c > hero.c ? 1 : tg.c < hero.c ? -1 : hero.face, 0];   // 回旋镐朝最近一次挥击的方向扔
+    HERO.aim = dy > 0 ? -62 : dy < 0 ? 70 : 0; hero.dig = dy > 0 ? [0, 1] : dy < 0 ? (kind === 'block' ? [0, -1] : hero.dig) : [tg.c > hero.c ? 1 : tg.c < hero.c ? -1 : hero.face, 0];   // 回旋镐朝最近一次挥击的方向扔
     const p0 = hero.sw; hero.sw += dt * D.freq;
     if (p0 < 0.55 && hero.sw >= 0.55) {
       if (kind === 'mon') { if (D.staff) castBolt(tg); else { hitMon(tg, D.atk); if (D.giant) giantSwing(tg.c, tg.r, null); } }   // 拿法杖打怪是远程魔力弹，巨镐只管近战挥击
@@ -809,12 +852,13 @@
     else if (stand && cr >= 0) { f = TERRAIN.floorAt(pet.x, pet.y) - pet.y; f = Math.max(-T * 0.35, Math.min(T * 0.35, f)); }
     pet.vo = pet.vo === undefined ? f : pet.vo + (f - pet.vo) * Math.min(1, dt * 14);
   }
-  function petFollowRise() {   // 回地面：切镜头前宠物原地不动；切到洞口后沿主角跳出来的同一条弧线晚 0.14 秒跟出洞（不穿土）
-    if (!trans.cut) return;
+  function petFollowRise() {   // 回地面：消失前原地不动（跟主角一起淡出）；跳出洞口后沿主角的同一条弧线晚 0.14 秒跟出洞（不穿土）
+    if (!trans.pop) return;
     const tr = trans.trail || (trans.trail = []); tr.push([trans.t, hero.x, hero.y]);
     const tt = trans.t - 0.14; let p = tr[0]; for (const q of tr) if (q[0] <= tt) p = q;
     pet.x = p[1]; pet.y = p[2]; pet.face = -1; pet.vo = 0; if (pet.anim === 'Walk') petAnim('Idle');
   }
+
 
   /* ---------- VIP 宠物 挖挖狗：身边 1 格内的蜘蛛网自动收 ---------- */
   function petWeb(dt) {
@@ -822,7 +866,7 @@
     const wr = D.pet.webR || 1;   // v0.18 探索类「收集范围」：1 → 2 格
     for (let dy = -wr; dy <= wr; dy++) for (let dx = -wr; dx <= wr; dx++) {
       if (!dx && !dy) continue; const c = hero.c + dx, r = hero.r + dy; if (c < 0 || c >= W) continue; const k = cell(c, r);
-      if (k.web && k.t === 0) { k.web = 0; const x = (c + 0.5) * T, y = (r + 0.5) * T; gainMat('silk', 1 + (D.oreX ? 1 : 0), x, y); addFx('puff', x, y, T / 140); petAct('Attack'); return; }
+      if (k.web && k.t === 0) { k.web = 0; const x = (c + 0.5) * T, y = (r + 0.5) * T; gainMat('silk', 1 + D.oreX, x, y); addFx('puff', x, y, T / 140); petAct('Attack'); return; }
     }
   }
 
@@ -878,7 +922,7 @@
       if (R.st >= R.stMax * 0.995) return;
       face(hx); petAct(P.anim); SFX.play('pet_bubble', 0.8);
       addFx('pbubble', pet.x + pet.face * T * 0.25, pet.y + (pet.vo || 0) - T * 0.7, T * 0.8 / 60);
-      petQ.push({ t: 0.25, fn: () => { R.st = Math.min(R.stMax, R.st + R.stMax * P.stam * x2); if (P.float) R.floatT = P.float; addFx('pbubble', hero.x, hero.y - T * 0.85, T * 1.1 / 60); addNum(hero.x, hero.y - T * 0.9, '+' + +(P.stam * x2 * 100).toFixed(1) + '% 体力', '#ffe066', true); } });
+      petQ.push({ t: 0.25, fn: () => { const hs = B.drain(Math.max(0, hero.r)) * P.stam * B.STAM_SEC * x2; R.st = Math.min(R.stMax, R.st + hs); if (P.float) R.floatT = P.float; addFx('pbubble', hero.x, hero.y - T * 0.85, T * 1.1 / 60); addNum(hero.x, hero.y - T * 0.9, '+' + B.fmt(Math.max(1, hs)), '#7cf06a'); } });
     }
     R.petCd = 0;
   }
@@ -914,12 +958,13 @@
   function draw() {
     if (ctx.__begin) ctx.__begin();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, VW, VH);
-    if (!R || !A.ready) { if (ctx.__end) ctx.__end(); return; }
+    if (!R || !A.ready) { ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, VW, VH); if (ctx.__end) ctx.__end(); return; }
     const sx = shake > 0 ? Math.round((Math.random() - 0.5) * shake * T * 0.5) : 0, sy = shake > 0 ? Math.round((Math.random() - 0.5) * shake * T * 0.5) : 0;
     const cy = Math.round(camY) + sy, ox = OX + sx;
-    TERRAIN.update(cy, VH);
-    TERRAIN.drawBG(ctx, cy, VW, VH);
+    // v0.20 tfix：整屏底色只垫在没人盖住的地方。地面以下由远景 / 地形盖满，地面以上由小镇远景画布（不透明）盖满；原来每帧先整屏填一遍再被盖掉（白画一屏）
+    { const bt = TERRAIN.legacyBG ? VH : Math.min(VH, Math.round(-cy), TW.backTop ? TW.backTop(cy) : VH); if (bt > 0) { ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, VW, bt); } }
+    TERRAIN.update(cy, VH, townCam() + (RISE.far + 1) * VH);
+    TERRAIN.drawBG(ctx, cy, VW, VH, ox);
     TW.drawBack(ctx, cy, VW, VH); TW.drawFx(ctx, cy, T, time); drawDoors(cy, ox); TW.drawOver(ctx, cy, VW, VH);
     TERRAIN.draw(ctx, cy, ox, VH);
     TERRAIN.drawProps(ctx, cy, ox, VH, time);
@@ -960,12 +1005,14 @@
     }
     if (trans && (trans.k === 'dive' || trans.k === 'rise')) TW.drawFront(ctx, cy, VW, VH);
     if (SK && petCv) {
-      const PZ = petCv.width; petG.setTransform(1, 0, 0, 1, 0, 0); petG.clearRect(0, 0, PZ, PZ);
-      const sc = T * 0.62 / 100; petG.setTransform(sc * pet.face, 0, 0, -sc, PZ / 2, PZ * 0.8); SR.draw(SK);
+      const PZ = petCv.width, sc = T * 0.62 / 100, gpu = !!ctx.__spine;   // v0.20：WebGL 下宠物骨骼直接变 GPU 网格（ctx.__spine），不再每帧在 CPU 上逐三角形画进离屏画布再整张上传（手机发烫的一项）
+      if (!gpu) { petG.setTransform(1, 0, 0, 1, 0, 0); petG.clearRect(0, 0, PZ, PZ); petG.setTransform(sc * pet.face, 0, 0, -sc, PZ / 2, PZ * 0.8); SR.draw(SK); }
       let pvo = mode === 'run' ? (pet.vo || 0) : 0, pa = hero.alpha;
       if (mode === 'shore' && !(trans && (trans.k === 'dive' || trans.k === 'rise'))) { const u = (pet.x / T - (TL.hole.x0 - 0.15)) / (TL.hole.x1 - TL.hole.x0 + 0.3); if (u > 0 && u < 1) pvo = -Math.sin(u * Math.PI) * T * 0.5; }   // 宠物过洞口也小跳，不悬在洞上
       if (mode === 'shore' && (hero.lvl || hero.climb)) pa = 1;   // 人进平台上的屋子时，在梯子脚下等的宠物不跟着消失
-      ctx.globalAlpha = pa; ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y + pvo - cy - PZ * 0.8 + T * 0.02)); ctx.globalAlpha = 1;
+      if (trans && trans.k === 'rise' && pet.riseA !== undefined) pa = pet.riseA;   // 回地面：宠物跟主角一起消失 / 从洞口出来
+      if (gpu) { if (pa > 0.01) { const a0 = SK.color.a; SK.color.a = a0 * pa; ctx.__spine(SK, [sc * pet.face, 0, 0, -sc, Math.round(ox + pet.x), Math.round(pet.y + pvo - cy + T * 0.02)]); SK.color.a = a0; } }
+      else { ctx.globalAlpha = pa; ctx.drawImage(petCv, Math.round(ox + pet.x - PZ / 2), Math.round(pet.y + pvo - cy - PZ * 0.8 + T * 0.02)); ctx.globalAlpha = 1; }
     }
     if (HERO && hero.alpha > 0.01) {
       if (hero.hurtT > 0) ctx.filter = 'brightness(1.8)';
@@ -1018,19 +1065,7 @@
       ctx.lineWidth = Math.max(3, fs * 0.22); ctx.strokeStyle = '#2a1436'; ctx.strokeText(n.text, x, y); ctx.fillStyle = n.col; ctx.fillText(n.text, x, y);
     }
     ctx.globalAlpha = 1;
-    // 回地面：速度线 + 白闪（遮住中段的跳切）
-    if (trans && trans.k === 'rise') {
-      const t = trans.t, k = t < 0.3 ? t / 0.3 : Math.max(0, 1 - (t - 0.3) / 0.3);
-      if (k > 0) {
-        ctx.globalAlpha = k * 0.42; ctx.fillStyle = '#fff6e0'; ctx.fillRect(0, 0, VW, VH);
-        for (let i = 0; i < 22; i++) {
-          const side = i % 2 ? 1 : -1, u = ((i * 37) % 11) / 11, x = VW / 2 + side * VW * (0.26 + u * 0.24), h = VH * (0.08 + ((i * 53) % 7) / 50), y = ((i * 97 + time * 3200) % (VH + h)) - h, w = Math.max(1.5, T * 0.018 * (1 + i % 2));
-          const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-          ctx.globalAlpha = k * (0.5 + u * 0.4); ctx.fillStyle = g; ctx.fillRect(Math.round(x), Math.round(y), w, h);
-        }
-        ctx.globalAlpha = 1;
-      }
-    }
+    if (trans && trans.k === 'rise' && trans.dark > 0) { ctx.globalAlpha = Math.min(1, trans.dark); ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }   // 回地面深处：切镜头前后的快速暗下 / 亮起（盖在飘字上面）
     if (ctx.__end) ctx.__end();
   }
   const DARK = new Map();
@@ -1154,7 +1189,12 @@
     MLIB = await EnemyMonsters.load(window.ENEMY_MONSTER_DATA, 'assets/monsters/');
     petCv = document.createElement('canvas'); petCv.width = petCv.height = Math.ceil(T * 1.6); petG = petCv.getContext('2d'); SR = new spine.SkeletonRenderer(petG); SR.triangleRendering = true;
     try { await document.fonts.load('700 20px UINum'); } catch (e) { }
-    G.ui.init(); toShore(false); await setPetActor(); $('loading').style.display = 'none';
+    G.ui.init(); toShore(false); await setPetActor();
+    // v0.20 tfix 预热（review 一般-2：开局第一帧 550ms、第一次下矿长帧）：加载画面盖着时先画好小镇和下矿落地两个视角的地形块、
+    //   把已下载的图全部传进显卡、两个视角各画一帧（着色器、图集、文字都在这时准备好），再撤加载画面
+    for (let i = 0; i < 150 && ctx.ready === false && !ctx.failed; i++) await new Promise(r => setTimeout(r, 20));   // WebGL 渲染器是异步建的
+    { const c0 = camY, cd = T - VH * 0.42; TERRAIN.prewarm([c0, cd], VH); if (ctx.__prewarm) ctx.__prewarm(null, 1e9); camY = cd; draw(); camY = c0; draw(); }
+    $('loading').style.display = 'none';
     if (off) G.ui.offline(off);
     requestAnimationFrame(frame);
   }

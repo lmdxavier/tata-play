@@ -163,7 +163,7 @@ const ALLIMG = [];
 { const OI = window.Image; if(OI && !OI.__pxwrap){ const W = function(w, h){ const i = arguments.length ? new OI(w, h) : new OI(); ALLIMG.push(i); return i; }; W.prototype = OI.prototype; W.__pxwrap = true; window.Image = W; } }
 
 // ---------- 4. 光栅化缓存（文字、路径、渐变、阴影） ----------
-const RC = new Map(); let RC_PX = 0; const RC_MAX = 8e6;   // 约 32MB
+const RC = new Map(); let RC_PX = 0; const RC_MAX = 4e6;   // 约 16MB（dig hero tfix：原 8e6 = 32MB；飘字伤害数字各不相同，挖得越深条目越多，手机画布内存有上限，减半）
 function rcGet(key){ const e = RC.get(key); if(e){ RC.delete(key); RC.set(key, e); } return e; }
 function rcPut(key, e){ RC.set(key, e); RC_PX += e.w * e.h;
   while(RC_PX > RC_MAX && RC.size > 1){ const [k, o] = RC.entries().next().value; RC.delete(k); RC_PX -= o.w * o.h; DEAD.push(o); } }
@@ -194,8 +194,8 @@ class PixiCtx {
     this.stage = new P.Container();
     this.target = this.stage; this.clips = [];    // [{depth, subs}]
     this.sp = []; this.spi = 0; this.cl = []; this.cli = 0; this.snap = new Map(); this.frameNo = 0; this.mk = new Map();
-    this.stats = { frames:0, flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0 };
-    this.fstat = { flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0 };
+    this.stats = { frames:0, flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0, subUploads:0 };
+    this.fstat = { flushes:0, sprites:0, raster:0, rasterMiss:0, uploads:0, drawCalls:0, upPx:0, subUploads:0 };
     P.autoDetectRenderer({ preference:'webgl', canvas:cv, width:cv.width || 1, height:cv.height || 1, resolution:1, autoDensity:false,
       antialias:/[?&]aa=1\b/.test(location.search) || (() => { try{ return JSON.parse(localStorage.getItem('tata_opts') || '{}').aa === true; }catch(e){ return false; } })(),   // 61 版：默认关抗锯齿（用户 2026-11-14 真机对比「没看出什么区别所以默认可以关」；Pixi 官方对移动端的建议），?aa=1 打开对比
       backgroundAlpha:0, clearBeforeRender:true, preserveDrawingBuffer:false, powerPreference:'high-performance',
@@ -286,12 +286,31 @@ class PixiCtx {
       if(src){ for(const o of S.__pxt.values()) DEAD_T.push(o); DEAD_SRC.push(src); }
       src = isImg(S) ? new P.ImageSource({ resource:S, width:w, height:h, resolution:1, autoGenerateMipmaps:MIP }) : new P.CanvasSource({ resource:S, width:w, height:h, resolution:1, autoGenerateMipmaps:MIPC });
       src.__w = w; src.__h = h; src.__uv = S.__v | 0; S.__pxs = src; S.__pxt = new Map(); this.fstat.uploads++;
-    } else if((S.__v | 0) !== src.__uv){ src.update(); src.__uv = S.__v | 0; this.fstat.uploads++; }
+      S.__dr = null; S.__drFull = false;
+    } else if((S.__v | 0) !== src.__uv){ if(!this._subUpload(S, src)) src.update(); src.__uv = S.__v | 0; this.fstat.uploads++; S.__dr = null; S.__drFull = false; }
     S.__q = QID;
     const k = sx + ',' + sy + ',' + sw + ',' + sh, M = S.__pxt; let t = M.get(k);
     if(!t){ if(M.size > 3000){ for(const o of M.values()) DEAD_T.push(o); M.clear(); }
       t = new P.Texture({ source:src, frame:new P.Rectangle(sx, sy, sw, sh) }); M.set(k, t); }
     return t;
+  }
+  // dig hero tfix：离屏画布只改了一小块（画布上记了 __dr = [x0,y0,x1,y1]、没有 __drFull）时，只把这一块拷进小画布、用 texSubImage2D 传这一块，
+  //   不整张重新上传（挖一下原来要整块地形画布 1174×672 重传）。拿不准就返回 false 走原来的整张上传。
+  _subUpload(S, src){
+    const d = S.__dr, r = this.r, gl = r && r.gl, ts = r && r.texture;
+    if(!d || S.__drFull || !gl || !ts || !ts.bindSource || isImg(S)) return false;
+    const W = iw0(S), H = ih0(S), x0 = Math.max(0, Math.floor(d[0])), y0 = Math.max(0, Math.floor(d[1])), x1 = Math.min(W, Math.ceil(d[2])), y1 = Math.min(H, Math.ceil(d[3]));
+    if(x1 <= x0 || y1 <= y0) return true;
+    if((x1 - x0) * (y1 - y0) > W * H * 0.6) return false;
+    if(!src._gpuData || !src._gpuData[r.uid]) return false;   // 还没传过：走整张
+    let c = this._subCv; if(!c){ c = this._subCv = document.createElement('canvas'); }
+    c.width = x1 - x0; c.height = y1 - y0; const g = c.getContext('2d'); g.drawImage(S, x0, y0, x1 - x0, y1 - y0, 0, 0, x1 - x0, y1 - y0);
+    ts.bindSource(src, 0);
+    const pm = src.alphaMode === 'premultiply-alpha-on-upload';
+    if(ts._premultiplyAlpha !== pm){ ts._premultiplyAlpha = pm; gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, pm); }
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x0, y0, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    this.fstat.subUploads = (this.fstat.subUploads | 0) + 1;
+    return true;
   }
   get _shadow(){ const S = this.S; return (S.shb > 0 || S.shx || S.shy) && parseColor(S.shc).a > 0; }
   get _fx(){ return this._shadow || (this.S.filter && this.S.filter !== 'none'); }
@@ -503,8 +522,9 @@ class PixiCtx {
       const s = this._sprite(this._tex(c, sx - ix, sy - iy, sw, sh)); this._place(s, mul(St.m, dw / sw, 0, 0, dh / sh, dx, dy)); s.tint = 0xffffff;
       return;
     }
-    const s = this._sprite(this._tex(S, sx, sy, sw, sh)); this._place(s, mul(St.m, dw / sw, 0, 0, dh / sh, dx, dy)); s.tint = 0xffffff;
+    const s = this._sprite(this._tex(S, sx, sy, sw, sh)); this._place(s, mul(St.m, dw / sw, 0, 0, dh / sh, dx, dy)); s.tint = St.tint === undefined ? 0xffffff : St.tint;   // dig hero tfix：__tint（精灵着色 = 乘一个颜色，代替整屏 multiply 矩形）
   }
+  get __tint(){ return this.S.tint === undefined ? 0xffffff : this.S.tint; } set __tint(v){ this.S.tint = v; }
   // 快照池：按尺寸分桶（宽高各向上取到 32 的倍数），同一桶本帧第几次用第几块；3 秒没用过的整块释放
   _snapCanvas(w, h){
     const bw = Math.ceil(w / 32) * 32, bh = Math.ceil(h / 32) * 32, k = bw + 'x' + bh;
@@ -705,6 +725,9 @@ Object.assign(PixiCtx.prototype, {
   // Spine 骨架（spine-canvas 4.3 的数据）直接变成 GPU 网格。m = 骨架坐标 → 屏幕像素的矩阵。
   // 和 spine-canvas 的 drawTriangles 一样：只用颜色的透明度（不着色、不管混合模式和裁剪附件）
   __spine(sk, m){
+    // dig hero v0.20：不在角色图集里（没调 __charBegin）也能直接画到主画面：网格池按帧复用
+    if(!this.sm){ this.sm = []; this.smi = 0; }
+    if(!this.atlas && this.__smF !== this.frameNo){ this.__smF = this.frameNo; this.smi = 0; }
     if(!SR){ SR = new spine.SkeletonRenderer(PG); SPV = { pos:new Float32Array(4096), uv:new Float32Array(4096), idx:new Uint32Array(6144) }; }
     const RA = spine.RegionAttachment, MA = spine.MeshAttachment, QT = spine.SkeletonRenderer.QUAD_TRIANGLES, sc = sk.color;
     const order = sk.drawOrder.appliedPose || sk.drawOrder;

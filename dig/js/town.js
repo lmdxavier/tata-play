@@ -161,11 +161,19 @@
     for (const [n, x, w] of TW.FG)
       { const h = w * T * I(n).height / I(n).width; dr(f, I(n), FX(x), FY(0) - h + T * 0.06, w * T, h); }   // 底边落在地面线（只压进 0.06 格草根）
     B.front = fr; B.gx = gx;
+    B.ovBox = opaqueBox(B.ov); B.frBox = opaqueBox(fr);   // v0.20 tfix：这两张整屏大小的画布大部分是透明的，只画有内容的那一块
   };
-  TW.drawOver = function (ctx, cy, VW, VH) { if (!B || !B.ov) return; const y = -B.H - cy; if (y + B.H < 0 || y > VH) return; ctx.drawImage(B.ov, 0, Math.round(y)); };   // 雨棚、门楣（画在门上面）
+  function opaqueBox(c) {   // 画布里不透明像素的外框 [x, y, w, h]（全透明返回 null）
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, W = c.width; let x0 = W, y0 = c.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < c.height; y++) for (let x = 0, i = y * W * 4 + 3; x < W; x++, i += 4) if (d[i]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    return x1 < 0 ? null : [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+  }
+  const drawBox = (ctx, cv, bx, y) => { if (!bx) return; ctx.drawImage(cv, bx[0], bx[1], bx[2], bx[3], bx[0], y + bx[1], bx[2], bx[3]); };
+  TW.drawOver = function (ctx, cy, VW, VH) { if (!B || !B.ov) return; const y = -B.H - cy; if (y + B.H < 0 || y > VH) return; drawBox(ctx, B.ov, B.ovBox, Math.round(y)); };   // 雨棚、门楣（画在门上面）
   // 画：地面线在世界 y = 0；camY 是镜头顶在世界里的 y（屏幕像素）
   TW.drawBack = function (ctx, cy, VW, VH) { if (!B) return; const y = -B.H - cy; if (y + B.H < 0 || y > VH) return; ctx.drawImage(B.cv, 0, Math.round(y)); };
-  TW.drawFront = function (ctx, cy, VW, VH) { if (!B) return; const y = -B.H - cy; if (y + B.H < 0 || y > VH) return; ctx.drawImage(B.front, 0, Math.round(y)); };
+  TW.drawFront = function (ctx, cy, VW, VH) { if (!B) return; const y = -B.H - cy; if (y + B.H < 0 || y > VH) return; drawBox(ctx, B.front, B.frBox, Math.round(y)); };
+  TW.backTop = cy => B ? Math.round(-B.H - cy) : 1e9;   // 小镇远景画布（不透明）顶边的屏幕 y：它下面不用再垫底色
   // 烟囱的烟（序列帧 smoke），门的开合由 game.js 叠画
   TW.drawFx = function (ctx, cy, T, time) {
     if (!B) return; const im = TW.img.smoke; if (!im || !im.width) return;

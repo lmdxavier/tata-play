@@ -661,3 +661,156 @@ nb { white-space: nowrap; }
 /* v0.19 小跳手势（复用铁匠铺教程的光点手势；层级同 #tut，被弹窗盖住） */
 .hoptut { position: absolute; z-index: 34; pointer-events: none; width: 0; height: 0; }
 .hoptut .hand { position: absolute; left: -1.2rem; top: -1.2rem; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: radial-gradient(rgba(255, 255, 255, .95), rgba(255, 240, 160, .7) 45%, rgba(255, 220, 120, 0) 70%); animation: tutm 0.9s infinite ease-in-out; }
+
+/* ===== v0.20 面板线：铁匠铺长按拖拽（docs/v0.20各线笔记/panel.md） ===== */
+/* 商品卡交给浏览器竖向滚动（原生惯性）；长按满 1 秒后 JS 拦掉 touchmove 再拖。长按不弹系统菜单、不选中文字 */
+#panel[data-tab="shop"] .item { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform .15s, opacity .15s; }
+#panel[data-tab="shop"] .item img { -webkit-touch-callout: none; pointer-events: none; }
+#panel[data-tab="shop"] .item.hold { transform: scale(.95); transition: transform .88s cubic-bezier(.3, 0, .6, 1) .12s; }
+/* 按住进度：卡片一圈金色描边渐满（rect pathLength=1，stroke-dashoffset 1 → 0，时长 JS 按 DRAG.hold 设） */
+#panel[data-tab="shop"] .item .lp { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+#panel[data-tab="shop"] .item .lp rect { fill: none; stroke: #ffc53a; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 1; stroke-dashoffset: 1; filter: drop-shadow(0 0 3px rgba(255, 170, 40, .9)); }
+#panel[data-tab="shop"] .item .lp.go rect { stroke-dashoffset: 0; }
+/* 原位置留一个淡掉的卡片，告诉玩家松手会飞回这里 */
+#panel[data-tab="shop"] .item.lift-src { opacity: .35; transform: none; transition: opacity .1s; }
+/* 浮起的整张卡片：在 #panel 里（被弹窗盖住），放大 + 加深投影 */
+#panel[data-tab="shop"] .item.ghost { position: absolute; z-index: 5; margin: 0; box-sizing: border-box; pointer-events: none; object-fit: unset; transform: scale(1); transform-origin: 50% 50%; opacity: 1; }
+#panel[data-tab="shop"] .item.ghost.up { transform: scale(1.08); filter: drop-shadow(0 .9rem .7rem rgba(20, 8, 2, .45)); }
+/* 拖到对的槽上：槽放大发光 = “放这里”（图不提前换） */
+#panel[data-tab="shop"] .slot.hover { transform: scale(1.12); transition: transform .1s; }
+/* 教程手势：光点按住、圈一圈渐满（长按）→ 卡片影子浮起到手指上方 → 拖到槽、缩进去 */
+#tut { --hold: 1000ms; }
+#tut .hand { animation: tuth 2.8s infinite ease-in-out; }
+#tut .hand svg { position: absolute; inset: -.55rem; width: calc(100% + 1.1rem); height: calc(100% + 1.1rem); overflow: visible; }
+#tut .hand circle { fill: none; stroke: #ffc53a; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 1; stroke-dashoffset: 1; transform: rotate(-90deg); transform-origin: 50% 50%; animation: tutr 2.8s infinite linear; filter: drop-shadow(0 0 2px rgba(120, 60, 0, .8)); }
+#tut .tcard { position: absolute; box-sizing: border-box; border-radius: .8rem; border: .16rem solid #3a2412; background: linear-gradient(rgba(255, 250, 240, .9), rgba(243, 217, 164, .9)); box-shadow: 0 0 0 .16rem #ffc53a, 0 .9rem 1rem rgba(20, 8, 2, .4); opacity: 0; animation: tutc 2.8s infinite ease-in-out; }
+@keyframes tuth { 0% { transform: translate(0, 0); opacity: 0; } 5% { transform: translate(0, 0); opacity: 1; } 40% { transform: translate(0, 0) scale(.85); } 76% { transform: translate(var(--dx), calc(var(--dy) - var(--ly))) scale(.85); opacity: 1; } 88% { transform: translate(var(--dx), calc(var(--dy) - var(--ly))) scale(.85); opacity: 0; } 100% { opacity: 0; } }
+@keyframes tutr { 0%, 5% { stroke-dashoffset: 1; opacity: 1; } 40% { stroke-dashoffset: 0; opacity: 1; } 44%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes tutc { 0%, 39% { transform: translate(0, 0) scale(.95); opacity: 0; } 41% { transform: translate(0, 0) scale(1); opacity: .95; } 46% { transform: translate(0, var(--ly)) scale(1.08); opacity: .95; } 76% { transform: translate(var(--dx), var(--dy)) scale(1.08); opacity: .95; } 84% { transform: translate(var(--dx), var(--dy)) scale(.35); opacity: 0; } 100% { opacity: 0; } }
+
+/* ===== v0.20 面板线：数字不出框（用户 23:03）——装数字的元素一律不折行、超宽裁掉，JS fitText 按实际宽度缩字号 ===== */
+.fit { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: clip; }
+#panel[data-tab="shop"] .stat { min-width: 0; box-sizing: border-box; }
+#panel[data-tab="shop"] .stat .sv { min-width: 0; overflow: hidden; }
+#panel[data-tab="shop"] .stat em i { white-space: nowrap; font-size: .62em; }
+#panel[data-tab="shop"] .stat > small.fit { width: 100%; text-align: center; }
+
+/* ===== v0.20 面板线：技能屋属性栏（和铁匠铺属性卡同款八角框 .koct、同样的图标和叫法）+ 说明卡「当前 → 买后」 ===== */
+#panel[data-tab="skill"] .skstats { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: max(.5rem, 8.5px); margin: max(.12rem, calc(8.5px - .4rem)) 0 max(.55rem, 8.5px); }
+#panel[data-tab="skill"] .ks { min-width: 0; display: flex; align-items: center; justify-content: center; gap: .2rem; padding: .32rem .35rem; }
+#panel[data-tab="skill"] .ks img { flex: none; width: 1.35rem; height: 1.35rem; object-fit: contain; filter: drop-shadow(0 .08rem .08rem rgba(58, 30, 10, .35)); }
+#panel[data-tab="skill"] .ks em { flex: 0 1 auto; font-style: normal; font-size: 1.02rem; line-height: 1.25; font-weight: 900; color: #4a2c14; }
+#panel[data-tab="skill"] .ks.bump { animation: ksbump .6s ease-out; }
+#panel[data-tab="skill"] .ks.bump em { color: #2f8a22; transition: color 1.2s; }
+@keyframes ksbump { 0% { transform: scale(1); } 30% { transform: scale(1.14); filter: drop-shadow(0 0 .45rem rgba(120, 230, 90, .9)); } 100% { transform: scale(1); } }
+/* 说明卡：高度跟内容走（有「当前 → 买后」时多一两行），最少还是原来的 4.9rem */
+#panel[data-tab="skill"] .dcard { height: auto; min-height: 4.9rem; }
+#panel[data-tab="skill"] .dcard .dv { font-style: normal; font-size: .78rem; line-height: 1.45; font-weight: 700; color: #85613e; }
+#panel[data-tab="skill"] .dcard .dv { display: flex; align-items: center; gap: .25em; font-size: .86rem; }
+#panel[data-tab="skill"] .dcard .dv img { flex: none; width: 1.25em; height: 1.25em; object-fit: contain; }
+#panel[data-tab="skill"] .dcard .dv u { text-decoration: none; color: #4a2c14; font-size: 1em; font-weight: 900; }
+#panel[data-tab="skill"] .dcard .dv .ar { color: #2f8a22; font-size: 1em; }
+#panel[data-tab="skill"] .dcard .dv em { font-style: normal; font-size: 1.1em; font-weight: 900; color: #2f8a22; }
+#panel[data-tab="skill"] .dcard .dv u.bump { display: inline-block; animation: ksbump .6s ease-out; color: #2f8a22; }
+/* v0.20：技能说明卡按钮里的材料多了换行，不撑出按钮 */
+#panel[data-tab="skill"] .dcard .buy .skm { flex-wrap: wrap; row-gap: .1rem; }
+/* v0.20 铁匠铺：买下后属性卡数字跳动；放错槽 = 正确的槽闪一下（不弹字） */
+#panel[data-tab="shop"] .stat.bump { animation: ksbump .6s ease-out; }
+#panel[data-tab="shop"] .stat.bump em { color: #2f8a22; }
+#panel[data-tab="shop"] .slot.hint { animation: slothint .3s 3 alternate; }
+@keyframes slothint { to { transform: scale(1.14); box-shadow: inset 0 .28rem .35rem rgba(0, 0, 0, .55), 0 0 0 .16rem #ffd34a, 0 0 .7rem #ffd34a; } }
+/* v0.20（用户 23:13）：去掉整排材料后，商品板高度跟着商品走（放不下才在板里滚动），不再撑满留空 */
+#panel[data-tab="shop"] .items { flex: 0 1 auto; }
+#panel[data-tab="skill"] .detail { margin-top: max(.5rem, 8.5px); }   /* v0.20：小屏 rem 变小时也保证块间距 ≥ 8px */
+/* v0.20：试穿中的商品要和“买得起”的橙色描边分得开：抬高一点 + 更粗的亮金描边和外发光 */
+#panel[data-tab="shop"] .item.pv { transform: translateY(-.2rem); box-shadow: 0 0 0 .24rem #ffd34a inset, 0 0 .9rem .1rem rgba(255, 211, 74, .95), 0 .4rem 0 rgba(60, 30, 10, .35); }
+
+/* ===== v0.20 面板修复线（docs/v0.20各线笔记/pfix.md）===== */
+/* 一般-5：全界面最小字号——正文 / 数字 ≥ 11px、角标 ≥ 10px（CSS 像素）。写成 max(原 rem, 下限)：大屏照旧按 rem 放大，小屏不低于下限 */
+.side button span { font-size: max(.68rem, 11px); }
+.bar span { font-size: max(.68rem, 11px); }
+#auto span { font-size: max(.78rem, 11px); }
+.card .mid span, #panel .card .src { font-size: max(.72rem, 11px); }
+.cell span { font-size: max(.7rem, 11px); }
+#panel .vipnow .prog span, .vipstreak .prog span, .prog span { font-size: max(.7rem, 11px); }
+.day b { font-size: max(.7rem, 11px); } #panel .day span { font-size: max(.62rem, 11px); }
+#panel[data-tab="skill"] .dcard span { font-size: max(.78rem, 11px); }
+#panel[data-tab="skill"] .dcard .buy .skm .m { font-size: max(.74rem, 11px); }
+#panel[data-tab="skill"] .sk u { font-size: max(.6rem, 10px); }
+#panel[data-tab="shop"] .stat b { font-size: max(.72rem, 11px); }
+#panel[data-tab="shop"] .item b { font-size: max(.78rem, 11px); }
+#panel[data-tab="shop"] .item > span, #panel[data-tab="shop"] .item small, #panel[data-tab="shop"] .item .cost { font-size: max(.64rem, 11px); }
+/* 铁匠铺属性卡：数值和 ▲差值分两段，放不下时差值换到下一行；「基础×技能」两段各自不拆、放不下换行（不再整行缩到 7.7px） */
+#panel[data-tab="shop"] .stat em { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .2rem; }
+#panel[data-tab="shop"] .stat em .n { flex: 0 1 auto; }
+#panel[data-tab="shop"] .stat em i { margin-left: 0; font-size: max(.72rem, 11px); }
+#panel[data-tab="shop"] .stat > small { display: flex; flex-wrap: wrap; justify-content: center; column-gap: .1rem; white-space: normal; font-size: max(.56rem, 11px); line-height: 1.2; }
+
+/* 一般-9 / 一般-10：装备图按不透明部分放大到框的 75%；铁匠铺下面有空时（JS fitShop 算 --giAdd / --slotAdd）分给商品图和装备槽 */
+#panel[data-tab="shop"] { --giAdd: 0px; --slotAdd: 0px; }
+.gi { position: relative; display: block; container-type: size; pointer-events: none; }
+.gi .gb { position: absolute; left: 50%; top: 50%; width: 75%; aspect-ratio: var(--ar); transform: translate(-50%, -50%); }
+@supports (width: 1cqw) { .gi .gb { width: min(75cqw, calc(75cqh * var(--ar))); } }
+#panel .gi .gb img { position: absolute; display: block; margin: 0; max-width: none; max-height: none; object-fit: fill; }
+#panel .gi .gf { position: absolute; left: 12.5%; top: 12.5%; width: 75%; height: 75%; margin: 0; object-fit: contain; }
+#panel[data-tab="shop"] .item .gi { width: 100%; height: calc(3.3rem + var(--giAdd)); margin: 0 0 .15rem; }
+#panel[data-tab="shop"] .slot { width: calc(3.7rem + var(--slotAdd)); height: calc(3.7rem + var(--slotAdd)); }
+#panel[data-tab="shop"] .slot .gi { position: absolute; inset: 0; }
+#panel[data-tab="shop"] .item.next img { filter: none; } #panel[data-tab="shop"] .item.next .gi img { filter: brightness(0) opacity(.55); }
+/* 一般-8：最后一档不写「沙岩层开放」，锁 + 守卫头像 */
+#panel[data-tab="shop"] .item.next .lk { display: flex; align-items: center; justify-content: center; gap: .2rem; margin-top: .2rem; }
+#panel[data-tab="shop"] .item.next .lk img { width: 1.25rem; height: 1.25rem; margin: 0; object-fit: contain; }
+#panel[data-tab="shop"] .item.next .lk canvas { width: 1.9rem; height: 1.9rem; }
+
+/* 一般-2：技能屋属性格 = 图标在上、数字在下，格子按 fmtNum 最长格式（「9999万亿」）留宽，375 宽也不缩 */
+#panel[data-tab="skill"] .ks { flex-direction: column; gap: .05rem; padding: .3rem .12rem .28rem; }
+#panel[data-tab="skill"] .ks img { width: 1.3rem; height: 1.3rem; }
+#panel[data-tab="skill"] .ks em { width: 100%; text-align: center; font-size: max(.92rem, 12px); line-height: 1.15; }
+
+/* 一般-3：技能买不了 = 按钮和节点摇一下 + 缺的价格闪红；没解锁 = 前置节点和连过来的虚线闪一下 */
+#panel[data-tab="skill"] .dcard .buy .lack { color: #ff3a2a; }
+#panel[data-tab="skill"] .dcard .buy.shake, #panel[data-tab="skill"] .sk.shake { animation: shake .4s; }
+#panel[data-tab="skill"] .dcard .buy .lack.flash { display: inline-block; animation: lackf .4s 2; }
+#panel[data-tab="skill"] .sk.need { animation: skneed .35s 3 alternate; } @keyframes skneed { to { transform: scale(1.18); filter: brightness(1.25) drop-shadow(0 0 .5rem #ff5a3a); } }
+#panel[data-tab="skill"] #links line.need { animation: lnneed .35s 3 alternate; } @keyframes lnneed { to { stroke: #ff5a3a; stroke-width: .34rem; } }
+
+/* 自动模式没解锁：按钮上挂锁 + 「VIP 2」角标（点了打开 VIP 页那一级）；挖矿中开 VIP 页时藏起顶部两条 / 回地面 / 自动按钮 */
+#auto .alock, #auto .avip { display: none; }
+#auto.lock .alock { display: block; position: absolute; left: 50%; top: 32%; width: 1.5rem; height: 1.5rem; transform: translate(-50%, -50%); }
+#auto.lock .alock img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 .08rem .08rem rgba(0, 0, 0, .5)); }
+#auto.lock .avip { display: block; position: absolute; right: -.35rem; top: -.35rem; padding: .05rem .3rem; border-radius: .6rem; background: linear-gradient(#ffe27a, #e0a81e); border: .12rem solid #3a2412; color: #3a2412; text-shadow: none; font-size: max(.62rem, 10px); line-height: 1.1; white-space: nowrap; }
+#auto.lock { filter: none; } #auto.lock > img, #auto.lock > span { filter: grayscale(.85) brightness(.75); }
+#wrap.pnrun #h-bars, #wrap.pnrun #back, #wrap.pnrun #auto, #wrap.pnrun #bossbar, #wrap.pnrun #movetut, #wrap.pnrun #hoptut { visibility: hidden; }
+#panel .card.focus { animation: vipfocus .5s 3 alternate; } @keyframes vipfocus { to { transform: scale(1.03); filter: drop-shadow(0 0 .6rem #ffc53a); } }
+
+/* 第一次下矿的手势教程（在主角身上往下划；层级同 #tut 34） */
+.hoptut.move .hand { animation-duration: 1.4s; }
+#pop .box.src .buy small, #pop .vipstreak .buy small { font-size: max(.62rem, 11px); }
+/* 一般-1：顶栏「最深」= 两行（小字「最深」在上、数字在下），格子按最长格式「9999万亿 米」留宽；金币 / 宝石 / 最深都到最长格式时一排也放得下，不再整排缩小 */
+.res { gap: .35rem; }
+.res > .pill { padding-right: .4rem; padding-left: 1.85rem; }
+.res:not(.run) .depth { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; min-width: 5.3rem; line-height: 1.05; font-size: .9rem; }
+.res:not(.run) .depth small { font-size: max(.62rem, 11px); color: #ffe2a0; }
+.res:not(.run) .depth:empty { display: none; }
+/* 没解锁的技能节点：右上角锁角标（要先打守卫的再并排一个守卫小头像），不靠灰色一种表现 */
+#panel[data-tab="skill"] .sk .lkb { position: absolute; right: -.45rem; top: -.4rem; display: flex; align-items: center; padding: .08rem; border-radius: .6rem; background: #fff1cc; border: .1rem solid #3a2412; filter: none; }
+#panel[data-tab="skill"] .sk .lkb img { position: static; width: .95rem; height: .95rem; opacity: 1; object-fit: contain; }
+#panel[data-tab="skill"] .sk .lkb canvas { width: 1.05rem; height: 1.05rem; }
+#panel[data-tab="skill"] .sk.lock { filter: none; } #panel[data-tab="skill"] .sk.lock > i, #panel[data-tab="skill"] .sk.lock > img, #panel[data-tab="skill"] .sk.lock > u { filter: grayscale(.9) brightness(.8) opacity(.75); }
+/* v0.20 收益飞入（loot 线）：图标位置由 ui.js lootTick 每帧写 transform */
+.lfly { position: absolute; left: 0; top: 0; z-index: 61; pointer-events: none; transform-origin: 50% 50%; will-change: transform; }
+.lfly img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 .15rem .2rem rgba(0, 0, 0, .5)); }
+.lfly b { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: .1rem; font-size: max(.9rem, 11px); color: #9df07a; white-space: nowrap; }
+.rstat { display: flex; align-items: center; justify-content: center; gap: .25rem; } .rstat img { width: 1.5rem; height: 1.5rem; object-fit: contain; margin-left: .45rem; } .rstat img:first-child { margin-left: 0; }
+.claim .tapgest { position: relative; z-index: 2; display: block; width: 2.4rem; height: 2.4rem; margin: .9rem auto 0; border-radius: 50%; background: radial-gradient(rgba(255, 255, 255, .95), rgba(255, 240, 160, .7) 45%, rgba(255, 220, 120, 0) 70%); animation: tapg 1s infinite ease-in-out; }
+@keyframes tapg { 0%, 100% { transform: scale(.8); opacity: .65; } 50% { transform: scale(1.1); opacity: 1; } }
+#pop .box .buy small { font-size: max(.8rem, 11px); }   /* v0.20：结算 / 离线广告按钮的“×2”（原“收获 ×2”在 375×553 约 8.6px），全界面最小字号 11px */
+.rstat { font-size: max(1rem, 11px); }
+/* v0.20 宽高比超过画面上限时左右露出的边：用地下岩壁底纹压暗填满，不留纯黑边 */
+body { background: linear-gradient(rgba(7, 4, 12, .72), rgba(7, 4, 12, .72)), url(../assets/bg/l1_wall.png) center / auto 100% repeat-x, #07040c; }
+/* bfix：材料数放进 <i>（飞到才改数字），不要斜体 */
+.m > i { font-style: normal; }
+/* bfix（检查报告建议-2）：技能说明卡的级数「0 / 5」、购买按钮里的价格在 360 宽也 ≥ 11px，价格字放大填满按钮 */
+#panel[data-tab="skill"] .dcard b small { font-size: max(.7rem, 11px); }
+#panel[data-tab="skill"] .dcard .buy > span { font-size: max(1rem, 13px); }
+#panel[data-tab="skill"] .dcard .buy > span img { width: 1.25rem; height: 1.25rem; }

@@ -1,4 +1,4 @@
-/* dig hero 数值表（v0.4：区域制，区域 1 表土层；设计见 docs/系统与数值.md） */
+/* dig hero 数值表（v0.4：区域制，区域 1 浅层岩土（bfix 原名表土层：现实表土只有几十厘米，0–50 米叫表土层不合常识）；设计见 docs/系统与数值.md） */
 (function (g) {
   'use strict';
   const B = {};
@@ -9,41 +9,47 @@
   B.STAGE = B.AREA;
   B.areaOf = r => Math.max(0, Math.floor(r / B.AREA));
   B.stageOf = B.areaOf;
-  B.AREA_NAME = ['表土层', '沙岩层', '根须红土', '苔藓洞', '紫晶岩', '冰窟', '青岩沼', '灰岩深层', '熔岩层', '暗紫遗迹'];
-  B.P = { dieLoss: 0.3, baseDig: 5, baseFreq: 2.5, fullBonus: 0.3 };
+  B.AREA_NAME = ['浅层岩土', '沙岩层', '根须红土', '苔藓洞', '紫晶岩', '冰窟', '青岩沼', '灰岩深层', '熔岩层', '暗紫遗迹'];
+  B.SC = 10;   // v0.20 属性整数化（用户：体力 10.3/10.5 一直跳 0.1 不像游戏数值）：血量、体力、攻击、防御、挖掘力、方块血、怪血 / 攻击、掉体力速度统一 ×10，公式同比例，手感不变
+  B.P = { dieLoss: 0.3, baseDig: 5 * B.SC, baseFreq: 2.5, fullBonus: 0.3, heavyN: 3 };   // heavyN：重击每第几下（v0.20 4 → 3：土多是 2 下碎，每第 4 下总落在一格的第 2 下上，重击白打）
 
   /* ---------- 地下 ---------- */
   const dep = r => Math.max(0, r);
   // 深度口径（v0.18 统一）：第 r 行 = r 米，地面线 = 0 米，区域 k 从 k×50 米开始。数值公式、横幅、顶部深度、结算“到达 X 米”、最深纪录都只用它。
   B.depthM = dep;
-  B.dirtHp = r => 6 * Math.pow(1.045, dep(r));
+  B.dirtHp = r => 6 * B.SC * Math.pow(1.045, dep(r));
   B.dirtCoin = r => 3 * Math.pow(1.05, dep(r));
   B.CELL = {   // t → { 血量倍数, 金币倍数, 掉的材料 }
     1: { name: '土', hp: 1, coin: 1 },
     2: { name: '玄武岩', hp: 4, coin: 2 },
-    4: { name: '树根', hp: 1.5, coin: 1, mat: 'wood' },
+    4: { name: '树根', hp: 1.2, coin: 1, mat: 'wood' },   // bfix 1.5 → 1.2：树根挪到 2–12 米（原 0–25 米）后挡在前几趟的主路上
     5: { name: '铜矿', hp: 2, coin: 5, mat: 'copper' },
     6: { name: '食物', hp: 0.5, coin: 0 },
   };
   B.cellHp = (t, r) => B.dirtHp(r) * (B.CELL[t] ? B.CELL[t].hp : 1);
   B.FOOD = {
-    mushroom: { name: '野蘑菇', img: 'mat/mushroom.png', heal: 0.10 },
-    apple: { name: '苹果', img: 'mat/apple.png', heal: 0.20 },
-    strawberry: { name: '草莓', img: 'mat/strawberry.png', heal: 0.35 },
+    mushroom: { name: '野蘑菇', img: 'mat/mushroom.png', sec: 2 },
+    apple: { name: '苹果', img: 'mat/apple.png', sec: 3 },
+    strawberry: { name: '草莓', img: 'mat/strawberry.png', sec: 4 },
   };
-  B.drain = r => Math.pow(2, dep(r) / 25);   // 每秒掉多少体力
+  // v0.20 用户 23:17「后期体力永远是满的」：食物、打怪回气原来按体力上限的百分比回（上限涨回得也涨，后期溢出）。
+  // 改成按“所在深度掉体力的秒数”回：回多少 = sec × 每秒掉速（B.drain），和上限无关；上限越大，同一个蘑菇占比越小，体力始终是约束
+  B.foodHeal = (k, r) => B.FOOD[k].sec * B.drain(r);
+  B.CHEST_K = 25;   // 幸运宝箱 = 同深度 25 块土的金币（原 10 块；v0.20 修了开不了的 bug 后定）
+  B.KILL_SEC = 1.0;   // 技能「打怪回气」：打死怪回 1.5 秒的体力消耗（原 8% 上限）
+  B.drain = r => B.SC * Math.pow(2, dep(r) / 25);   // 每秒掉多少体力（×B.SC 整数化）
   B.MON = {
-    Slime_Green: { name: '绿史莱姆', hp: 24, atk: 6, gem: 1, mat: 'gel', p: 0.5, pity: 3 },
-    Snail_Green: { name: '绿蜗牛', hp: 40, atk: 9, gem: 2, mat: 'pearl', p: 0.35, pity: 4 },
-    Bat_Cave: { name: '洞穴蝙蝠', hp: 18, atk: 7, gem: 1, fly: true },   // v0.18：飞行怪（LayerLab Enemy Monster 2 · Bat_Cave），不掉材料
-    Beetle_Red: { name: '红甲虫王', hp: 1200, atk: 26, gem: 30, coin: 400, mat: 'amber', boss: true },
+    Slime_Green: { name: '绿史莱姆', hp: 24, atk: 8, gem: 1, mat: 'gel', p: 0.5, pity: 3 },
+    Snail_Green: { name: '绿蜗牛', hp: 40, atk: 12, gem: 2, mat: 'pearl', p: 0.35, pity: 4 },
+    Bat_Cave: { name: '洞穴蝙蝠', hp: 18, atk: 9, gem: 1, fly: true },   // v0.18：飞行怪（LayerLab Enemy Monster 2 · Bat_Cave），不掉材料
+    Beetle_Red: { name: '红甲虫王', hp: 2000, atk: 72, gem: 30, coin: 400, mat: 'amber', boss: true },
   };
   /* ---------- 怪物行为（v0.18，用户 18:21：不能都是“跑过来打一下”的同一模板；区域 1 取偏慢的值）----------
    * 时间单位秒，距离单位格。sight = 沿空腔 / 挖开的通道能走到主角身边的最长步数（隔着土走不过去就不追）。
    * wind = 前摇（闪红 + 蓄力姿势），每种攻击都有；cd = 打完到下一次能出手的间隔。 */
   B.AI = {
-    Slime_Green: { sight: 4, hop: 0.42, hopH: 0.38, rest: 0.8, wind: 0.6, lunge: 0.24, cd: 1.6 },                          // 一跳一格（能跳上 1 格台阶）；扑咬
-    Snail_Green: { sight: 3, step: 1.6, wind: 0.8, cd: 2.2, shellHits: 3, shellWin: 2.5, shellT: 2.2, shellDR: 0.75, shellCd: 3 },   // 慢爬；连挨 3 下缩壳 2.2 秒，期间受伤 −75%
+    Slime_Green: { sight: 4, hop: 0.42, hopH: 0.38, rest: 0.2, wind: 0.45, lunge: 0.24, cd: 1.3 },                          // 一跳一格（能跳上 1 格台阶）；扑咬
+    Snail_Green: { sight: 3, step: 1.0, wind: 0.55, cd: 1.5, shellHits: 5, shellWin: 2.5, shellT: 2.2, shellDR: 0.75, shellCd: 3 },   // 慢爬；连挨 3 下缩壳 2.2 秒，期间受伤 −75%
     Bat_Cave: { sight: 5, fly: 0.32, hover: 0.32, wind: 0.65, swoop: 0.32, perch: 1.2, cd: 1.8 },                         // 穿过空腔飞到主角斜上方 → 俯冲 → 落在旁边歇 1.2 秒（破绽）
   };
   /* 守卫红甲虫王：三种招式轮换 + 半血二阶段（每对数字 = [一阶段, 二阶段]），伤害 = 攻击 × 倍数 */
@@ -58,19 +64,24 @@
     rage: 0.5, roar: 1.3,        // 半血咆哮进入二阶段
   };
   B.HOP = { t: 0.5, h: 0.8 };    // 主角小跳（摇杆 / 方向键往上，头顶没有怪时）：0.5 秒，跳过冲撞和冲击波
-  B.monHp = (k, r) => B.MON[k].boss ? B.MON[k].hp : B.MON[k].hp * Math.pow(1.045, dep(r));
-  B.monAtk = (k, r) => B.MON[k].boss ? B.MON[k].atk : B.MON[k].atk * Math.pow(1.03, dep(r));
-  B.monCoin = (k, r) => B.MON[k].coin || B.dirtCoin(r) * 1.5;
+  // bfix（用户「血量根本没有什么用」根因：怪在出手前就被打死）：普通怪血量从浅处 ×1 渐变到 20 米以下 ×1.6，让深处一场战斗长到怪能出手 1–2 次；浅处新手照旧几下打死
+  B.monHpK = r => 1 + 0.6 * Math.min(1, dep(r) / 20);
+  B.monHp = (k, r) => B.SC * (B.MON[k].boss ? B.MON[k].hp : B.MON[k].hp * B.monHpK(r) * Math.pow(1.045, dep(r)));
+  // v0.20（用户 23:00「血量根本没有什么用」）：怪物攻击随深度涨得和血量一样快（1.03 → 1.04），基础攻击 +30% 左右；
+  // 打怪收益随深度涨：宝石 = 基础 × 1.04^米（四舍五入，至少 1），金币 = 同深度土 ×4（原 ×1.5）
+  B.monAtk = (k, r) => B.SC * (B.MON[k].boss ? B.MON[k].atk : B.MON[k].atk * Math.pow(1.045, dep(r)));   // bfix 1.04 → 1.045：20 米以下的怪要能把不升血量 / 防御的人打倒
+  B.monGem = (k, r) => B.MON[k].boss ? B.MON[k].gem : Math.max(1, Math.round(B.MON[k].gem * Math.pow(1.04, dep(r))));
+  B.monCoin = (k, r) => B.MON[k].coin || B.dirtCoin(r) * 4;
   B.hurt = (matk, def) => Math.max(1, Math.round(Math.max(matk * 0.15, matk - def)));
 
   /* ---------- 材料 ---------- */
   B.MAT = {
-    wood: { name: '树根木', img: 'mat/wood.png', src: '', srcT: '{wood} 米的树根方块（土里露出的树根）' },
-    silk: { name: '蛛丝', img: 'mat/spider_web.png', src: '', srcT: '{silk} 米洞穴角上的蜘蛛网（碰到就收）' },
+    wood: { name: '树根木', img: 'mat/wood.png', src: '', srcT: '{wood} 米的树根方块' },
+    silk: { name: '蛛丝', img: 'mat/spider_web.png', src: '', srcT: '{silk} 米洞穴角上的蜘蛛网' },
     copper: { name: '铜矿石', img: 'mat/copper.png', src: '', srcT: '{copper} 米的铜矿方块' },
     gel: { name: '史莱姆黏液', img: 'mat/cactus_pulp.png', src: '绿史莱姆 50% 掉落（连续 3 只没掉必掉）', mon: 'Slime_Green' },
-    pearl: { name: '蜗牛珠', img: 'mat/tree_sap.png', src: '', srcT: '绿蜗牛（{Snail_Green} 米起）35% 掉落（连续 4 只没掉必掉）', mon: 'Snail_Green' },
-    amber: { name: '甲虫琥珀', img: 'mat/amberstone.png', src: '', srcT: '{Beetle_Red} 米守卫“红甲虫王”首次击败必掉', mon: 'Beetle_Red' },
+    pearl: { name: '蜗牛涎', img: 'mat/tree_sap.png', src: '', srcT: '绿蜗牛（{Snail_Green} 米起）35% 掉落（连续 4 只没掉必掉）', mon: 'Snail_Green' },
+    amber: { name: '虫珀', img: 'mat/amberstone.png', src: '', srcT: '{Beetle_Red} 米守卫“红甲虫王”首次击败必掉', mon: 'Beetle_Red' },
   };
   B.MAT_ORDER = ['wood', 'silk', 'copper', 'gel', 'pearl', 'amber'];
   /* 深度文字（v0.18 修：原来手写“蜗牛 15 米起 / 蝙蝠 8 米起 / 50 米守卫”，和地形对不上）：不手写数字，
@@ -90,6 +101,7 @@
     helmet: { name: '头盔', stat: 'hp', part: 'Helmet' },
     armor: { name: '衣服', stat: 'stam', part: 'Chest' },
   };
+  // v0.20：盾 4/7/12 → 5/10/18（深处怪攻击 40–60，防御是减法，原数值买了只少掉 10–20%）
   B.GEAR = {
     weapon: [
       { name: '木棍', v: 5, part: 'Blunt', spr: 'FA_WP_Main_Blunt_001_Wood' },
@@ -100,10 +112,10 @@
     ],
     shield: [
       { name: '锅盖', v: 2, spr: 'FA_WP_Sub_Shield_002_WoodGray' },
-      { name: '木盾', v: 4, coin: 70, mat: { wood: 5 }, spr: 'FA_WP_Sub_Shield_005_WoodGray' },
-      { name: '铜盾', v: 7, coin: 380, mat: { copper: 6, wood: 4 }, spr: 'FA_WP_Sub_Shield_005_Gold' },
-      { name: '琥珀盾', v: 12, coin: 1500, mat: { copper: 10, gel: 4, amber: 1 }, spr: 'FA_WP_Sub_Shield_010_Gold' },
-      { name: '蓝钢盾', v: 21, next: true, spr: 'FA_WP_Sub_Shield_008_BlueGold' },
+      { name: '木盾', v: 5, coin: 70, mat: { wood: 5 }, spr: 'FA_WP_Sub_Shield_005_WoodGray' },
+      { name: '铜盾', v: 10, coin: 380, mat: { copper: 6, wood: 4 }, spr: 'FA_WP_Sub_Shield_005_Gold' },
+      { name: '琥珀盾', v: 18, coin: 1500, mat: { copper: 10, gel: 4, amber: 1 }, spr: 'FA_WP_Sub_Shield_010_Gold' },
+      { name: '蓝钢盾', v: 32, next: true, spr: 'FA_WP_Sub_Shield_008_BlueGold' },
     ],
     helmet: [
       { name: '布帽', v: 50, spr: 'FA_Helmet_007_RedWhite' },
@@ -114,9 +126,9 @@
     ],
     armor: [
       { name: '粗布衣', v: 10, spr: 'FA_Chest_004_Brown' },
-      { name: '草编衣', v: 15, coin: 90, mat: { wood: 5 }, spr: 'FA_Chest_010_Brown' },
-      { name: '蛛丝衣', v: 22, coin: 450, mat: { silk: 4, gel: 3 }, spr: 'FA_Chest_013_White' },
-      { name: '琥珀甲', v: 33, coin: 1800, mat: { copper: 8, pearl: 2, amber: 1 }, spr: 'FA_Chest_016_Gold' },
+      { name: '根编衣', v: 17, coin: 90, mat: { wood: 5 }, spr: 'FA_Chest_010_Brown' },
+      { name: '蛛丝衣', v: 20, coin: 450, mat: { silk: 4, gel: 3 }, spr: 'FA_Chest_013_White' },
+      { name: '琥珀甲', v: 25, coin: 1800, mat: { copper: 8, pearl: 2, amber: 1 }, spr: 'FA_Chest_016_Gold' },
       { name: '翠银斗篷', v: 50, next: true, spr: 'FA_Chest_015_GreenSilver' },
     ],
   };
@@ -134,13 +146,13 @@
     { id: 'dig2', name: '精钢镐尖', ic: 'Material_Ore_03_Silver', x: 0, y: -2, max: 1, c0: 150, cur: 'coin', br: 'dig', add: ['dig', 1.0], req: [['dig', 5]], desc: one('挖掘力', 1.0) },
     { id: 'dig3', name: '镐尖打磨', ic: 'Item_Anvil_01_Light', x: -1, y: -3, max: 2, c0: 450, cur: 'coin', br: 'dig', add: ['dig', 1.0], req: [['dig2', 1]], desc: per('挖掘力', 1.0) },
     { id: 'freq', name: '挥镐速度', ic: 'Economy_Energy_01_Yellow', x: -1, y: -2, max: 6, c0: 60, cur: 'coin', br: 'dig', add: ['freq', 0.25], req: [['dig', 1]], desc: per('每秒挥击', '0.25 次', 1) },
-    { id: 'heavy', name: '重击', ic: 'Gear_Weapons_Hammer_01', x: 1, y: -2, max: 1, c0: 60, cur: 'coin', br: 'dig', mech: 1, req: [['dig', 3]], desc: () => '每第 4 下挖掘伤害 ×3' },
+    { id: 'heavy', name: '重击', ic: 'Gear_Weapons_Hammer_01', x: 1, y: -2, max: 1, c0: 60, cur: 'coin', br: 'dig', mech: 1, req: [['dig', 3]], desc: () => `每第 ${B.P.heavyN} 下挖掘伤害 ×3` },
     { id: 'heavy2', name: '重击强化', ic: 'Gear_Weapons_Hammer_02', x: 2, y: -3, max: 3, c0: 500, cur: 'coin', br: 'dig', add: ['heavy', 1], req: [['heavy', 1]], desc: () => '重击倍率 +1 / 级' },
     { id: 'pierce', name: '穿透', ic: 'Gear_Weapons_Shovel_01', x: -2, y: -3, max: 1, c0: 500, cur: 'coin', br: 'dig', mech: 1, req: [['freq', 2]], desc: () => '往下挖时，下面第 2 格同时受 50% 伤害' },
-    { id: 'soil', name: '表土专精', ic: 'Material_Ore_01', x: 0, y: -3, max: 4, c0: 1200, cur: 'coin', br: 'dig', add: ['soil', 0.5], req: [['dig2', 1]], desc: per('表土层方块伤害', 0.5) },
-    { id: 'soilx', name: '表土制霸', ic: 'Misc_Earth_01', x: 0, y: -4, max: 1, c0: 6000, gem: 50, cur: 'coin', br: 'dig', mech: 1, req: [['soil', 4]], boss: 1, desc: () => '表土层方块一下就碎（玄武岩除外）' },
+    { id: 'soil', name: '浅层专精', ic: 'Material_Ore_01', x: 0, y: -3, max: 3, c0: 700, cur: 'coin', br: 'dig', add: ['soil', 1.0], req: [['dig2', 1]], desc: per('浅层岩土方块伤害（玄武岩除外）', 1.0) },
+    { id: 'soilx', name: '浅层制霸', ic: 'Misc_Earth_01', x: 0, y: -4, max: 1, c0: 6000, gem: 50, cur: 'coin', br: 'dig', mech: 1, req: [['soil', 3]], boss: 1, desc: () => '浅层岩土所有方块一下就碎（含玄武岩）' },
     // v0.18 挖掘机制线第一段（用户路线图 15.1/15.2 定的区域 1 参数；强度全在 B.MECH，以后的区域往 B.MECH 里加形态）
-    { id: 'boom', name: '回旋镐', ic: 'DH_Skill_Boomerang_Pickaxe', x: -3, y: -2, max: 1, c0: 260, mat: { copper: 4, wood: 3 }, cur: 'coin', br: 'dig', mech: 1, req: [['freq', 2]], desc: () => `每 ${B.MECH.boom.cd} 秒扔出镐飞 ${B.MECH.boom.range} 格再飞回，去回各打 1 下（挖掘力 ${Math.round(B.MECH.boom.dmg * 100)}%）` },
+    { id: 'boom', name: '回旋镐', ic: 'DH_Skill_Boomerang_Pickaxe', x: -3, y: -2, max: 1, c0: 260, mat: { copper: 4, wood: 3 }, cur: 'coin', br: 'dig', mech: 1, req: [['freq', 2]], desc: () => `每 ${B.MECH.boom.cd} 秒扔出镐直线飞 ${B.MECH.boom.range} 格再飞回，沿途最多打 ${B.MECH.boom.pierce + 1} 格，去回各打 1 下（挖掘力 ${Math.round(B.MECH.boom.dmg * 100)}%）` },
     { id: 'boomcd', name: '回旋镐·快手', ic: 'Item_Clock_01_Silver', x: -3, y: -3, max: 2, c0: 150, cur: 'coin', br: 'dig', req: [['boom', 0]], desc: () => `回旋镐冷却 −${B.MECH.boom.cdStep} 秒 / 级` },   // 0：价格由用户直接定（父节点还要材料），不参与价格顺序核对
     { id: 'giant', name: '巨镐', ic: 'DH_Skill_Giant_Pickaxe', x: 1, y: -3, max: 1, c0: 420, mat: { copper: 6, gel: 2 }, cur: 'coin', br: 'dig', mech: 1, req: [['heavy', 1]], desc: () => `每下多打左右各 1 格（${Math.round(B.MECH.giant.sideK * 100)}% 伤害）` },
     { id: 'giantw', name: '巨镐·加宽', ic: 'DH_Skill_Giant_Wide', x: 2, y: -4, max: 1, c0: 500, cur: 'coin', br: 'dig', req: [['giant', 1]], desc: () => `巨镐旁边两格伤害 ${Math.round(B.MECH.giant.sideK * 100)}% → ${Math.round((B.MECH.giant.sideK + B.MECH.giant.sideStep) * 100)}%` },
@@ -149,7 +161,7 @@
     { id: 'time2', name: '大胃王', ic: 'Consumable_Food_Stew_01', x: -2, y: 0, max: 1, c0: 120, cur: 'coin', br: 'live', add: ['stam', 0.6], req: [['time', 6]], desc: one('体力上限', 0.6) },
     { id: 'time3', name: '储粮', ic: 'Consumable_Food_Bread_01', x: -3, y: 1, max: 2, c0: 300, cur: 'coin', br: 'live', add: ['stam', 0.6], req: [['time2', 1]], desc: per('体力上限', 0.6) },
     { id: 'full', name: '吃饱有力', ic: 'Consumable_Food_Steak_01', x: -2, y: -1, max: 1, c0: 50, cur: 'coin', br: 'live', mech: 1, req: [['time', 2]], desc: () => '体力高于 50% 时挖掘力 +30%' },
-    { id: 'kill', name: '打怪回气', ic: 'Consumable_Food_Skewer_01', x: -3, y: 0, max: 1, c0: 120, cur: 'coin', br: 'live', mech: 1, req: [['time2', 1]], desc: () => '打死怪回复 8% 体力' },
+    { id: 'kill', name: '打怪回气', ic: 'Consumable_Food_Skewer_01', x: -3, y: 0, max: 1, c0: 120, cur: 'coin', br: 'live', mech: 1, req: [['time2', 1]], desc: () => `打死怪回复体力：当前深度 ${B.KILL_SEC} 秒的消耗` },
     { id: 'aid', name: '急救包', ic: 'Consumable_Healing_Bandage_01', x: -2, y: 1, max: 2, c0: 200, cur: 'coin', br: 'live', req: [['time', 3]], desc: () => '血量归零时多保住 15% 收获 / 级' },
     { id: 'lamp', name: '光源', ic: 'Item_Bulb_01_On', x: -1, y: 1, max: 1, c0: 40, mat: { silk: 2 }, cur: 'coin', br: 'live', mech: 1, req: [['time', 1]], desc: () => `头灯照亮半径 +${B.MECH.lamp.add} 格，照出暗洞里的暗格宝箱` },
     { id: 'lampr', name: '光源亮度', ic: 'Item_Candle_01', x: -2, y: 2, max: 1, c0: 90, cur: 'coin', br: 'live', req: [['lamp', 1]], desc: () => `头灯照亮半径再 +${B.MECH.lamp.step} 格` },
@@ -169,9 +181,9 @@
     { id: 'coin3', name: '财源滚滚', ic: 'Item_PiggyBank', x: -1, y: 3, max: 2, c0: 150, cur: 'gem', br: 'eco', add: ['coin', 0.8], req: [['coin2', 1]], desc: per('金币获取', 0.8) },
     { id: 'gem', name: '宝石嗅觉', ic: 'Economy_Gem_01_Purple', x: 1, y: 2, max: 6, c0: 15, cur: 'coin', br: 'eco', add: ['gem', 0.08], req: [['coin', 1]], desc: per('宝石获取', 0.08) },
     { id: 'gem2', name: '慧眼', ic: 'Economy_Gem_04_Purple', x: 2, y: 2, max: 1, c0: 200, cur: 'coin', br: 'eco', add: ['gem', 1.0], req: [['gem', 6]], desc: one('宝石获取', 1.0) },
-    { id: 'ore', name: '矿石专家', ic: 'Material_Ore_02_01', x: -1, y: 2, max: 2, c0: 300, cur: 'coin', br: 'eco', req: [['coin', 2]], desc: () => '每块树根 / 矿多掉 1 个材料 / 级' },
-    { id: 'slime', name: '史莱姆猎人', ic: 'Item_Jelly_01', x: 1, y: 3, max: 2, c0: 60, cur: 'gem', br: 'eco', req: [['coin2', 1]], desc: () => '史莱姆黏液掉率 +25% / 级' },
-    { id: 'chest', name: '幸运宝箱', ic: 'Item_Chest_01_Wood', x: 2, y: 3, max: 1, c0: 80, cur: 'coin', br: 'eco', mech: 1, req: [['gem', 1]], desc: () => '每趟地下出现 1 个宝箱' },
+    { id: 'ore', name: '矿石专家', ic: 'Material_Ore_02_01', x: -1, y: 2, max: 2, c0: 300, cur: 'coin', br: 'eco', req: [['coin', 2]], desc: () => '每块树根 / 铜矿、每张蜘蛛网多掉 1 个材料 / 级' },
+    { id: 'slime', name: '史莱姆猎人', ic: 'Item_Jelly_01', x: 1, y: 3, max: 2, c0: 20, cur: 'gem', br: 'eco', req: [['gem', 1]], desc: () => '史莱姆黏液掉率 +25% / 级' },
+    { id: 'chest', name: '幸运宝箱', ic: 'Item_Chest_01_Wood', x: 2, y: 3, max: 1, c0: 80, cur: 'coin', br: 'eco', mech: 1, req: [['gem', 1]], desc: () => `每趟地下出现 1 个宝箱（18–36 米的洞里），金币 = 同深度 ${B.CHEST_K} 块土` },
     // 条件分支（用户 18:19）：cond = 出现条件（B.COND 里的键），不满足时整支不显示、不能买；没有 req 的 cond 节点 = 这支的独立起点（不连主网）
     // 法杖分支：拿到 VIP 法杖后出现。射程 2 → 最多 4 格；“多级小加成 → 单级大跳”交替
     { id: 'srange', name: '法杖射程', ic: 'Item_Telescope', x: 1, y: 5, max: 2, c0: 15, cur: 'gem', br: 'magic', cond: 'staff', add: ['srange', 1], desc: () => '法杖射程 +1 格 / 级' },
@@ -182,7 +194,7 @@
     // v0.18 宠物分支（用户 18:59：按类别做，不是每只一支）：拥有该类任意一只宠物就长出这一类的独立分支（不连主网）；
     // 通用节点作用在当前带着的同类宠物上；每只宠物另有 1 个专属大跳（单级，cond = 拥有这只宠物）。以后新宠物在 B.PETS 标 cat 就自动吃到本类分支
     // 攻击类（炸弹崽、南瓜灯；宝石）——摆在技能树右上方
-    { id: 'pa1', name: '宠物火力', ic: 'Stat_Attack_01', x: 2, y: -6, max: 5, c0: 10, cur: 'gem', br: 'patk', cond: 'petcat:atk', add: ['pa_dmg', 0.1], desc: () => '攻击类宠物伤害 +10% / 级' },
+    { id: 'pa1', name: '宠物火力', ic: 'Stat_Attack_01', x: 2, y: -6, max: 5, c0: 10, cur: 'gem', br: 'patk', cond: 'petcat:atk', add: ['pa_dmg', 0.2], desc: () => '攻击类宠物伤害 +20% / 级' },
     { id: 'pa2', name: '宠物猛攻', ic: 'Stat_Attack_02', x: 3, y: -7, max: 1, c0: 50, cur: 'gem', br: 'patk', cond: 'petcat:atk', add: ['pa_dmg', 1.0], req: [['pa1', 5]], desc: () => '攻击类宠物伤害 +100%' },
     { id: 'pa4', name: '烈焰之心', ic: 'Misc_Fire_01_Red', x: 3, y: -8, max: 2, c0: 100, cur: 'gem', br: 'patk', cond: 'petcat:atk', add: ['pa_dmg', 1.0], req: [['pa2', 1]], desc: () => '攻击类宠物伤害 +100% / 级' },
     { id: 'pa3', name: '宠物快攻', ic: 'Stat_AttackSpeed_01', x: 1, y: -7, max: 4, c0: 15, cur: 'gem', br: 'patk', cond: 'petcat:atk', add: ['pa_cd', 0.05], req: [['pa1', 1]], desc: () => '攻击类宠物冷却 −5% / 级' },
@@ -191,14 +203,14 @@
     { id: 'xbomb', name: '连环炸', ic: 'Consumable_Explosives_Bomb_03_Red', x: 1, y: -9, max: 1, c0: 300, cur: 'gem', br: 'patk', cond: 'pet:Bomb', mech: 1, req: [['pa6', 1]], desc: () => '炸弹崽每次扔 2 颗炸弹（第 2 颗炸另一个目标）' },
     { id: 'xburn', name: '灼烧', ic: 'Neture_Fire_02_Red', x: 3, y: -9, max: 1, c0: 300, cur: 'gem', br: 'patk', cond: 'pet:Pumpkin', mech: 1, req: [['pa6', 1]], desc: () => `被南瓜灯烧到的怪 ${B.PET_BURN.t} 秒内每秒再受攻击 ×${B.PET_BURN.k}` },
     // 探索类（挖挖狗；以后磁铁、照明类宠物也归这里；金币）——摆在技能树左上方
-    { id: 'pe1', name: '刨土力度', ic: 'Gear_Glove_01', x: -2, y: -6, max: 5, c0: 30, cur: 'coin', br: 'pexp', cond: 'petcat:explore', add: ['pe_dmg', 0.1], desc: () => '探索类宠物刨土伤害 +10% / 级' },
+    { id: 'pe1', name: '刨土力度', ic: 'Gear_Glove_01', x: -2, y: -6, max: 5, c0: 30, cur: 'coin', br: 'pexp', cond: 'petcat:explore', add: ['pe_dmg', 0.2], desc: () => '探索类宠物刨土伤害 +20% / 级' },
     { id: 'pe2', name: '用力刨', ic: 'Stat_Power_01', x: -1, y: -7, max: 1, c0: 150, cur: 'coin', br: 'pexp', cond: 'petcat:explore', add: ['pe_dmg', 1.0], req: [['pe1', 5]], desc: () => '探索类宠物刨土伤害 +100%' },
     { id: 'pe5', name: '利爪打磨', ic: 'Gear_Weapons_Saw_01', x: -1, y: -8, max: 2, c0: 450, cur: 'coin', br: 'pexp', cond: 'petcat:explore', add: ['pe_dmg', 1.0], req: [['pe2', 1]], desc: () => '探索类宠物刨土伤害 +100% / 级' },
     { id: 'pe3', name: '勤快', ic: 'Item_Hourglass_01_Wood', x: -3, y: -7, max: 4, c0: 40, cur: 'coin', br: 'pexp', cond: 'petcat:explore', add: ['pe_cd', 0.05], req: [['pe1', 1]], desc: () => '探索类宠物冷却 −5% / 级' },
     { id: 'pe4', name: '收集范围', ic: 'Item_Magnet_01', x: -3, y: -8, max: 1, c0: 200, cur: 'coin', br: 'pexp', cond: 'petcat:explore', mech: 1, add: ['pe_rng', 1], req: [['pe3', 4]], desc: () => '探索类宠物收集范围 +1 格（自动收身边 2 格内的蜘蛛网）' },
     { id: 'xpaw', name: '双爪', ic: 'DH_Skill_Double_Paw', x: -2, y: -9, max: 1, c0: 1000, cur: 'coin', br: 'pexp', cond: 'pet:Pug', mech: 1, req: [['pe4', 1]], desc: () => '挖挖狗每次刨 2 格' },
     // 回复类（花花、泡泡鱼；金币）——摆在法杖分支下面
-    { id: 'ph1', name: '回复量', ic: 'Consumable_Potion_01_Green', x: 0, y: 8, max: 5, c0: 120, cur: 'coin', br: 'pheal', cond: 'petcat:heal', add: ['ph_amt', 0.005], desc: () => '回复类宠物每次多回 0.5% 上限 / 级（花花回血量、泡泡鱼回体力）' },
+    { id: 'ph1', name: '回复量', ic: 'Consumable_Potion_01_Green', x: 0, y: 8, max: 5, c0: 120, cur: 'coin', br: 'pheal', cond: 'petcat:heal', add: ['ph_amt', 0.01], desc: () => '回复类宠物每次多回 1% 上限 / 级（花花回血量、泡泡鱼回体力）' },
     { id: 'ph2', name: '大补', ic: 'Consumable_Potion_02_Green', x: 1, y: 9, max: 1, c0: 600, cur: 'coin', br: 'pheal', cond: 'petcat:heal', add: ['ph_amt', 0.05], req: [['ph1', 5]], desc: () => '回复类宠物每次多回 5% 上限' },
     { id: 'ph5', name: '生命之泉', ic: 'Economy_Elixir_01_Green', x: 2, y: 9, max: 2, c0: 1500, cur: 'coin', br: 'pheal', cond: 'petcat:heal', add: ['ph_amt', 0.05], req: [['ph2', 1]], desc: () => '回复类宠物每次多回 5% 上限 / 级' },
     { id: 'ph3', name: '回复加速', ic: 'Item_Hourglass_02_Green', x: -1, y: 9, max: 4, c0: 150, cur: 'coin', br: 'pheal', cond: 'petcat:heal', add: ['ph_cd', 0.05], req: [['ph1', 1]], desc: () => '回复类宠物冷却 −5% / 级' },
@@ -218,7 +230,7 @@
   B.MECH = {
     // 回旋镐：n 把镐（扇形）、cd 冷却秒、range 飞几格、dmg 挖掘力倍数（打怪用攻击 × dmg）、pierce 穿过几个实心格（0 = 打到第一个就折返）
     // hits 每个目标打几下（去 1 回 1）、basalt 能不能伤玄武岩、speed 飞行格/秒、linger 打中后原地转几秒再回、spin 每秒转几圈、cdStep 快手每级减的秒数
-    boom: { n: 1, cd: 6, cdStep: 1, range: 3, dmg: 0.6, pierce: 0, hits: 2, basalt: false, speed: 11, linger: 0.18, spin: 3.2 },
+    boom: { n: 1, cd: 5, cdStep: 1, range: 3, dmg: 1.0, pierce: 2, hits: 2, basalt: false, speed: 11, linger: 0.18, spin: 3.2 },
     // 巨镐：side 左右各几格、sideK 旁边格伤害倍数、sideStep 加宽每级加多少、rows 往挥击方向打几排（3×3 进化时 = 3）、pick 镐图放大倍数
     giant: { side: 1, sideK: 0.5, sideStep: 0.25, rows: 1, pick: 1.45 },
     // 光源：add 机制节点加的照亮半径（格）、step 亮度节点每级加的格数、dark 每趟暗格宝箱个数 [最少, 最多]、gem 宝石、matN 最缺材料个数、xray 透视（进化，区域 1 没有）
@@ -235,12 +247,13 @@
   // 数值都按主角当前属性的比例算（区域 1 取偏弱的值）；以后更强的宠物同方向放大 k / 缩短 cd
   // kind：dig 刨土 / bomb 爆破 / fire 火光 / heal 治疗 / stam 体力；cd 冷却秒；anim 宠物 Spine 动作
   const PET = {
-    Pug: { name: '挖挖狗', cat: 'explore', kind: 'dig', cd: 6, k: 3, web: 1, anim: 'Attack' },             // 刨开身边 1 格：伤害 = 挖掘力 ×3；身边 1 格内蜘蛛网自动收
+    Pug: { name: '挖挖狗', cat: 'explore', kind: 'dig', cd: 4, k: 5, web: 1, anim: 'Attack' },             // 刨开身边 1 格：伤害 = 挖掘力 ×3；身边 1 格内蜘蛛网自动收
     Bomb: { name: '炸弹崽', cat: 'atk', kind: 'bomb', cd: 5, blk: 4, mon: 2, anim: 'Attack' },        // 往面前 1 格扔炸弹：方块受 挖掘力 ×4，怪受 攻击 ×2
     Pumpkin: { name: '南瓜灯', cat: 'atk', kind: 'fire', fly: 1, cd: 10, mon: 1.5, light: 1.5, anim: 'Busking' }, // 照亮 +50%；身边一圈火光：1 格内（含斜角）每只怪受 攻击 ×1.5
     Flower: { name: '花花', cat: 'heal', kind: 'heal', cd: 8, heal: 0.05, anim: 'Busking' },            // 回 5% 血量（满血时等着，掉血后马上放）
     Goldfish: { name: '泡泡鱼', cat: 'heal', kind: 'stam', fly: 1, cd: 10, stam: 0.05, anim: 'Busking' },        // 吐泡泡回 5% 体力
   };
+  B.STAM_SEC = 60;   // v0.20 泡泡鱼：回 stam × 60 秒 = 所在深度掉体力的秒数（5% → 3 秒），和体力上限脱钩，不随上限溢出
   const pc = x => Math.round(x * 100) + '%';
   // v0.19 说明由参数拼（用户 22:40 定：宠物页显示加上分支后的实际数值）；VIP 卡显示基础值
   const nf = x => String(Math.round(x * 10) / 10);
@@ -250,7 +263,7 @@
     if (P.kind === 'bomb') return `每 ${cd} 秒炸开面前 1 格（方块：挖掘力 ×${nf(P.blk)}，怪：攻击 ×${nf(P.mon)}${two}）`;
     if (P.kind === 'fire') return `照亮范围 +${pc(P.light - 1)}；每 ${cd} 秒火光烧身边的怪（攻击 ×${nf(P.mon)}）`;
     if (P.kind === 'heal') return `每 ${cd} 秒回 ${pc(P.heal)} 血量`;
-    return `每 ${cd} 秒吐泡泡，回 ${pc(P.stam)} 体力`;
+    return `每 ${cd} 秒吐泡泡，回 ${nf(P.stam * B.STAM_SEC)} 秒的体力消耗`;
   };
   for (const k in PET) PET[k].desc = B.petDesc(PET[k]);
   B.PETS = PET;
@@ -305,6 +318,7 @@
 
   /* ---------- 由存档算出面板属性 ---------- */
   B.gearOf = (S, slot) => B.GEAR[slot][S.gear[slot] || 0];
+  for (const sl in B.GEAR) for (const g of B.GEAR[sl]) g.v *= B.SC;   // 装备数值 ×B.SC（表里按原刻度写，读的时候都是整数化后的）
   B.derive = (S) => {
     const L = id => S.skill[id] || 0, v = s => B.gearOf(S, s).v;
     const staff = !!S.staff && (S.vip || 0) >= B.vipLv('staff');   // 法杖拿在手上：攻击 = 最高武器 × 1.1
