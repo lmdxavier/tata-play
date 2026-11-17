@@ -35,7 +35,7 @@ const CAMP = (()=>{
   //   南瓜（一颗大南瓜）和彩虹花（一株大花）差不多大 → 都是 1.05；鱼缸金鱼是桌上的小鱼缸 → 0.8；炸弹是圆炸弹 → 0.7；
   //   未获得的（以后进营地）：史莱姆 0.75、甲虫 0.7、蜗牛 0.65、狐狸比小狗略大 1.1、灰熊最大 1.7。
   const CAMP_H = 60;
-  const BODY = { pug:1.0, lizard:1.35, pumpkin:1.05, flower:1.05, goldfish:0.8, bomb:0.7, slime:0.75, beetle:0.7, snail:0.65, fox:1.1, bear:1.7 };
+  const BODY = { pug:1.0, lizard:1.35, pumpkin:1.05, flower:1.05, goldfish:0.8, bomb:0.7, slime:0.75, beetle:0.7, snail:0.65, fox:1.1, bear:1.7, wildox:1.5, disco:1.7, goat:1.1, toucan:1.0, hornbug:0.7, cat:0.95 };   // 91 版：新宠物身高（其余默认 1）
   // 可见内容占骨架绘制高度的比例（h = 可见高 / visH）和可见宽 / 绘制高：2026-11-13 用 renderChar 画 Idle、读不透明像素量出来的
   //   （运行时不能读像素：file:// 打开时画布跨域会报错）。炸弹的骨架范围比身体大很多（引线火花），所以 visH 只有 0.59。
   const VIS = { flower:[0.89,0.795], goldfish:[0.905,0.72], pug:[0.875,0.97], pumpkin:[0.99,0.85], bomb:[0.59,0.775], lizard:[0.925,1.045],

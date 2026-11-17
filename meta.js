@@ -46,13 +46,15 @@ MT.ui = 'depth';   // 44 版（用户 2026-11-13）：默认立体
 try{ const u=localStorage.getItem('tata_ui44'); if(u==='flat'||u==='depth'||u==='deco') MT.ui=u; }catch(e){}
 const PULL = 190;   // 向下拉多少（设计像素）= 完整详情
 // 职能图标：Fantasy Hero PictoIcon（卡片左下圆标里就是它）；包里没有炸弹，地雷用 Critical（爆炸形）
-const ROLE_ICON = {producer:'PictoIcon_Thunder', shooter:'PictoIcon_Bow', melee:'PictoIcon_Attack', wall:'PictoIcon_Shield', mine:'PictoIcon_Critical', support:'PictoIcon_Health'};   // 第2章角色 v1：+ 治疗
+const ROLE_ICON = {producer:'PictoIcon_Thunder', shooter:'PictoIcon_Bow', melee:'PictoIcon_Attack', wall:'PictoIcon_Shield', mine:'PictoIcon_Critical', support:'PictoIcon_Like'};   // 91 版：辅助（回血、加速、收能量、控场）统一用爱心   // 第2章角色 v1：+ 治疗
 const roleIcon = r => hero(ROLE_ICON[r]);
 // PictoIcon 是白图：启程配色的浅底上按深色着色，选中（深底）时用浅色
 const roleIco = (r, on) => MT.theme==='afk' ? heroT(ROLE_ICON[r], on?'#f4f0e7':'#8d8485') : roleIcon(r);
-const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦克', mine:'地雷', support:'治疗'};
-const EL_CN = {fire:'火', water:'水', grass:'草', none:'无'};
-const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速', fox:'近战 · 三路横扫', mushgoat:'治疗 · 周围 3×3', bear:'坦克 · 拍击击退'};   // 第2章角色 v1
+const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦克', mine:'地雷', support:'辅助'};
+const EL_CN = {fire:'火', water:'水', grass:'草', light:'光', dark:'暗', none:'无'};
+const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速', fox:'近战 · 三路横扫', mushgoat:'治疗 · 周围 3×3', bear:'坦克 · 拍击击退',
+  slime:'远程 · 减速', beetle:'近战 · 带刺反伤', snake:'近战 · 中毒', hornliz:'近战 · 半血发怒', hornbug:'近战 · 同路加成', gull:'远程 · 越过道具', shellliz:'坦克 · 挡远程',
+  goat:'近战 · 冲撞击退', cat:'辅助 · 自动收能量', bellsnake:'辅助 · 加攻速', redbird:'远程 · 打最远', mushsnake:'控制 · 孢子定身', wildox:'坦克 · 冲锋', toucan:'控制 · 叼走', disco:'控制 · 群体定身'};   // 91 版   // 第2章角色 v1
 // 升星后攻击方式的变化：照抄 docs/vfx-design.md 9.1（提案），那边改了这里跟着改
 const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
@@ -826,7 +828,7 @@ function tabFocus(cx, by, w){
 }
 function drawFilters(x, y, w, live){
   const rows=[
-    [['all','全部',null], ['fire','',icon(PROJ_ICON.fire)], ['water','',icon(PROJ_ICON.water)], ['grass','',icon(PROJ_ICON.grass)]],
+    [['all','全部',null], ['fire','',icon(PROJ_ICON.fire)], ['water','',icon(PROJ_ICON.water)], ['grass','',icon(PROJ_ICON.grass)], ['light','',icon(PROJ_ICON.light)], ['dark','',icon(PROJ_ICON.dark)]],   // 91 版：+ 光、暗
     [['all','全部',null], ...Object.keys(ROLE_CN).map(k=>[k,'',roleIcon(k)])],
   ];
   rows.forEach((row,ri)=>{ const cur = ri===0?MT.fEl:MT.fRole, pad=12, gap=6, cw=(w-pad*2-gap*(row.length-1))/row.length, cy=y+4+ri*38;

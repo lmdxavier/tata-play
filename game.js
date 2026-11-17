@@ -34,30 +34,46 @@ const DATA = {
     mushgoat:{cn:'菇背羊', desc:'不攻击。每 6 秒给周围 3×3 格内的宠物回复 80 生命（包括自己）。', rarity:'rare', name:'Goat_Mushroom', short:'菇', el:'grass', shape:'support', cost:125, cd:15, hp:600, heal:{amt:80, every:6}, windup:0.3, monster:true},
     bear:    {cn:'格鲁姆', desc:'生命 2400，能挡住蛮角牛和巴隆的践踏。每 2.4 秒拍击前方 1 格，90 伤害，并把普通敌人击退 0.6 格。', rarity:'epic', name:'Bear_Grizzly', short:'熊', el:'none', shape:'melee', tank:true, cost:200, cd:30, hp:2400, dmg:90, int:2.4, reach:1, knock:0.6, windup:0.47, monster:true},
     lizard:  {cn:'喷火蜥', desc:'朝前方 2 格喷火，命中的敌人灼烧：每秒 6 点，持续 3 秒。', rarity:'rare', name:'Lizard_Fire',short:'火蜥',el:'fire',shape:'melee',  cost:150, cd:8,  hp:400,  dmg:30, int:1.5, reach:2, burn:{dps:6, t:3}, windup:0.28, monster:true},
+    // ===== 91 版：所有怪都能召唤（用户 2026-11-17 同意 Claude 的提案）：宠物技能 = 它当敌人时的那一招；出手时机沿用敌方同一只怪测好的 windup =====
+    slime:    {cn:'绿莱姆', desc:'向本路前方吐粘液弹，每 1.5 秒一发，14 伤害；命中的敌人移动变慢 20%，持续 2 秒。', rarity:'common', name:'Slime_Green', short:'史', el:'grass', shape:'shooter', cost:75, cd:6, hp:300, dmg:14, int:1.5, projSpeed:5, windup:0.1, monster:true, spit:{k:0.8, t:2}},
+    beetle:   {cn:'赤甲虫', desc:'咬前方 1 格，每 1.1 秒 30 伤害。背上带刺：咬它的敌人每口反受 15 伤害。', rarity:'common', name:'Beetle_Red', short:'甲', el:'fire', shape:'melee', cost:75, cd:6, hp:500, dmg:30, int:1.1, reach:1, windup:0.15, monster:true, thorns:15},
+    snake:    {cn:'翠颈蛇', desc:'咬前方 1 格，每秒 16 伤害；咬中的敌人中毒：每秒 5 伤害，持续 4 秒。', rarity:'common', name:'Snake_Green', short:'蛇', el:'grass', shape:'melee', cost:75, cd:6, hp:360, dmg:16, int:1.0, reach:1, windup:0.17, monster:true, venom:{dps:5, t:4}},
+    hornliz:  {cn:'棘背蜥', desc:'咬前方 1 格，每 1.2 秒 34 伤害。生命降到一半以下后发怒，攻击间隔缩短 30%。', rarity:'common', name:'Lizard_Horn', short:'棘', el:'grass', shape:'melee', cost:100, cd:8, hp:520, dmg:34, int:1.2, reach:1, windup:0.2, monster:true, fury:{at:0.5, k:0.7}},
+    hornbug:  {cn:'尖角虫', desc:'咬前方 1 格，每 0.9 秒 16 伤害。同一路每多 1 只尖角虫，攻击 +15%（最多 +60%）。', rarity:'common', name:'Beetle_Blood', short:'角', el:'dark', shape:'melee', cost:50, cd:5, hp:260, dmg:16, int:0.9, reach:1, windup:0.15, monster:true, pack:{k:0.15, max:4}},
+    gull:     {cn:'长信翁', desc:'抛出水弹，每 1.8 秒一发，26 伤害；弧线飞行，越过木箱等道具，打本路最前面的敌人。', rarity:'rare', name:'Bird_Gull', short:'翁', el:'none', shape:'shooter', cost:100, cd:7, hp:280, dmg:26, int:1.8, projSpeed:4.5, windup:0.42, monster:true, lob:true},
+    goat:     {cn:'莽角羊', desc:'咬前方 1 格，每秒 20 伤害。每 12 秒冲向前方 4 格内最近的敌人，撞击 200 伤害并击退 1 格（精英、Boss 不击退），撞完回到原位。', rarity:'rare', name:'Goat_Angry', short:'莽', el:'none', shape:'melee', cost:125, cd:12, hp:450, dmg:20, int:1.0, reach:1, windup:0.2, monster:true, ram:{every:12, dmg:200, knock:1, range:4}},
+    cat:      {cn:'灰原喵', desc:'不攻击。每 1.5 秒自动收取周围 3×3 格内的一颗能量，不用点。', rarity:'rare', name:'Animal_Cat', short:'喵', el:'dark', shape:'support', cost:50, cd:10, hp:300, windup:0.25, monster:true, magnet:{every:1.5, dl:1, dp:1.5}},
+    bellsnake:{cn:'铃尾蛇', desc:'不攻击。每 8 秒摇一次铃：周围 3×3 格内的宠物攻击速度 +25%，持续 3 秒。', rarity:'rare', name:'Snake_Bell', short:'铃', el:'light', shape:'support', cost:100, cd:12, hp:300, windup:0.17, monster:true, chime:{every:8, t:3, k:1.25}},
+    redbird:  {cn:'掠空鸟', desc:'每 2 秒俯冲攻击本路最远的一只敌人，40 伤害，能打到飞行的敌人。', rarity:'rare', name:'Bird_Red', short:'掠', el:'fire', shape:'shooter', cost:125, cd:8, hp:260, dmg:40, int:2.0, windup:0.2, monster:true, snipe:true},
+    mushsnake:{cn:'伞顶蛇', desc:'不攻击。每 10 秒炸开伞顶孢子：本路和上下相邻路、前后 1.5 格内的敌人停下 1.5 秒（Boss 不受影响）。', rarity:'rare', name:'Snake_Mushroom', short:'伞', el:'fire', shape:'support', cost:100, cd:12, hp:300, windup:0.17, monster:true, sporeP:{every:10, t:1.5, dl:1, dp:1.5}},
+    shellliz: {cn:'背壳蜥', desc:'生命 1400，不攻击。背壳挡住远程攻击：喷火等远程攻击打它只有 50% 伤害。', rarity:'rare', name:'Lizard_Snail', short:'壳', el:'water', shape:'wall', cost:75, cd:15, hp:1400, windup:0.25, monster:true, shellP:0.5},
+    wildox:   {cn:'蛮角牛', desc:'生命 1600，能挡住践踏。顶前方 1 格，每 1.5 秒 30 伤害。每 15 秒向前冲 2 格，路上的敌人各受 150 伤害并被击退 0.5 格（精英、Boss 不击退），冲完回到原位。', rarity:'epic', name:'Buffalo_Wild', short:'牛', el:'none', shape:'melee', tank:true, cost:175, cd:25, hp:1600, dmg:30, int:1.5, reach:1, windup:0.3, monster:true, rush:{every:15, dmg:150, len:2, knock:0.5}},
+    toucan:   {cn:'巨喙鸟', desc:'不攻击。每 20 秒叼走本路离它最近的一只普通敌人（精英、Boss 叼不走）。', rarity:'epic', name:'Bird_Toucan', short:'喙', el:'none', shape:'support', cost:150, cd:25, hp:300, windup:0.2, monster:true, pluck:{every:20}},
+    disco:    {cn:'巴隆', desc:'不攻击。每 14 秒打开舞池灯光：场上最靠近警钟的 4 只敌人停下跳舞 2 秒（Boss 不受影响）。', rarity:'legend', name:'Buffalo_Disco', short:'隆', el:'none', shape:'support', cost:250, cd:40, hp:1200, windup:0.3, monster:true, lights:{every:14, n:4, t:2}},
   },
   enemies: {
-    slime:  {cn:'绿莱姆', desc:'移动 0.25 格 / 秒，生命 200。咬挡路的宠物。', name:'Slime_Green', short:'史', el:'grass', hp:200,  speed:0.25, atk:10, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.1},
-    beetle: {cn:'赤甲虫', desc:'火系，生命 280。水系攻击对它伤害 +50%。', name:'Beetle_Red',  short:'甲', el:'fire',  hp:280,  speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.07, r:0.30, windup:0.15},
-    snail:  {cn:'厚壳蜗', desc:'移动 0.15 格 / 秒，生命 800。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0, r:0.34, windup:0.13},
-    fox:    {cn:'迅火狐', desc:'移动 0.5 格 / 秒，是绿莱姆的 2 倍。生命 170。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.07, r:0.28, windup:0.09},
-    lizard: {cn:'喷火蜥', desc:'隔 1 格停下，向前喷火 2 格，烧到最前面的宠物：每次 16 伤害。近战 1 格的宠物打不到它。', name:'Lizard_Fire', short:'火蜥', el:'fire', hp:360, speed:0.2, atk:16, atkInt:1.6, role:'minor', drop:0, r:0.32, windup:0.28, range:2},
-    snake:  {cn:'翠颈蛇', desc:'生命 240，移动 0.3 格 / 秒。咬中的宠物中毒：每秒 5 伤害，持续 4 秒。', name:'Snake_Green', short:'蛇', el:'grass', hp:240, speed:0.3, atk:8, atkInt:1.0, role:'minor', drop:0, r:0.3, windup:0.17, poison:{dps:5, t:4}},   // 73 版；出手 = Attack 里身体冲到最前（0.167s）
-    gull:   {cn:'长信翁', desc:'生命 220，移动 0.4 格 / 秒。遇到的第一只宠物会被它飞越过去，之后正常前进。', name:'Bird_Gull', short:'翁', el:'none', hp:220, speed:0.4, atk:10, atkInt:1.0, role:'minor', drop:0, r:0.3, windup:0.42, hop:true},   // 73 版；出手 = Attack 里身体冲到最前、最低（0.417s）
-    hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
-    hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 260，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:260, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0, r:0.26, windup:0.15},
+    slime:  {cn:'绿莱姆', desc:'移动 0.25 格 / 秒，生命 200。咬挡路的宠物。', name:'Slime_Green', short:'史', el:'grass', hp:200,  speed:0.25, atk:10, atkInt:1.0, role:'minor', drop:0.05, r:0.30, windup:0.1},
+    beetle: {cn:'赤甲虫', desc:'火系，生命 280。水系攻击对它伤害 +50%。', name:'Beetle_Red',  short:'甲', el:'fire',  hp:280,  speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.05, r:0.30, windup:0.15},
+    snail:  {cn:'厚壳蜗', desc:'移动 0.15 格 / 秒，生命 800。', name:'Snail_Green', short:'蜗', el:'grass', hp:800,  speed:0.15, atk:15, atkInt:1.5, role:'minor', drop:0.05, r:0.34, windup:0.13},
+    fox:    {cn:'迅火狐', desc:'移动 0.5 格 / 秒，是绿莱姆的 2 倍。生命 170。', name:'Animal_Fox',  short:'狐', el:'fire',  hp:170,  speed:0.5,  atk:10, atkInt:0.8, role:'minor', drop:0.05, r:0.28, windup:0.09},
+    lizard: {cn:'喷火蜥', desc:'隔 1 格停下，向前喷火 2 格，烧到最前面的宠物：每次 16 伤害。近战 1 格的宠物打不到它。', name:'Lizard_Fire', short:'火蜥', el:'fire', hp:360, speed:0.2, atk:16, atkInt:1.6, role:'minor', drop:0.05, r:0.32, windup:0.28, range:2},
+    snake:  {cn:'翠颈蛇', desc:'生命 240，移动 0.3 格 / 秒。咬中的宠物中毒：每秒 5 伤害，持续 4 秒。', name:'Snake_Green', short:'蛇', el:'grass', hp:240, speed:0.3, atk:8, atkInt:1.0, role:'minor', drop:0.05, r:0.3, windup:0.17, poison:{dps:5, t:4}},   // 73 版；出手 = Attack 里身体冲到最前（0.167s）
+    gull:   {cn:'长信翁', desc:'生命 220，移动 0.4 格 / 秒。遇到的第一只宠物会被它飞越过去，之后正常前进。', name:'Bird_Gull', short:'翁', el:'none', hp:220, speed:0.4, atk:10, atkInt:1.0, role:'minor', drop:0.05, r:0.3, windup:0.42, hop:true},   // 73 版；出手 = Attack 里身体冲到最前、最低（0.417s）
+    hornliz:{cn:'棘背蜥', desc:'生命 320。生命降到一半后移动速度 +80%，攻击间隔缩短 30%。', name:'Lizard_Horn', short:'棘', el:'grass', hp:320, speed:0.22, atk:14, atkInt:1.2, role:'minor', drop:0.05, r:0.32, windup:0.2, enrage:{at:0.5, speed:1.8, atkInt:0.7}},
+    hornbug:{cn:'尖角虫', desc:'5 只一群一起出现。生命 260，移动比绿莱姆快 40%。', name:'Beetle_Blood', short:'角', el:'dark', hp:260, speed:0.35, atk:8, atkInt:0.9, role:'minor', drop:0.05, r:0.26, windup:0.15},
     // ===== 第2章角色 v1（_dev，未合并；机制表见 _dev/第2章角色/v1/说明.md）=====
-    goat:     {cn:'莽角羊', desc:'进场就冲刺（速度 0.7），撞上第一只挡路的宠物造成 100 伤害，然后自己晕 2 秒。之后正常走、咬。生命 380。', name:'Goat_Angry', short:'莽', el:'none', hp:380, speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0, r:0.32, windup:0.2, charge:{speed:0.7, dmg:100, daze:2}},
-    cat:      {cn:'灰原喵', desc:'每 5 秒叼走场上一颗没收的能量（最多 3 颗）。打死它，叼走的能量全部掉出来。生命 260，移动 0.35 格 / 秒。', name:'Animal_Cat', short:'喵', el:'dark', hp:260, speed:0.35, atk:10, atkInt:1.0, role:'minor', drop:0, r:0.3, windup:0.25, steal:{every:5, max:3, minAge:1.2}},
-    bellsnake:{cn:'铃尾蛇', desc:'每 6 秒摇一次铃：本路和上下相邻路、前后 2 格内的其他敌人移动速度 +50%，持续 3 秒。生命 180。', name:'Snake_Bell', short:'铃', el:'light', hp:180, speed:0.28, atk:8, atkInt:1.0, role:'minor', drop:0, r:0.28, windup:0.17, ring:{every:6, t:3, k:1.5, dp:2, stop:0.6}},
-    mushgoat: {cn:'菇背羊', desc:'每 5 秒给本路和上下相邻路、前后 1.5 格内的敌人（包括自己）回复 60 生命。生命 340，移动 0.2 格 / 秒。', name:'Goat_Mushroom', short:'菇', el:'grass', hp:340, speed:0.2, atk:10, atkInt:1.2, role:'minor', drop:0, r:0.32, windup:0.2, healAura:{every:5, amt:60, dp:1.5, stop:0.6}},
-    redbird:  {cn:'掠空鸟', desc:'飞在空中，不停下、不咬，直接飞向警钟。近战打不到它，也不会踩响波姆；只有吐弹的宠物能打到。生命 160，移动 0.45 格 / 秒。', name:'Bird_Red', short:'掠', el:'fire', hp:160, speed:0.45, atk:0, atkInt:1.0, role:'minor', drop:0, r:0.28, windup:0.2, fly:true},
-    wildox:   {cn:'蛮角牛', desc:'精英。从宠物身上踩过去，每踩到一只造成 150 伤害，不停下。只有坦克（硬壳南瓜、厚壳蜗、格鲁姆）能把它挡住，挡住后每 1.5 秒顶 60。生命 1800。', name:'Buffalo_Wild', short:'牛', el:'none', hp:1800, speed:0.18, atk:60, atkInt:1.5, role:'elite', drop:0, r:0.42, windup:0.3, trample:{dmg:150}},
-    toucan:   {cn:'巨喙鸟', desc:'飞到本路最贵的一只宠物上方，盘旋 2.5 秒（脚下出现红圈）后把它叼走。盘旋时把那只宠物换走，它就扑空落地，之后像普通敌人一样走。生命 260。', name:'Bird_Toucan', short:'喙', el:'none', hp:260, speed:0.4, atk:10, atkInt:1.0, role:'minor', drop:0, r:0.3, windup:0.3, fly:true, grab:{hover:2.5}},
-    mushsnake:{cn:'伞顶蛇', desc:'被打死时伞顶炸开孢子：本路和上下相邻路、前后 1 格内的宠物停手 2.5 秒。生命 280。', name:'Snake_Mushroom', short:'伞', el:'fire', hp:280, speed:0.26, atk:10, atkInt:1.0, role:'minor', drop:0, r:0.3, windup:0.17, spore:{t:2.5, dp:1.2}},
-    shellliz: {cn:'背壳蜥', desc:'背上的壳挡子弹：吐弹的宠物打它只有 25% 伤害。近战、爆炸、灼烧照常。生命 420。', name:'Lizard_Snail', short:'壳', el:'water', hp:420, speed:0.22, atk:12, atkInt:1.1, role:'minor', drop:0, r:0.32, windup:0.25, shell:0.25},
-    disco:    {cn:'巴隆', desc:'Boss，生命 7000。践踏：踩过的宠物各 150 伤害，坦克才挡得住。舞池灯光：每 15 秒地上亮 4 格灯，2 秒后打开 4 秒，站在灯里的宠物跳舞停手。伴舞：每 24 秒叫出 3 只莽角羊。节拍冲刺：每 18 秒踩 4 拍，第 4 拍往前冲 3 格，冲过的宠物各 200 伤害。生命降到一半后：移动速度 +40%，灯光每 10 秒、亮 6 格，伴舞每 16 秒，冲刺每 12 秒。', name:'Buffalo_Disco', short:'隆', el:'light', hp:7000, speed:0.12, atk:80, atkInt:1.6, role:'elite', drop:0, r:0.46, windup:0.3,
+    goat:     {cn:'莽角羊', desc:'进场就冲刺（速度 0.7），撞上第一只挡路的宠物造成 100 伤害，然后自己晕 2 秒。之后正常走、咬。生命 380。', name:'Goat_Angry', short:'莽', el:'none', hp:380, speed:0.25, atk:12, atkInt:1.0, role:'minor', drop:0.08, r:0.32, windup:0.2, charge:{speed:0.7, dmg:100, daze:2}},
+    cat:      {cn:'灰原喵', desc:'每 5 秒叼走场上一颗没收的能量（最多 3 颗）。打死它，叼走的能量全部掉出来。生命 260，移动 0.35 格 / 秒。', name:'Animal_Cat', short:'喵', el:'dark', hp:260, speed:0.35, atk:10, atkInt:1.0, role:'minor', drop:0.08, r:0.3, windup:0.25, steal:{every:5, max:3, minAge:1.2}},
+    bellsnake:{cn:'铃尾蛇', desc:'每 6 秒摇一次铃：本路和上下相邻路、前后 2 格内的其他敌人移动速度 +50%，持续 3 秒。生命 180。', name:'Snake_Bell', short:'铃', el:'light', hp:180, speed:0.28, atk:8, atkInt:1.0, role:'minor', drop:0.08, r:0.28, windup:0.17, ring:{every:6, t:3, k:1.5, dp:2, stop:0.6}},
+    mushgoat: {cn:'菇背羊', desc:'每 5 秒给本路和上下相邻路、前后 1.5 格内的敌人（包括自己）回复 60 生命。生命 340，移动 0.2 格 / 秒。', name:'Goat_Mushroom', short:'菇', el:'grass', hp:340, speed:0.2, atk:10, atkInt:1.2, role:'minor', drop:0.08, r:0.32, windup:0.2, healAura:{every:5, amt:60, dp:1.5, stop:0.6}},
+    redbird:  {cn:'掠空鸟', desc:'飞在空中，不停下、不咬，直接飞向警钟。近战打不到它，也不会踩响波姆；只有吐弹的宠物能打到。生命 160，移动 0.45 格 / 秒。', name:'Bird_Red', short:'掠', el:'fire', hp:160, speed:0.45, atk:0, atkInt:1.0, role:'minor', drop:0.08, r:0.28, windup:0.2, fly:true},
+    wildox:   {cn:'蛮角牛', desc:'精英。从宠物身上踩过去，每踩到一只造成 150 伤害，不停下。只有坦克（硬壳南瓜、厚壳蜗、格鲁姆）能把它挡住，挡住后每 1.5 秒顶 60。生命 1800。', name:'Buffalo_Wild', short:'牛', el:'none', hp:1800, speed:0.18, atk:60, atkInt:1.5, drop:1, role:'elite',  r:0.42, windup:0.3, trample:{dmg:150}},
+    toucan:   {cn:'巨喙鸟', desc:'飞到本路最贵的一只宠物上方，盘旋 2.5 秒（脚下出现红圈）后把它叼走。盘旋时把那只宠物换走，它就扑空落地，之后像普通敌人一样走。生命 260。', name:'Bird_Toucan', short:'喙', el:'none', hp:260, speed:0.4, atk:10, atkInt:1.0, role:'minor', drop:0.08, r:0.3, windup:0.3, fly:true, grab:{hover:2.5}},
+    mushsnake:{cn:'伞顶蛇', desc:'被打死时伞顶炸开孢子：本路和上下相邻路、前后 1 格内的宠物停手 2.5 秒。生命 280。', name:'Snake_Mushroom', short:'伞', el:'fire', hp:280, speed:0.26, atk:10, atkInt:1.0, role:'minor', drop:0.08, r:0.3, windup:0.17, spore:{t:2.5, dp:1.2}},
+    shellliz: {cn:'背壳蜥', desc:'背上的壳挡子弹：吐弹的宠物打它只有 25% 伤害。近战、爆炸、灼烧照常。生命 420。', name:'Lizard_Snail', short:'壳', el:'water', hp:420, speed:0.22, atk:12, atkInt:1.1, role:'minor', drop:0.08, r:0.32, windup:0.25, shell:0.25},
+    disco:    {cn:'巴隆', desc:'Boss，生命 7000。践踏：踩过的宠物各 150 伤害，坦克才挡得住。舞池灯光：每 15 秒地上亮 4 格灯，2 秒后打开 4 秒，站在灯里的宠物跳舞停手。伴舞：每 24 秒叫出 3 只莽角羊。节拍冲刺：每 18 秒踩 4 拍，第 4 拍往前冲 3 格，冲过的宠物各 200 伤害。生命降到一半后：移动速度 +40%，灯光每 10 秒、亮 6 格，伴舞每 16 秒，冲刺每 12 秒。', name:'Buffalo_Disco', short:'隆', el:'light', hp:7000, speed:0.12, atk:80, atkInt:1.6, drop:1, role:'elite',  r:0.46, windup:0.3,
                trample:{dmg:150}, disco:{light:15, lightRage:10, n:4, nRage:6, warn:2, on:4, dance:24, danceRage:16, pose:1.2, dash:18, dashRage:12, beat:0.5, dashLen:3, dashDmg:200}, boss:{bell:true}, enrage:{at:0.5, speed:1.4, atkInt:0.85}},
-    bear:   {cn:'格鲁姆', desc:'生命 5000。重击面前的宠物 60 伤害，同一列上下两路的宠物也受 60 伤害。每 16 秒换到相邻一路（那一路先亮红 2 秒）；每 24 秒吼叫，左右两路各出 2 只绿莱姆。生命降到一半后移动速度 +50%、攻击间隔缩短 15%，改为每 10 秒换路、每 16 秒吼叫。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:5000, speed:0.15, atk:60, atkInt:1.8, role:'elite', drop:0, r:0.44, windup:0.47,
+    bear:   {cn:'格鲁姆', desc:'生命 5000。重击面前的宠物 60 伤害，同一列上下两路的宠物也受 60 伤害。每 16 秒换到相邻一路（那一路先亮红 2 秒）；每 24 秒吼叫，左右两路各出 2 只绿莱姆。生命降到一半后移动速度 +50%、攻击间隔缩短 15%，改为每 10 秒换路、每 16 秒吼叫。', name:'Bear_Grizzly',short:'熊', el:'none',  hp:5000, speed:0.15, atk:60, atkInt:1.8, drop:1, role:'elite',  r:0.44, windup:0.47,
              boss:{switchEvery:16, switchRage:10, warn:2, roarEvery:24, roarRage:16, roarT:1.2, cleave:true}, enrage:{at:0.5, speed:1.5, atkInt:0.85}},
   },
   level: {
@@ -70,7 +86,8 @@ const DATA = {
 // ---------- 65 版：关卡按 id 读取（数据在 levels.js），宠物拥有 / 机制解锁存档 ----------
 // 90 版：2 星效果数值（和 meta.js STAR_ROUTE 的文字一致，改一处要两处一起改）
 const STAR2 = {flowerProd:1.25, pumpkinHp:1.4, bombArm:0.7, lizardReach:1, foxBurn:{dps:6, t:3}};
-const PET_ORDER = ['flower','goldfish','pug','pumpkin','bomb','lizard','snail','fox','mushgoat','bear'];   // 第2章角色 v1：+ 迅火狐、菇背羊、格鲁姆
+const PET_ORDER = ['flower','goldfish','pug','pumpkin','bomb','lizard','snail','fox','mushgoat','bear',
+  'slime','beetle','snake','hornliz','hornbug','gull','shellliz','goat','cat','bellsnake','redbird','mushsnake','wildox','toucan','disco'];   // 91 版：+ 15 只怪的宠物形态   // 第2章角色 v1：+ 迅火狐、菇背羊、格鲁姆
 const PET_NEED = {common:10, rare:15, epic:25, legend:40};   // 召唤一只宠物要的碎片（和 render.js 的 RAR.need 一致）
 let PROFILE = {owned:{flower:1, goldfish:1}, unlock:{}};
 const PROFILE_KEY = 'tata_profile';
@@ -367,7 +384,7 @@ function placePet(key,lane,col){
   G.energy -= def.cost; G.cooldown[key] = def.cd;
   const star=starOf(key), S2=star>=2;   // 90 版：2 星效果（vfx-design.md 9.1；迅火狐按用户 2026-11-15 定）
   const hp0 = def.hp*(key==='pumpkin'&&S2 ? STAR2.pumpkinHp : 1);
-  const pet={key, def, lane, col, hp:hp0, maxHp:hp0, timer:def.shape==='producer'? def.prodInt*0.5 : 0.3,
+  const pet={key, def, lane, col, hp:hp0, maxHp:hp0, timer:def.shape==='producer'? def.prodInt*0.5 : (()=>{ const S=def.magnet||def.chime||def.sporeP||def.pluck||def.lights; return S ? S.every*0.5 : 0.3; })(),   // 91 版：控场技能放下后先等半个冷却
                stun:0, armT: (def.arm||0)*(key==='bomb'&&S2 ? STAR2.bombArm : 1), flash:0, move:null, star,
                reach: (def.reach||0)+(key==='lizard'&&S2 ? STAR2.lizardReach : 0)};
   G.pets.push(pet);
@@ -406,7 +423,8 @@ function hitEnemy(e, dmg, el, opts){
   if(mult>1) floatText(e.lane,e.p,'克制','#ffd25a',11);
   emit('hit',{e,el,mult,dmg:d,src:opts&&opts.src});
   if(opts && opts.burn){ e.burn = {dps:Math.max(e.burn?e.burn.dps:0, opts.burn.dps), t:opts.burn.t}; }
-  if(opts && opts.slow){ e.slow = Math.max(e.slow||0, opts.slow); }
+  if(opts && opts.slow){ const k=opts.slowK||0.85; e.slowK = e.slow>0 ? Math.min(e.slowK||0.85, k) : k; e.slow = Math.max(e.slow||0, opts.slow); }
+  if(opts && opts.venom){ const fresh=!e.venom; e.venom={dps:opts.venom.dps, t:opts.venom.t}; if(fresh) emit('venom',{e}); }   // 91 版：翠颈蛇（宠物）的毒
   if(e.hp<=0) killEnemy(e);
 }
 const LOOT_P = {gold:0.15, star:0.03, goldV:10};   // 88 版：每只怪死亡时的掉落概率；一枚金币 = 10 金币
@@ -424,13 +442,14 @@ function killEnemy(e, silent){
   }
   if(!silent && !G.demo){ const r=Math.random(), kind = r<LOOT_P.star ? 'star' : r<LOOT_P.star+LOOT_P.gold ? 'gold' : null;   // 88 版（用户 2026-11-15）：金币 15%、星星 3%
     if(kind){ const v = kind==='gold' ? LOOT_P.goldV : 1; G.loot[kind]+=v; emit('loot',{e, kind, v}); } }
-  if(silent || !e.def.drop || !DATA.pets[e.key]) return;   // 65 版：只有能收服成宠物的怪才掉碎片
+  if(silent || e.summoned || !e.def.drop || !DATA.pets[e.key]) return;   // 65 版：只有能收服成宠物的怪才掉碎片；91 版：全部怪都能，Boss 叫出来的小兵不掉
   // 碎片掉落：看本关角色（drop），带保底 N = 2/p
   const k=e.key, p=e.def.drop, N=Math.round(2/p);
   G.pity[k]=(G.pity[k]||0)+1;
   if(Math.random()<p || G.pity[k]>=N){
     G.pity[k]=0;
-    const n = Math.random()<0.5?1:2;
+    const big = e.def.boss || e.def.disco ? 2 : e.def.role==='elite' ? 1 : 0;   // 91 版：精英必掉 3～5 片，Boss 必掉 5～8 片；普通怪 1～2 片
+    const n = big===2 ? 5+Math.floor(Math.random()*4) : big===1 ? 3+Math.floor(Math.random()*3) : (Math.random()<0.5?1:2);
     G.shards[k]=(G.shards[k]||0)+n;
     G.shardsFx.push({lane:e.lane,p:e.p,t:0,life:0.9,n,key:k}); emit('shard',{e,n});
   }
@@ -458,8 +477,52 @@ function ringShot(pet, k, idx){ const R=pet.def.evo.ring, a=-Math.PI/2 + k/R.n*M
   pet.faceL = sx < -0.01 || (Math.abs(sx)<=0.01 && k>R.n/2);   // 打左半圈时转过身朝左
   G.rprojs.push({lane:pet.lane, p:pet.col+0.5, vl:vl/n*R.speed, vp:vp/n*R.speed, dmg:R.dmg*atkMul(pet), el:pet.def.el, src:pet, t:0, ang:a, hit:new Set()});
   emit('ringShot',{pet, ang:a, k, idx}); }
+// ===== 91 版：怪物宠物的主动技能 =====
+const petInt = pet => pet.def.int*(pet.def.fury && pet.hp<=pet.maxHp*pet.def.fury.at ? pet.def.fury.k : 1);   // 棘背蜥半血后发怒
+const petHasteK = pet => pet.haste>0 ? (pet.hasteK||1.25) : 1;                                               // 铃尾蛇的铃声
+const knockable = e => !e.def.boss && !e.def.disco && e.def.role!=='elite';
+// 莽角羊冲撞 / 蛮角牛冲锋：dash = {t, d 冲出去的格数, hit 是否已结算, kind}；0.22 秒冲出去、在最远处结算、0.3 秒回来
+function petDashTick(pet, dt){ const D=pet.dash; D.t+=dt;
+  if(!D.hit && D.t>=0.22){ D.hit=true; const d=pet.def;
+    if(D.kind==='ram'){ const t=D.tg, pr=propAhead(pet.lane,pet.col+1,pet.col+1+d.ram.range); if(t && !t.dead && !(pr && t.p>pr.col+0.2)){ hitEnemy(t, d.ram.dmg*atkMul(pet), d.el, {src:pet}); if(!t.dead && knockable(t)) t.p=Math.min(COLS+0.4, t.p+d.ram.knock); emit('petRamHit',{pet, e:t}); } }
+    else { const pr=propAhead(pet.lane,pet.col+1,pet.col+d.rush.len), hi=pr ? pr.col+0.2 : 99, hs=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>=pet.col+0.3&&e.p<=hi&&e.p-e.def.r<=pet.col+1+d.rush.len);   // 道具后面的怪打不到
+      hs.forEach(e=>{ hitEnemy(e, d.rush.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && knockable(e)) e.p=Math.min(COLS+0.4, e.p+d.rush.knock); }); emit('petRushHit',{pet, hits:hs}); } }
+  if(D.t>=0.52) pet.dash=null; }
+function petSkillTick(pet, dt){ const d=pet.def;
+  if(d.ram || d.rush){ const S=d.ram||d.rush; pet.skT=(pet.skT??S.every*0.5)-dt;
+    if(pet.skT<=0){ if(d.ram){ const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>pet.col+0.3&&e.p<=pet.col+1+d.ram.range&&e.p<COLS).sort((a,b)=>a.p-b.p)[0];
+        const prA=propAhead(pet.lane,pet.col+1,pet.col+1+d.ram.range); if(t && prA && t.p>prA.col+0.2) { pet.skT=0.3; return false; }
+        if(t){ pet.skT=S.every; pet.dash={t:0, kind:'ram', tg:t, d:Math.max(0.3, t.p-t.def.r-(pet.col+0.75))}; emit('petRam',{pet, e:t}); return true; } pet.skT=0.3; }
+      else { const any=G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>=pet.col+0.3&&e.p-e.def.r<=pet.col+1+d.rush.len);
+        if(any){ pet.skT=S.every; pet.dash={t:0, kind:'rush', d:d.rush.len}; emit('petRush',{pet}); return true; } pet.skT=0.3; } } }
+  if(d.shape!=='support' || d.heal) return false;
+  const S=d.magnet||d.chime||d.sporeP||d.pluck||d.lights; pet.timer-=dt; if(pet.timer>0) return false;
+  pet.timer=S.every;
+  if(d.magnet){ const o=G.orbs.filter(o=>!o.got&&!(o.fall>0)&&Math.abs(o.lane-pet.lane)<=d.magnet.dl&&Math.abs(o.p-(pet.col+0.5))<=d.magnet.dp)[0];
+    if(o){ emit('petMagnet',{pet, o}); collectOrb(o); } else pet.timer=0.3; }
+  else if(d.chime){ const list=G.pets.filter(q=>!q.dead&&Math.abs(q.lane-pet.lane)<=1&&Math.abs(q.col-pet.col)<=1&&q.def.shape!=='mine');
+    list.forEach(q=>{ q.haste=d.chime.t; q.hasteK=d.chime.k; }); emit('petChime',{pet, list}); }
+  else if(d.sporeP){ const list=G.enemies.filter(e=>!e.dead&&!e.def.boss&&!e.def.disco&&Math.abs(e.lane-pet.lane)<=d.sporeP.dl&&Math.abs(e.p-(pet.col+0.5))<=d.sporeP.dp);
+    if(list.length){ list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.sporeP.t); }); emit('petSpore',{pet, list}); } else pet.timer=0.5; }
+  else if(d.pluck){ const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS&&knockable(e)).sort((a,b)=>a.p-b.p)[0];
+    if(t){ emit('petPluck',{pet, e:t}); killEnemy(t, true); } else pet.timer=0.5; }   // 叼走不算击杀掉落：不掉金币、碎片（否则每 20 秒稳定刷碎片）
+  else if(d.lights){ const list=G.enemies.filter(e=>!e.dead&&e.p<COLS&&!e.def.boss&&!e.def.disco).sort((a,b)=>a.p-b.p).slice(0,d.lights.n);
+    if(list.length){ list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.lights.t); e.danceT=d.lights.t; }); emit('petLights',{pet, list}); } else pet.timer=0.5; }
+  return false;
+}
 function petRelease(pet){
   const d=pet.def;
+  if(d.shape==='shooter' && d.snipe){   // 91 版：掠空鸟俯冲打本路最远的敌人（飞行的也打得到）
+    const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3).sort((a,b)=>b.p-a.p)[0];
+    emit('snipe',{pet, e:t||null}); if(t) hitEnemy(t, d.dmg*atkMul(pet), d.el, {src:pet});
+    return;
+  }
+  if(d.shape==='shooter' && (d.spit || d.lob)){   // 91 版：绿莱姆粘液弹（减速）、长信翁抛物线（越过道具）
+    const tg = d.lob ? G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3).sort((a,b)=>a.p-b.p)[0] : null;
+    G.projs.push({lane:pet.lane, p:pet.col+0.8, speed:d.projSpeed, dmg:d.dmg*atkMul(pet), el:d.el, src:pet,
+      slow: d.spit ? d.spit.t : 0, slowK: d.spit ? d.spit.k : 0, lob: d.lob ? {tg, p0:pet.col+0.8} : null}); emit('shoot',{pet});
+    return;
+  }
   if(d.shape==='shooter'){
     G.projs.push({lane:pet.lane,p:pet.col+0.8,speed:d.projSpeed,dmg:d.dmg*atkMul(pet)*(pet.evo&&d.evo?d.evo.dmgMul:1),el:d.el,src:pet,
                   slow: pet.group&&pet.group.el==='water'&&pet.group.size>=3 ? 2 : 0}); emit('shoot',{pet});
@@ -469,11 +532,12 @@ function petRelease(pet){
     const hits=meleeHits(pet), prop=meleeProp(pet); pet.swing=0.18;
     let burn = d.burn || null;
     if(pet.key==='fox' && pet.star>=2) burn = STAR2.foxBurn;   // 90 版：迅火狐 2 星，横扫附带灼烧
+    let pk = 1; if(d.pack){ const n=Math.min(d.pack.max, G.pets.filter(q=>q!==pet&&!q.dead&&q.key===pet.key&&q.lane===pet.lane).length); pk=1+d.pack.k*n; }   // 91 版：尖角虫同路加成
     let heavy = false; if(pet.key==='pug' && pet.star>=2 && hits.length){ pet.bites=(pet.bites||0)+1; if(pet.bites%4===0) heavy=true; }   // 73 版：火牙犬 2 星，每第 4 口变重咬（伤害 ×2，击退 0.5 格）
     if(pet.group && pet.group.el==='fire' && pet.group.size>=3) burn = {dps:Math.max(4,(burn||{}).dps||0), t:3};
     emit('melee',{pet,hits,prop,heavy});   // 出手时目标走开了也照样挥空（动画已经播了）
     if(prop) damageProp(prop, d.dmg*atkMul(pet), true);
-    hits.forEach(e=>{ hitEnemy(e,d.dmg*atkMul(pet)*(heavy?2:1),d.el,{burn,src:pet}); if(heavy && !e.dead && !e.def.boss) e.p=Math.min(COLS+0.4, e.p+0.5); if(d.knock && !e.dead && e.def.role!=='elite') e.p=Math.min(COLS+0.4, e.p+d.knock); if(pet.group&&pet.group.size>=5&&pet.group.el==='fire') e.burnFromGroup5=true; });
+    hits.forEach(e=>{ hitEnemy(e,d.dmg*atkMul(pet)*(heavy?2:1)*pk,d.el,{burn,src:pet,venom:d.venom||null}); if(heavy && !e.dead && !e.def.boss) e.p=Math.min(COLS+0.4, e.p+0.5); if(d.knock && !e.dead && e.def.role!=='elite') e.p=Math.min(COLS+0.4, e.p+d.knock); if(pet.group&&pet.group.size>=5&&pet.group.el==='fire') e.burnFromGroup5=true; });
   }
 }
 
@@ -607,6 +671,7 @@ function update(dt){
     pet.flash=Math.max(0,pet.flash-dt);
     if(pet.poison){ pet.poison.t-=dt; pet.hp-=pet.poison.dps*dt; if(pet.poison.t<=0) pet.poison=null;   // 73 版：翠颈蛇的毒
       if(pet.hp<=0 && !pet.dead){ pet.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet}); G.fx.push({kind:'pop',lane:pet.lane,p:pet.col+0.5,t:0,life:0.4,color:'#ccc'}); continue; } }
+    if(pet.haste>0) pet.haste-=dt;   // 91 版：铃尾蛇加速，被控住时也照常倒计时
     if(pet.evoBusy){ pet.windup=0; pet.again=0; continue; }   // 87 版：进化演出中（飞到画面中间去了）不攻击
     if(pet.ring){ ringTick(pet, dt); continue; }   // 87 版：进化后的全屏环射期间不做普通攻击
     if(pet.spored>0) pet.spored-=dt;
@@ -616,6 +681,9 @@ function update(dt){
     const d=pet.def;
     if(pet.again>0){ pet.again-=dt; if(pet.again<=0){ pet.second=true; petRelease(pet); } }
     if(pet.windup>0){ pet.windup-=dt; if(pet.windup<=0) petRelease(pet); continue; }   // 攻击前摇中：等动画走到出手那一帧
+    if(pet.dash){ petDashTick(pet, dt); continue; }   // 91 版：冲撞 / 冲锋中不做普通攻击
+    if(d.monster && petSkillTick(pet, dt)) continue;
+    if(d.fury && !pet.furyOn && pet.hp<=pet.maxHp*d.fury.at){ pet.furyOn=true; emit('petFury',{pet}); }
     // 草系 3 连：回血
     if(pet.group && pet.group.el==='grass' && pet.group.size>=3) pet.hp=Math.min(pet.maxHp, pet.hp+Math.min(pet.maxHp*0.01,6)*dt); // 每秒 1%，最多 6 点，防止草墙永动
     if(d.shape==='producer'){
@@ -628,21 +696,21 @@ function update(dt){
         G.orbs.push({lane:pet.lane,p:pet.col+0.5,value:Math.round(d.prod*mul),life:0,fall:0,pop:0.3,produced:true}); emit('produce',{pet});
       }
     } else if(d.shape==='shooter'){
-      pet.timer-=dt;
+      pet.timer-=dt*petHasteK(pet);
       if(pet.timer<=0){
-        const target = G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3) || G.cells.some(c=>propAlive(c)&&c.marked&&c.lane===pet.lane&&c.col>pet.col);
-        if(target){ pet.timer=d.int; pet.windup=d.windup; emit('attackStart',{pet}); }
+        const target = G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3) || (!d.snipe && !d.lob && G.cells.some(c=>propAlive(c)&&c.marked&&c.lane===pet.lane&&c.col>pet.col));
+        if(target){ pet.timer=petInt(pet); pet.windup=d.windup; emit('attackStart',{pet}); }
         else pet.timer=0.1;
       }
     } else if(d.shape==='melee'){
-      pet.timer-=dt;
+      pet.timer-=dt*petHasteK(pet);
       if(pet.timer<=0){
         // 近战覆盖「前方 reach 格」：按怪物身体边缘判断，体型大的怪站得远也打得到
-        if(meleeHits(pet).length || meleeProp(pet)){ pet.timer=d.int; pet.windup=d.windup; emit('attackStart',{pet}); }
+        if(meleeHits(pet).length || meleeProp(pet)){ pet.timer=petInt(pet); pet.windup=d.windup; emit('attackStart',{pet}); }
         else pet.timer=0.1;
       }
       if(pet.swing) pet.swing=Math.max(0,pet.swing-dt);
-    } else if(d.shape==='support'){   // 第2章角色 v1：菇背羊（宠物）每 6 秒给周围 3×3 回血
+    } else if(d.shape==='support' && d.heal){   // 第2章角色 v1：菇背羊（宠物）每 6 秒给周围 3×3 回血
       pet.timer-=dt;
       if(pet.timer<=0){ pet.timer=d.heal.every; const list=G.pets.filter(q=>!q.dead&&Math.abs(q.lane-pet.lane)<=1&&Math.abs(q.col-pet.col)<=1&&q.def.shape!=='mine');
         list.forEach(q=>{ q.hp=Math.min(q.maxHp, q.hp+d.heal.amt); }); emit('petHeal',{pet, list}); }
@@ -660,11 +728,16 @@ function update(dt){
   // 弹道
   for(const pr of G.projs){
     pr.p += pr.speed*dt;
+    if(pr.lob){ const t=pr.lob.tg;   // 91 版：抛物线，不被木箱挡；飞到目标身上才命中
+      if(t && !t.dead){ pr.lob.p1=t.p; if(pr.p>=t.p-t.def.r*0.5){ emit('projhit',{pr,e:t}); if(t.def.shell) emit('deflect',{e:t}); hitEnemy(t,pr.dmg*(t.def.shell||1),pr.el,{src:pr.src}); pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color}); } }
+      else { const e=G.enemies.filter(e=>!e.dead&&e.lane===pr.lane&&Math.abs(e.p-pr.p)<e.def.r+0.1).sort((a,b)=>a.p-b.p)[0];
+        if(e){ emit('projhit',{pr,e}); if(e.def.shell) emit('deflect',{e}); hitEnemy(e,pr.dmg*(e.def.shell||1),pr.el,{src:pr.src}); pr.dead=true; } }
+      if(pr.p>COLS+0.6) pr.dead=true; continue; }
     // 木箱挡弹道
     const c = G.cells.find(c=>c.type==='crate'&&c.hpNow>0&&c.lane===pr.lane&&pr.p>=c.col+0.2&&pr.p<=c.col+0.9);
     if(c){ pr.dead=true; damageProp(c, pr.dmg, true); continue; }
     const e = G.enemies.filter(e=>!e.dead&&e.lane===pr.lane&&Math.abs(e.p-pr.p)<e.def.r+0.1).sort((a,b)=>a.p-b.p)[0];
-    if(e){ emit('projhit',{pr,e}); if(e.def.shell) emit('deflect',{e}); hitEnemy(e,pr.dmg*(e.def.shell||1),pr.el,{slow:pr.slow,src:pr.src}); pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color}); }
+    if(e){ emit('projhit',{pr,e}); if(e.def.shell) emit('deflect',{e}); hitEnemy(e,pr.dmg*(e.def.shell||1),pr.el,{slow:pr.slow,slowK:pr.slowK||0,src:pr.src}); pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color}); }
     if(pr.p>COLS+0.6) pr.dead=true;
   }
   // 87 版：进化环射的水弹（格坐标里朝任意方向飞，穿透，每只怪 / 木箱只打一次）
@@ -683,17 +756,21 @@ function update(dt){
     if(e.burn){ e.burn.t-=dt; e.hp-=e.burn.dps*dt; e.burnAcc=(e.burnAcc||0)+e.burn.dps*dt; e.burnTick=(e.burnTick||0)+dt;
       if(e.burnTick>=0.5 && e.burnAcc>=1){ emit('burnTick',{e,dmg:e.burnAcc}); e.burnTick=0; e.burnAcc=0; }
       if(e.burn.t<=0){ e.burn=null; e.burnTick=0; } if(e.hp<=0){ killEnemy(e); continue; } }
+    if(e.venom){ e.venom.t-=dt; e.hp-=e.venom.dps*dt; e.vAcc=(e.vAcc||0)+e.venom.dps*dt; e.vTick=(e.vTick||0)+dt;
+      if(e.vTick>=0.5 && e.vAcc>=1){ emit('venomTick',{e,dmg:e.vAcc}); e.vTick=0; e.vAcc=0; }
+      if(e.venom.t<=0){ e.venom=null; e.vTick=0; } if(e.hp<=0){ killEnemy(e); continue; } }
     if(e.slow>0) e.slow-=dt;
     if(e.sticky>0) e.sticky-=dt;
     if(e.def.enrage && !e.rage && e.hp<=e.maxHp*e.def.enrage.at){ e.rage=true; emit('enrage',{e}); if(e.bs){ e.bs.sw=Math.min(e.bs.sw, e.def.boss.switchRage); e.bs.roar=Math.min(e.bs.roar, e.def.boss.roarRage); } }   // Boss 狂暴后新的间隔马上生效   // 棘背蜥：半血后发怒
     if(e.def.disco && e.rage && !e.ds.rg){ const B=e.def.disco, s=e.ds; s.rg=true; s.light=Math.min(s.light,B.lightRage); s.dance=Math.min(s.dance,B.danceRage); s.dash=Math.min(s.dash,B.dashRage); }
     // ===== 第2章角色 v1 =====
+    if(e.danceT>0) e.danceT-=dt;   // 91 版：巴隆（宠物）的舞池灯光，只用来画彩色
     if(e.daze>0){ e.daze-=dt; e.windup=0; continue; }      // 莽角羊撞完晕；巨喙鸟扑空落地
     if(e.haste>0) e.haste-=dt;                               // 铃尾蛇的铃声
     if(ch2Tick(e, dt)) continue;
     if(e.def.boss && !e.def.disco && bossTick(e, dt)) continue;
     if(e.hopT!=null){ e.hopT+=dt; e.p=e.hop0+(e.hop1-e.hop0)*Math.min(1,e.hopT/0.7); if(e.hopT>=0.7){ e.hopT=null; } else continue; }   // 73 版：长信翁飞越中，不挡、不咬   // 70 版：Boss 换路 / 吼叫时不走也不咬
-    const spd = (e.def.charge && !e.charged ? e.def.charge.speed : e.def.speed)*(e.slow>0?0.85:1)*(e.sticky>0?(e.stickyK||0.7):1)*(e.rage?e.def.enrage.speed:1)*(e.rush||1)*(e.haste>0?1.5:1);
+    const spd = (e.def.charge && !e.charged ? e.def.charge.speed : e.def.speed)*(e.slow>0?(e.slowK||0.85):1)*(e.sticky>0?(e.stickyK||0.7):1)*(e.rage?e.def.enrage.speed:1)*(e.rush||1)*(e.haste>0?1.5:1);
     // 被谁挡住：同 lane、非地雷、身后的最近宠物
     const ext = e.def.range && e.p<=COLS-0.2 ? e.def.range-0.6 : 0;   // 69 版：远程的怪（喷火蜥）隔着停下，停的位置近战 1 格够不着；先走进棋盘再停（宠物放在最后两格时不能停在棋盘外）
     const inReach = c => e.p>c+0.2 && e.p<=c+1+e.def.r*0.6+ext;
@@ -712,11 +789,12 @@ function update(dt){
       // 先起手（播攻击动画），到出手那一帧才扣血
       if(e.windup>0){ e.windup-=dt;
         if(e.windup<=0){ const bt=e.biteTarget, alive=bt && (bt.type==='crate' ? propAlive(bt) : !bt.dead), t=alive?bt:tgt;
-          const hurt = q => { if(q.evoBusy) return; q.hp-=e.def.atk; q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };
+          const hurt = q => { if(q.evoBusy) return; q.hp-=e.def.atk*(e.def.range && q.def.shellP ? q.def.shellP : 1); q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };   // 91 版：背壳蜥（宠物）挡远程
           if(t.type==='crate'){ e.bite=0.15; emit(e.def.range?'breath':'propBite',{e,c:t,pets:[]}); damageProp(t, e.def.atk, false); }
           else if(e.def.range){ const wall=pb?pb.col:-1, hits=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col>wall&&inReach(p.col));   // 喷火：范围内的宠物都烧到；道具后面的烧不到
             e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt); }
           else { e.bite=0.15; emit('bite',{e,pet:t}); hurt(t);
+            if(t.def.thorns && !e.dead){ hitEnemy(e, t.def.thorns, 'none', {src:t}); emit('thorns',{e, pet:t}); }   // 91 版：赤甲虫（宠物）带刺反伤
             if(e.def.poison && !t.dead){ const fresh=!t.poison; t.poison={dps:e.def.poison.dps, t:e.def.poison.t}; emit('poison',{pet:t, fresh}); }
             if(t.def.sticky){ e.sticky=t.def.sticky.t; e.stickyK=t.def.sticky.k; }   // 73 版：咬了厚壳蜗的怪变慢
             if(e.def.boss && e.def.boss.cleave){ const side=G.pets.filter(p=>!p.dead&&p.col===t.col&&Math.abs(p.lane-t.lane)===1&&p.def.shape!=='mine');   // 70 版：Boss 重击，同一列上下两路也受伤
