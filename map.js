@@ -205,6 +205,8 @@ const CHAPTER_MAP = (()=>{
   // ---------- 节点 ----------
   function nodeState(i){ return P.cleared[levels()[i].id] ? 'done' : unlocked(i) ? 'cur' : 'lock'; }
   function nodeW(n){ return (n.big?74:58); }
+  const bestOf = id => (P.best||{})[id] || (P.cleared[id] ? 1 : 0);   // 92 版以前通关的存档没记星数 → 至少 1 颗
+  function starRow(cx, cy, n, s){ for(let i=0;i<3;i++) drawImgC(img('gui/IconMisc/'+(i<n?'Icon_Star_On':'Icon_Star_Off')+'.png'), cx+(i-1)*s*0.95, cy-(i===1?s*0.12:0), s); }
   function drawNode(n, sx, sy, u){
     const st=nodeState(n.i), im=mi(st==='done'?'node_green':'node_gray'); if(!ok(im)) return;
     let pop = S.pop[n.l.id]; const pk = pop!=null ? ease.outBack(clamp01(pop/0.45)) : 1;
@@ -264,6 +266,7 @@ const CHAPTER_MAP = (()=>{
     // 关卡号、精英 / Boss / 新宠物气泡
     for(const n of g.nodes){ if(!vis(n.x,80)) continue; const st=nodeState(n.i), sx=X(n.x), sy=Y(n.y);
       text(n.l.id, sx, sy+19*u, (n.big?17:15)*u, st==='lock'?'#e8e4ee':'#fff', 'center', 800, st==='lock'?'#5a566a':'#2c3a2a');
+      if(st==='done') starRow(sx, sy+37*u, bestOf(n.l.id), 15*u);   // 92 版：拿到几颗星（用户 2026-11-14：「没有显示…让人没有重新打的欲望」）
       const bob=Math.sin(S.t*2.4+n.i)*2*u, onPet = Math.abs(pp.x-n.x)<20;
       const top = sy - (onPet ? 66 : 20)*u + bob;
       if(n.l.elite || n.l.boss){ const key=n.l.boss||n.l.elite; bubble(sx, top, (n.l.boss?44:36)*u, (cx,cy,s)=>{ const pc=MONPORT[key]; if(pc) ctx.drawImage(pc, cx-s*0.62, cy-s*0.74, s*1.24, s*1.24); }); }
@@ -331,9 +334,10 @@ const CHAPTER_MAP = (()=>{
     text(l.id, x+18*u, y+30*u, 26*u, MT_UI.txt, 'left', 800, false);
     ctx.font=`800 ${26*u}px ${FONT}`; const iw=ctx.measureText(l.id).width;
     text(l.name, x+18*u+iw+10*u, y+31*u, 18*u, MT_UI.txt, 'left', 800, false);
-    const tag = done ? '已通关' : '未通关', tc = done ? '#5f8a57' : '#b07a3a';
-    ctx.font=`800 ${12*u}px ${FONT}`; const tw=ctx.measureText(tag).width+18*u;
-    ctx.save(); rr(x+w-tw-14*u, y+19*u, tw, 22*u, 11*u); ctx.fillStyle=tc; ctx.fill(); ctx.restore(); text(tag, x+w-14*u-tw/2, y+30.5*u, 12*u, '#fff', 'center', 800, false);
+    if(done) starRow(x+w-14*u-36*u, y+29*u, bestOf(l.id), 26*u);   // 92 版：通关后显示最好几颗星，代替「已通关」
+    else { const tag='未通关', tc='#b07a3a';
+      ctx.font=`800 ${12*u}px ${FONT}`; const tw=ctx.measureText(tag).width+18*u;
+      ctx.save(); rr(x+w-tw-14*u, y+19*u, tw, 22*u, 11*u); ctx.fillStyle=tc; ctx.fill(); ctx.restore(); text(tag, x+w-14*u-tw/2, y+30.5*u, 12*u, '#fff', 'center', 800, false); }
     // 第二行：精英 / Boss、通关解锁
     let cx=x+18*u; const cy=y+64*u;
     const chip = (s, lead) => { ctx.font=`800 ${13*u}px ${FONT}`; const lw=lead?24*u:0, cw=ctx.measureText(s).width+20*u+lw;
@@ -406,8 +410,9 @@ const CHAPTER_MAP = (()=>{
     if(!d.moved){ tapAt(x, y); return; }
     const now=performance.now(), s=d.samples.filter(q=>now-q.t<100); if(s.length>1){ const a=s[0], b=s[s.length-1]; S.vel=-(b.x-a.x)/Math.max(30,b.t-a.t)*1000/S.geo.u; } }
   // 胜利后调用：记通关，回到地图时播解锁动画
-  function markCleared(id){
+  function markCleared(id, stars){
     const L=levels(), i=L.findIndex(l=>l.id===id); if(i<0) return;
+    P.best=P.best||{}; P.best[id]=Math.max(P.best[id]||0, stars||1);   // 92 版：每关最好成绩几颗星（地图节点、信息卡上显示）
     const first=!P.cleared[id]; P.cleared[id]=true; save(); if(!first) return;
     const nxt=L[i+1]; S.cam=null; P.sel=id; S.petS=null; S.petTo=null; S.follow=null; S.followOff=false;
     if(nxt) S.anim={t:0, from:id, to:nxt.id};
@@ -477,7 +482,7 @@ const CHAPTER_MAP = (()=>{
   window.addEventListener('wheel', e=>{ if(!on() || !S.geo) return; const mx=Math.max(0, S.geo.width-S.lay.content.w/S.geo.u); S.cam=clamp(S.cam+(e.deltaX||e.deltaY)*0.8/S.geo.u, 0, mx); S.vel=0; S.follow=null; S.followOff=true; }, {passive:true});
   document.addEventListener('DOMContentLoaded', ()=>{
     if(typeof drawBattleEntry==='function') drawBattleEntry = lay => CHAPTER_MAP.draw(lay);   // meta.js 的战斗页入口换成地图
-    if(typeof HOOKS!=='undefined') HOOKS.push(type=>{ if(type==='win' && S.playing) markCleared(S.playing); });
+    if(typeof HOOKS!=='undefined') HOOKS.push(type=>{ if(type==='win' && S.playing) markCleared(S.playing, G.over && G.over.stars); });
   });
 
   const API = { draw, drawOverlay, chestState, markCleared, reset, preset, gotoChapter, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },

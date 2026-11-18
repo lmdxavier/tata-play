@@ -23,7 +23,7 @@ const BEATS = {fire:'grass', grass:'water', water:'fire', light:'dark', dark:'li
 
 const DATA = {
   pets: {
-    flower:  {cn:'聚能花', desc:'每 14 秒产出 25 能量。放在花丛格上产量 +20%。', rarity:'common', name:'Flower',  short:'花', el:'grass', shape:'producer', cost:50,  cd:5,  hp:300,  prod:25, prodInt:14, windup:0.17},
+    flower:  {cn:'聚能花', desc:'每 20 秒产出 25 能量。放在花丛格上产量 +20%。', rarity:'common', name:'Flower',  short:'花', el:'grass', shape:'producer', cost:50,  cd:5,  hp:300,  prod:25, prodInt:20,   /* 92 版：14 → 20（关卡设计.md「难度和重玩」；PvZ 向日葵每 24 秒 25） */ windup:0.17},
     goldfish:{cn:'泡泡鱼', desc:'向本路前方吐水弹，命中第一个敌人。水系连成 3 只时，水弹让敌人减速 15%，持续 2 秒。上下左右 4 格都被普通宠物链接时可以进化。', rarity:'rare', evo:{spine:'GoldfishEvo', cn:'花冠泡泡鱼', dmgMul:1.5, ring:{n:12, rounds:2, round:2, dmg:60, speed:5}}, name:'Goldfish',short:'鱼', el:'water', shape:'shooter',  cost:100, cd:5,  hp:300,  dmg:20, int:1.4, projSpeed:6, windup:0.17},
     pug:     {cn:'火牙犬', desc:'咬前方 1 格内的所有敌人。火系连成 3 只时，攻击附带灼烧：每秒 4 点，持续 3 秒。', rarity:'common', name:'Pug',     short:'巴哥',el:'fire', shape:'melee',    cost:75,  cd:5,  hp:450,  dmg:40, int:1.0, reach:1, windup:0.36}   /* 出手 = Attack 动画里身体顶到最高点（0.367s），不是 Spine 自带的 0.167s 事件（那是蓄力开始） */,
     pumpkin: {cn:'硬壳南瓜', desc:'生命 2000，不攻击。挡住敌人，让后排继续输出。', rarity:'common', name:'Pumpkin', short:'南瓜',el:'grass', shape:'wall',    cost:50,  cd:20, hp:2000, windup:0.17},
@@ -103,13 +103,18 @@ const starOf = k => (PROFILE.stars && PROFILE.stars[k]) || 1;   // 69 版：宠�
 const swapMax = () => PROFILE.unlock.swap3 ? 3 : PROFILE.unlock.swap ? 2 : 0;
 const laneOn = l => DATA.level.lanes.includes(l);
 const levelCleared = id => { try{ return !!(window.CHAPTER_MAP && CHAPTER_MAP.progress.cleared[id]); }catch(e){ return false; } };
+// 92 版：本关条件（开局写清楚；用户 2026-11-14：「需要在一开始游戏界面说明」）。只列和平常不一样的
+function condInfo(){ const lv=DATA.level, c=lv.cond||{}, out=[];
+  if(!lv.skyDrop) out.push('天上不掉能量');
+  if(c.prod && c.prod<1) out.push(`聚能花产量 -${Math.round((1-c.prod)*100)}%`);
+  return out.length ? {name:c.name||'', lines:out} : null; }
 function setLevel(id){
   const lv = (window.LEVELS||{})[id]; if(!lv) return false;
   const owned = PET_ORDER.filter(k=>PROFILE.owned[k]);
   const pick = owned.length>6;   // 73 版：宠物超过 6 只 → 开战前选上阵（参照 PvZ 1-8 起开战前选卡）；默认上次选的
   const prev = (PROFILE.loadout||[]).filter(k=>PROFILE.owned[k]);
   DATA.level = { id, scene:lv.scene||'day', title:lv.title, lanes:lv.lanes.slice(), loadout: pick && prev.length ? prev.slice(0,6) : owned.slice(0,6), pick, startEnergy:lv.startEnergy, skyDrop:lv.skyDrop, cells:lv.cells||[], duration:lv.duration,
-    spawns:lv.spawns, reward:lv.reward||null, tut:lv.tut||null, boxShard:lv.boxShard||null, first:!levelCleared(id) };
+    spawns:lv.spawns, cond:lv.cond||null, reward:lv.reward||null, tut:lv.tut||null, boxShard:lv.boxShard||null, first:!levelCleared(id) };
   DATA.level.demo = (lv.demo && DATA.level.first && !PROFILE.demo) ? lv.demo : null;   // 66 版：带浮窗的演示，只放一次；演示完重新开始，玩家自己打
   EVENTS = lv.events||[]; WAVE_MARKS = lv.marks||[];
   if(L) L = makeLayout(L.kind);
@@ -692,6 +697,7 @@ function update(dt){
         let mul = (cellAt(pet.lane,pet.col)||{}).type==='flower' ? 1.2 : 1;
         if(pet.group && pet.group.el==='grass' && pet.group.size>=5) mul*=1.2;
         if(pet.key==='flower' && pet.star>=2) mul*=STAR2.flowerProd;   // 90 版：聚能花 2 星产能 +25%
+        if(DATA.level.cond && DATA.level.cond.prod) mul*=DATA.level.cond.prod;   // 92 版：黄昏 / 夜晚等时段的产量减益（levels.js cond，关卡设计.md「难度和重玩」）
         pet.timer = d.prodInt;
         G.orbs.push({lane:pet.lane,p:pet.col+0.5,value:Math.round(d.prod*mul),life:0,fall:0,pop:0.3,produced:true}); emit('produce',{pet});
       }

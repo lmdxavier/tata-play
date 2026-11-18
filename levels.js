@@ -78,7 +78,7 @@
     reward:{shard:['lizard',15]} };
 
   // 1-7 山坡小路：5 路。迅火狐（移动 0.5 格 / 秒，生命 170，走防守少的路）；通关给泡泡鱼升 2 星的碎片
-  L['1-7'] = { scene:'dusk', title:'山坡小路', lanes:[0,1,2,3,4], startEnergy:200, skyDrop:{every:10, value:25, firstAt:5}, duration:205, marks:[10,50,110,160],
+  L['1-7'] = { cond:{name:'黄昏', prod:0.8}, scene:'dusk', title:'山坡小路', lanes:[0,1,2,3,4], startEnergy:250, skyDrop:{every:10, value:25, firstAt:5}, duration:205, marks:[10,50,110,160],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:2,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[18,1],[26,3],[34,0],[42,4],[90,2],[98,1],[106,3],[140,0],[148,4],[176,2],[180,1],[184,3]]),
               ...seq('fox', [[50,1],[52,3],[76,0],[77.5,4],[80,0],[110,2],[112,2],[130,1],[131,3],[133,1],[160,0],[161,4],[168,2],[170,1],[171,3],[186,0],[188,4]]),
@@ -91,7 +91,7 @@
     reward:{shard:['goldfish',10]} };
 
   // 1-8 林间夜路：5 路，夜里（不掉天降能量）。厚壳蜗（慢、血厚，后面跟着怪）；翠颈蛇（咬中的宠物中毒）。通关给厚壳蜗碎片（满）
-  L['1-8'] = { scene:'A', title:'林间夜路', lanes:[0,1,2,3,4], startEnergy:325, skyDrop:null, duration:220, marks:[10,60,120,170],
+  L['1-8'] = { cond:{name:'夜晚'}, scene:'A', title:'林间夜路', lanes:[0,1,2,3,4], startEnergy:325, skyDrop:null, duration:220, marks:[10,60,120,170],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:2,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[17,1],[24,3],[31,0],[38,4],[64,2],[66,2],[90,0],[92,0],[96,4],[98,4],[124,1],[126,1],[130,3],[132,3],[172,0],[176,4],[182,2],[188,1],[194,3]]),
               ...seq('snail', [[60,2],[86,0],[94,4],[120,1],[128,3],[170,2],[180,0],[186,4]]),
@@ -103,7 +103,7 @@
     reward:{shard:['snail',10]} };
 
   // 1-9 深林山谷：5 路，夜里（不掉天降能量）。宠物 7 只，开战前选 6 只上阵；长信翁（飞越遇到的第一只宠物）。通关给火牙犬碎片（升 2 星）
-  L['1-9'] = { scene:'C', title:'深林山谷', lanes:[0,1,2,3,4], startEnergy:325, skyDrop:null, duration:230, marks:[10,60,120,175],
+  L['1-9'] = { cond:{name:'夜晚'}, scene:'C', title:'深林山谷', lanes:[0,1,2,3,4], startEnergy:325, skyDrop:null, duration:230, marks:[10,60,120,175],
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:0,col:6,type:'crate',kind:'barrel'}, {lane:4,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[16,1],[22,3],[28,0],[34,4],[66,1],[68,3],[96,2],[124,0],[126,4],[178,1],[182,3],[188,2],[196,0],[200,4]]),
               ...seq('gull', [[44,2],[62,0],[70,4],[100,1],[104,3],[136,2],[150,0],[154,4],[176,2],[186,1],[192,3]]),
@@ -116,7 +116,7 @@
     reward:{shard:['pug',10]} };
 
   // 1-10 森林之王：5 路。Boss 格鲁姆（重击带上下两路、换路、吼叫召绿莱姆、半血狂暴）。通关给章节宝箱（金币 500、星星 10）
-  L['1-10'] = { scene:'B', title:'森林之王', lanes:[0,1,2,3,4], startEnergy:350, skyDrop:null, duration:290, marks:[10,60,140,200],   // 夜里不掉天降能量
+  L['1-10'] = { cond:{name:'夜晚'}, scene:'B', title:'森林之王', lanes:[0,1,2,3,4], startEnergy:350, skyDrop:null, duration:290, marks:[10,60,140,200],   // 夜里不掉天降能量
     cells:[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'}, {lane:0,col:6,type:'crate',kind:'barrel'}, {lane:4,col:6,type:'crate',kind:'barrel'} ],
     spawns: [ ...seq('slime', [[10,2],[16,1],[22,3],[28,0],[34,4],[40,2],[46,1],[52,3],[150,0],[158,4],[172,1],[180,3],[205,0],[210,4],[222,1],[230,3]]),
               ...seq('beetle', [[44,0],[50,4],[66,2],[90,1],[96,3],[165,0],[190,4],[215,2],[226,0]]),
@@ -164,31 +164,31 @@
   L['2-1'] = { scene:'c2day', title:'花谷入口', lanes:ALL, startEnergy:150, skyDrop:{every:12, value:25, firstAt:6}, duration:200, marks:[8,60,120,160], cells:CELLS,
     spawns:[ ...spread('slime',8,170,18,[2,1,3,0,4]), ...spread('goat',40,175,8,[1,3,2,0,4]), ...spread('beetle',70,165,6,[0,4,2]) ],
     events:[ {t:150, kind:'banner', text:'一大波敌人正在接近', until:156} ], reward:{shard:['fox',15]} };
-  L['2-2'] = { scene:'c2mist', title:'晨雾花坡', lanes:ALL, startEnergy:150, skyDrop:{every:12, value:25, firstAt:6}, duration:210, marks:[8,60,120,170], cells:CELLS,
+  L['2-2'] = { scene:'c2mist', title:'晨雾花坡', lanes:ALL, startEnergy:150, skyDrop:{every:11, value:25, firstAt:6}, duration:210, marks:[8,60,120,170], cells:CELLS,
     spawns:[ ...spread('slime',8,180,16,[2,1,3,0,4]), ...spread('goat',30,170,7,[3,1,4,0,2]), ...spread('cat',45,185,7,[2,0,4,1,3]), ...spread('beetle',90,175,5,[1,3]) ],
     events:[ {t:160, kind:'banner', text:'一大波敌人正在接近', until:166} ], reward:{shard:['flower',10]} };
-  L['2-3'] = { scene:'c2noon', title:'铃声花径', lanes:ALL, startEnergy:175, skyDrop:{every:12, value:25, firstAt:6}, duration:220, marks:[8,60,120,180], cells:CELLS,
+  L['2-3'] = { scene:'c2noon', title:'铃声花径', lanes:ALL, startEnergy:175, skyDrop:{every:11, value:25, firstAt:6}, duration:220, marks:[8,60,120,180], cells:CELLS,
     spawns:[ ...spread('slime',8,195,18,[2,1,3,0,4]), ...spread('goat',40,190,6,[1,3,2]), ...spread('cat',60,190,4,[0,4]), ...spread('bellsnake',50,195,7,[2,1,3,0,4]), ...spread('hornbug',140,141.6,5,[2,2,1,3,2]) ],
     events:[ {t:170, kind:'banner', text:'一大波敌人正在接近', until:176} ], reward:{shard:['lizard',15]} };
-  L['2-4'] = { scene:'c2shade', title:'蘑菇花荫', lanes:ALL, startEnergy:175, skyDrop:{every:13, value:25, firstAt:6}, duration:230, marks:[8,60,130,190], cells:CELLS,
+  L['2-4'] = { scene:'c2shade', title:'蘑菇花荫', lanes:ALL, startEnergy:250, skyDrop:{every:11, value:25, firstAt:6}, duration:230, marks:[8,60,130,190], cells:CELLS,
     spawns:[ ...spread('slime',8,205,18,[2,1,3,0,4]), ...spread('mushgoat',50,200,6,[2,1,3]), ...spread('goat',30,200,7,[0,4,2,1,3]), ...spread('bellsnake',90,205,4,[1,3]), ...spread('cat',70,180,3,[2,0,4]) ],
     events:[ {t:180, kind:'banner', text:'一大波敌人正在接近', until:186} ], reward:{shard:['mushgoat',15]} };
-  L['2-5'] = { scene:'c2gale', title:'落樱风岭', lanes:ALL, startEnergy:200, skyDrop:{every:13, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
+  L['2-5'] = { scene:'c2gale', title:'落樱风岭', lanes:ALL, startEnergy:200, skyDrop:{every:11, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
     spawns:[ ...spread('slime',8,215,16,[2,1,3,0,4]), ...spread('redbird',35,220,10,[1,3,0,4,2]), ...spread('cat',60,210,4,[2,1,3]), ...spread('mushgoat',90,215,4,[2,0,4]), ...spread('beetle',50,200,6,[0,4,1,3]), ...spread('gull',150,215,3,[1,3,2]) ],
     events:[ {t:30, kind:'preview', lanes:[1,3], until:45, text:'预告：掠空鸟走第 2、第 4 路'}, {t:190, kind:'banner', text:'一大波敌人正在接近', until:196} ], reward:{shard:['goldfish',15]} };
-  L['2-6'] = { scene:'c2after', title:'花溪石滩', lanes:ALL, startEnergy:200, skyDrop:{every:14, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
+  L['2-6'] = { scene:'c2after', title:'花溪石滩', lanes:ALL, startEnergy:250, skyDrop:{every:12, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
     spawns:[ ...spread('slime',8,215,16,[2,1,3,0,4]), ...spread('shellliz',40,220,9,[2,1,3,0,4]), ...spread('redbird',60,215,6,[0,4,2]), ...spread('goat',30,210,6,[1,3]), ...spread('bellsnake',100,220,4,[2,0,4]) ],
     events:[ {t:190, kind:'banner', text:'一大波敌人正在接近', until:196} ], reward:{shard:['pumpkin',10]} };
-  L['2-7'] = { scene:'c2dusk', title:'晚霞花道', lanes:ALL, startEnergy:225, skyDrop:{every:14, value:25, firstAt:6}, duration:250, marks:[8,70,140,205], cells:CELLS,
+  L['2-7'] = { cond:{name:'晚霞', prod:0.8}, scene:'c2dusk', title:'晚霞花道', lanes:ALL, startEnergy:300, skyDrop:{every:11, value:25, firstAt:6}, duration:250, marks:[8,70,140,205], cells:CELLS,
     spawns:[ ...spread('slime',8,225,16,[2,1,3,0,4]), ...spread('shellliz',40,220,6,[1,3,2]), ...spread('mushgoat',60,215,4,[0,4]), ...spread('cat',50,200,4,[2,1,3]), ...spread('goat',30,225,6,[0,4,2]), [120,'wildox',2], [205,'wildox',1], [210,'wildox',3] ],
     events:[ {t:110, kind:'preview', lanes:[2], until:122, text:'预告：蛮角牛走中路'}, {t:198, kind:'banner', text:'一大波敌人正在接近', until:204} ], reward:{shard:['bear',25]} };
-  L['2-8'] = { scene:'c2rain', title:'花雨小径', lanes:ALL, startEnergy:325, skyDrop:null, duration:260, marks:[8,70,140,210], cells:CELLS,
+  L['2-8'] = { cond:{name:'细雨'}, scene:'c2rain', title:'花雨小径', lanes:ALL, startEnergy:325, skyDrop:null, duration:260, marks:[8,70,140,210], cells:CELLS,
     spawns:[ ...spread('slime',8,235,16,[2,1,3,0,4]), ...spread('toucan',45,230,8,[1,3,2,0,4]), ...spread('redbird',70,225,5,[0,4,2]), ...spread('goat',30,230,6,[1,3]), ...spread('shellliz',90,230,4,[2,0,4]), ...spread('cat',60,200,3,[1,3,2]) ],
     events:[ {t:40, kind:'preview', lanes:[1], until:52, text:'预告：巨喙鸟走第 2 路'}, {t:205, kind:'banner', text:'一大波敌人正在接近', until:211} ], reward:{shard:['fox',15]} };
-  L['2-9'] = { scene:'c2twi', title:'暮色花谷', lanes:ALL, startEnergy:325, skyDrop:null, duration:270, marks:[8,70,150,215], cells:CELLS,
+  L['2-9'] = { cond:{name:'暮色', prod:0.8}, scene:'c2twi', title:'暮色花谷', lanes:ALL, startEnergy:325, skyDrop:null, duration:270, marks:[8,70,150,215], cells:CELLS,
     spawns:[ ...spread('slime',8,245,16,[2,1,3,0,4]), ...spread('mushsnake',40,240,9,[2,1,3,0,4]), ...spread('bellsnake',60,240,5,[1,3,2]), ...spread('mushgoat',80,240,4,[0,4]), ...spread('goat',30,240,6,[2,1,3]), ...spread('toucan',110,230,4,[0,4]), [150,'wildox',2], [225,'wildox',0], [228,'wildox',4] ],
     events:[ {t:215, kind:'banner', text:'一大波敌人正在接近', until:221} ], reward:{shard:['bomb',15]} };
-  L['2-10'] = { scene:'c2disco', title:'巴隆的舞会', lanes:ALL, startEnergy:375, skyDrop:null, duration:300, marks:[10,70,140,200], cells:CELLS,
+  L['2-10'] = { cond:{name:'夜晚'}, scene:'c2disco', title:'巴隆的舞会', lanes:ALL, startEnergy:375, skyDrop:null, duration:300, marks:[10,70,140,200], cells:CELLS,
     spawns:[ ...spread('slime',10,260,18,[2,1,3,0,4]), ...spread('cat',40,200,4,[1,3]), ...spread('bellsnake',60,250,5,[0,4,2]), ...spread('redbird',80,240,5,[1,3,2]), ...spread('shellliz',100,250,4,[0,4]), ...spread('goat',30,120,5,[2,1,3]), [140,'disco',2] ],
     events:[ {t:134, kind:'banner', text:'巴隆从中路过来', until:140} ], reward:{chest:{coin:800, star:15}} };
 })();

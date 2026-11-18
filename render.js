@@ -982,12 +982,24 @@ function pickGeom(){
   // 91 版：宠物最多 25 只 → 每行按屏宽放 4～6 张，还放不下就整体缩小卡片，面板不超出战场区域
   const own=PET_ORDER.filter(k=>PROFILE.owned[k]), card=L.items.find(i=>i.id==='card') || {w:56,h:66}, gap=10, first=!PROFILE.tipPick;
   let cw=card.w, ch=card.h; const per=Math.max(4, Math.min(6, Math.floor((W-24-36+gap)/(cw+gap))));
-  const rows=Math.ceil(own.length/per), fixed=58+(first?24:0)+18+56+18, avail=L.bar.y-L.hud.h-24;
+  const cd=condInfo(), rows=Math.ceil(own.length/per), fixed=58+(first?24:0)+(cd?24:0)+18+56+18, avail=L.bar.y-L.hud.h-24;
   if(fixed+rows*(ch+gap)-gap > avail){ const k=Math.max(0.5, (avail-fixed+gap)/(rows*(ch+gap))); cw*=k; ch*=k; }
   const pw=Math.min(W-24, per*cw+(per-1)*gap+36);
   const ph=fixed+rows*(ch+gap)-gap, px=W/2-pw/2, py=Math.max(L.hud.h+10, Math.min(L.bar.y-ph-14, (L.hud.h+L.bar.y)/2-ph/2));
-  return {own, cw, ch, per, gap, pw, ph, px, py, first, gx:W/2-(Math.min(per,own.length)*cw+(Math.min(per,own.length)-1)*gap)/2};
+  return {own, cw, ch, per, gap, pw, ph, px, py, first, cd, gx:W/2-(Math.min(per,own.length)*cw+(Math.min(per,own.length)-1)*gap)/2};
 }
+// 92 版：本关条件（黄昏、夜晚…）。选阵面板里一行；开战后正中再亮 3 秒（用户 2026-11-14：「需要在一开始游戏界面说明」）
+const condLine = cd => (cd.name ? cd.name+'：' : '') + cd.lines.join('，');
+function drawCond(){
+  if(!G.started || G.over || G.paused || (G.pick && G.pick.on) || G.demo || tutCur() || G.t>=3.4) return; const cd=condInfo(); if(!cd) return;
+  const U=TH_AFK.ui, a=Math.min(1, G.t/0.25, (3.4-G.t)/0.4); ctx.font=`800 15px ${FONT}`;
+  const lw=Math.max(...cd.lines.map(t=>ctx.measureText(t).width)), pw=Math.min(W-40, Math.max(200, lw+56)), ph=(cd.name?50:22)+cd.lines.length*24+12, px=W/2-pw/2, py=(L.hud.h+L.bar.y)/2-ph/2-40;
+  ctx.save(); ctx.globalAlpha=a;
+  const pf=dBox(px, py, pw, ph, 18, U.panel, D37.sideL, D37.out, 0);
+  ctx.strokeStyle=D37.gold; ctx.lineWidth=1.5; rr(pf.x+5, pf.y+5, pf.w-10, pf.h-10, 14); ctx.stroke();
+  let y=py+(cd.name?30:22); if(cd.name){ text(cd.name, W/2, y, 19, U.txt, 'center', 800, false); y+=30; }
+  cd.lines.forEach(t=>{ text(t, W/2, y, 15, '#c0603a', 'center', 800, false); y+=24; });
+  ctx.restore(); }
 function drawPick(){
   PICK_RECTS.length=0; if(!G.pick || !G.pick.on || G.over) return;
   const g=pickGeom(), U=TH_AFK.ui, lo=DATA.level.loadout;
@@ -995,7 +1007,9 @@ function drawPick(){
   const pf=dBox(g.px, g.py, g.pw, g.ph, 22, U.panel, D37.sideL, D37.out, 0);
   ctx.save(); ctx.strokeStyle=D37.gold; ctx.lineWidth=1.5; rr(pf.x+6, pf.y+6, pf.w-12, pf.h-12, 17); ctx.stroke(); ctx.restore();
   text(`选择上阵宠物  ${lo.length}/6`, W/2, g.py+34, 19, U.txt, 'center', 800, false);
-  let y0=g.py+58; if(g.first){ text('点卡片换上或换下，最多 6 只', W/2, y0+4, 13, U.sub, 'center', 800, false); y0+=24; }
+  let y0=g.py+58;
+  if(g.cd){ text(condLine(g.cd), W/2, y0+4, 14, '#c0603a', 'center', 800, false); y0+=24; }   // 92 版：本关条件，选阵时就能看到
+  if(g.first){ text('点卡片换上或换下，最多 6 只', W/2, y0+4, 13, U.sub, 'center', 800, false); y0+=24; }
   g.own.forEach((k,i)=>{ const r=Math.floor(i/g.per), c=i%g.per, n=Math.min(g.per, g.own.length-r*g.per), rx=W/2-(n*g.cw+(n-1)*g.gap)/2,
       it={x:rx+c*(g.cw+g.gap), y:y0+r*(g.ch+g.gap), w:g.cw, h:g.ch}, on=lo.includes(k);
     drawCard(it, DATA.pets[k], k, false);
@@ -1565,7 +1579,7 @@ function draw(){
   drawNight(dt);
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();
   if(G.started && !G.over) watchEvents();
-  drawUI2(); drawPick(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt); drawLoot(dt); EVO.drawOverlay(dt);   // 87 版：进化演出画在最上面；拖着的宠物画在卖出区上面，不被挡住
+  drawUI2(); drawPick(); drawCond(); drawNightDemo(); drawSellZone(); drawTutorial(); drawDragGhost(); drawFlyers(dt); drawLoot(dt); EVO.drawOverlay(dt);   // 87 版：进化演出画在最上面；拖着的宠物画在卖出区上面，不被挡住
   const bn=[...G.fx.filter(f=>f.kind==='banner'), ...EVENTS.filter(ev=>G.t>=ev.t&&G.t<ev.until&&ev.text).map(ev=>({text:ev.text,big:ev.kind==='banner'}))];
   /* 65 版：教学提示出现时，同一位置的预告文字先不画，免得叠在一起 */
   if(!G.over && !G.paused && !tutCur()) bn.slice(0,2).forEach((b,i)=>{ const y=L.hud.h+30+i*46; if(b.big){ const ev=EVENTS.find(e=>e.kind==='banner'&&G.t>=e.t&&G.t<e.until); if(ev) drawWaveWarning(G.t-ev.t, ev.until-ev.t); }
