@@ -425,6 +425,7 @@ function mk(t, extra) {
 }
 
 // ---------------------------------------------------------------- 状态
+const PEEK = new Set(); let GAVEUP = false;
 let cells = [], player, status = "gen", showAll = false, killedRats = 0, startTime = 0, killer = -1;
 let stamps = loadStamps(), runStamps = [];
 let soundOn = true;
@@ -632,7 +633,7 @@ function openContents(i, what) {
 
 function newGame() {
   player = {hp: 6, maxHP: 6, xp: 0, level: 1};
-  status = "gen"; showAll = false; killedRats = 0; killer = -1; runStamps = [];
+  status = "gen"; showAll = false; killedRats = 0; killer = -1; runStamps = []; PEEK.clear(); GAVEUP = false;
   hideBanner(); closePicker(); resetStage();
   hist.length = 0; histActs.length = 0; hintTarget = null; closeAd();
   document.getElementById("winp").classList.remove("on");
@@ -765,7 +766,6 @@ function levelUp() {
 function die(i) {
   if (SIM) { status = "dead"; return; }
   status = "dead"; killer = i;
-  cells.forEach(b => { if (b.t === "mimic") b.mimic = false; });
   // 亮图、横幅、震屏在战斗演出播完后由 finishDeath() 做
 }
 
@@ -779,7 +779,7 @@ function win() {
   if (cells.filter(b => b.t === "egg" && !b.def).length === 1) runStamps.push("egg");
   if (killedRats === 0) runStamps.push("pacifist");
   for (const s of runStamps) if (!stamps.includes(s)) stamps.push(s);
-  saveStamps();
+  saveStamps(); try { localStorage.setItem("wyrmnest_cleared", "1"); } catch (e) {}
   const secs = Math.round((Date.now() - startTime) / 1000);
   const wb = document.getElementById("winBox");
   wb.innerHTML =
@@ -1988,11 +1988,11 @@ function updateBattle(dt) {
   stepScript(dt);
 }
 function finishDeath() {
-  showAll = true; shakeT = 0.5; sfx("lose");
+  shakeT = 0.5; sfx("lose");
   const k = killer >= 0 ? cells[killer] : null;
   const kn = k ? (k.t === "giant" ? (k.name === "B" ? "白熊" : "棕熊") : DEF[k.t].name) : "怪物";
   const kic = k ? (k.t === "mine" ? ITEM_ICON.mine : monKey(k)) : null;
-  bannerEl.innerHTML = `<div class="dk">${kic ? `<span class="dav"><img src="${guideIcon(kic)}"></span>` : ""}<div><div class="dt">被<em>${kn}</em>打倒了</div><div class="bw"><span class="btn o" onclick="deathRewind()"><span class="pl">▶</span>回溯</span><span class="btn" onclick="deathRestart()">重开</span></div></div></div>`;
+  bannerEl.innerHTML = `<div class="dk">${kic ? `<span class="dav"><img src="${guideIcon(kic)}"></span>` : ""}<div><div class="dt">被<em>${kn}</em>打倒了</div><div class="bw"><span class="btn o" onclick="deathRewind()"><span class="pl">▶</span>回溯</span><span class="btn" onclick="giveUp()">放弃</span></div></div></div>`;
   bannerEl.classList.remove("on"); void bannerEl.offsetWidth; bannerEl.classList.add("on"); placeBanner();
 }
 // 飞起：WebGL 画，从格子弧线飞到舞台右边，越飞越大
@@ -2205,11 +2205,12 @@ function updateReveal(dt) {
     }
     LA = {i: -1, t: ""};
   }
-  if (showAll && !RV.lastAll) {   // 死后亮全图：从凶手那里一圈圈翻开
-    const hidden = []; for (let j = 0; j < N; j++) if (!cells[j].rev) hidden.push(j);
+  const peekN = showAll ? N : PEEK.size;
+  if (peekN && peekN !== RV.lastPeek) {   // 放弃后亮图：从凶手那里一圈圈翻开
+    const hidden = []; for (let j = 0; j < N; j++) if (!cells[j].rev && (showAll || PEEK.has(j))) hidden.push(j);
     rvStart(hidden, killer >= 0 ? killer : 0, {r: 0, step: 0.035, cap: 0.6, amp: 0.7, sound: false});
   }
-  RV.lastAll = showAll;
+  RV.lastAll = showAll; RV.lastPeek = peekN;
   for (const [j, r] of RV.rip) { r.t += dt; if (r.t > 0.4) RV.rip.delete(j); }
 }
 const RIP_DUR = 0.34, RIP_PEAK = 0.13;
@@ -2400,7 +2401,7 @@ function drawCell(i, hover) {
   if (rx || pressed) XF = {cx, cy: y + CELL / 2, s: (rx ? rx[1] : 1) * (pressed ? 0.9 : 1), dy: rx ? rx[0] : 0};
   const notYet = rx && rx[2];                    // 波浪还没到最高点：先显示没翻开的样子
   const rev = c.rev && !notYet;
-  const shown = (rev || (showAll && !notYet)) && !away && !pendRew.has(i);
+  const shown = (rev || ((showAll || PEEK.has(i)) && !notYet)) && !away && !pendRew.has(i);
   const hideRew = pendRew.has(i);
   const collectible = rev && ((c.mon && c.def) || c.t === "treasure") && !away && !hideRew;
   {   // 地面：没翻开 = 凸起的石砖，翻开 = 凹下去的石板；离棋盘中心越远越暗（火光照不到）
@@ -2425,7 +2426,7 @@ function drawCell(i, hover) {
     }
   }
   if (i === killer && !away) rect(x + 2, y + 2, CELL - 4, CELL - 4, [0.95, 0.15, 0.15, 0.4]);
-  const dim = !c.rev && showAll ? 0.8 : 1;
+  const dim = !c.rev && (showAll || PEEK.has(i)) ? 0.8 : 1;
   const W1 = [1, 1, 1, dim];
   // 宝箱刚打开：箱子先抖两下再爆开
   const ch = fxOf(i, "chest");
@@ -2478,7 +2479,7 @@ function drawCell(i, hover) {
       }
     }
   }
-  if (!c.rev && c.mark && !showAll) {
+  if (!c.rev && c.mark && !showAll && !PEEK.has(i)) {
     if (c.mark === 100) icon(ITEM_ICON.mine, cx, y + 12, 15, [1, 1, 1, 0.75]);
     else text(String(c.mark), cx, y + 12.5, 11, C_MARK);
   }
@@ -2596,7 +2597,7 @@ function guideRow(c) { const key = c.t === "giant" ? "giantA" : c.t; return GUID
 function infoFor0(lx, ly) {
   if (ly >= BOARD_Y && ly < HUD_Y && lx >= 0 && lx < VW) {
     const i = DI((lx / CELL) | 0, ((ly - BOARD_Y) / CELL) | 0), c = cells[i];
-    if (!c || (!c.rev && !showAll)) return null;
+    if (!c || (!c.rev && !showAll && !PEEK.has(i))) return null;
     if (BT && BT.i === i) return null;
     const youP = Math.max(0, player.hp - 1);
     if ((c.mon && c.def && c.t !== "mine") || c.t === "treasure" || (c.t === "mine" && c.def)) {
@@ -2705,7 +2706,7 @@ cv.addEventListener("pointerup", e => {
   [mouseX, mouseY] = toV(e);
   if (BT) { BT.speed = FAST; return; }      // 演出中点一下 = 加速
   if (!P || P.moved) return;
-  if (inR(HERO_R, mouseX, mouseY) || inR(XP_R, mouseX, mouseY)) { if (status === "dead") newGame(); else playerAct("lv"); return; }
+  if (inR(HERO_R, mouseX, mouseY) || inR(XP_R, mouseX, mouseY)) { if (status === "dead") { if (GAVEUP) newGame(); else giveUp(); } else playerAct("lv"); return; }
   if (inR(BOOK_R, mouseX, mouseY)) { openGuide(); return; }
   if (inR(TUT_R, mouseX, mouseY)) { askHint(); return; }
   if (inR(LAMP_R, mouseX, mouseY)) { toggleTutor(); return; }
@@ -2985,7 +2986,7 @@ function giveHint() {
 function doRewind() {
   const p = pendingRewind; pendingRewind = null;
   if (!p) return closeAd();
-  restore(hist[p.k]);
+  restore(hist[p.k]); PEEK.clear(); GAVEUP = false;
   hist.length = p.k; histActs.length = p.k;
   resetStage(); shakeT = 0; dispHP = player.hp;
   hideBanner(); closeAd(); sfx("level");
@@ -3100,7 +3101,18 @@ function drawNum(i, cx, y, dim) {
   text(String(lo + 1), cx, y + 12.5 + (1 - fr) * H, numSize(lo + 1) * pl, numCol(lo + 1, dim * fr));
 }
 
-function deathRewind() { if (status !== "dead" || BT || adTimer) return; askHint(); }
+function deathRewind() { if (status !== "dead" || GAVEUP || BT || adTimer) return; askHint(); }
+function clearedOnce() { try { return localStorage.getItem("wyrmnest_cleared") === "1"; } catch (e) { return false; } }
+function giveUp() {
+  if (status !== "dead" || GAVEUP || BT) return;
+  GAVEUP = true; sfx("mark");
+  cells.forEach(b => { if (b.t === "mimic") b.mimic = false; });
+  if (clearedOnce()) showAll = true;                       // 通关过：亮全图复盘
+  else if (killer >= 0) { around(killer, 1, j => { PEEK.add(j); }); PEEK.add(killer); }   // 没通关过：只亮死因那一片
+  const btn = bannerEl.querySelector(".bw");
+  if (btn) btn.innerHTML = `<span class="btn o" onclick="deathRestart()">重开</span>`;
+  placeBanner();
+}
 function deathRestart() { if (status !== "dead") return; sfx("mark"); newGame(); }
 function setHint(step) { hintTarget = step; hintSig = tutorSig(); }
 
@@ -3168,7 +3180,7 @@ function openGuide() {
     <li>经验槽集满点主角（或经验槽）升级，升级会<b>回满血</b>；每升两级多 1 颗心</li>
     <li><b>长按</b>任何怪物、道具、数字、心或经验槽 0.3 秒：看说明</li>
     <li>右键 / Shift+点击 / 长按没翻开的格子：标记数字；空格键也能升级；R 重开；战斗中点一下加速</li>
-    <li>死了没关系，会亮出整张图，适合观察规律</li>
+    <li>死了可以看广告<b>回溯</b>；选<b>放弃</b>会亮出打倒你的那一片。通关过一次后，放弃会亮出整张图，可以长按复盘</li>
     <li>点右上角指南针：看广告拿提示（保证能通关的一步）</li>
     <li>教学（下面按钮或按 T）：只按你看得见的信息分析，<span class="y">黄圈</span> = 下一步，<span class="c">蓝圈</span> = 依据的数字</li>
   </ul></div>
