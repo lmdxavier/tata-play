@@ -21,7 +21,10 @@
     //   起伏横向拉长 2.6 倍 + 软台阶（层状沉积、风蚀圆滑，不尖棱）；远景用自己的一套（bgSet: 's2'，map07 琥珀洞穴，不再叠阶段色）；
     //   环境光暖琥珀、比区域 1 暗一档；光源 = 火把 + 琥珀色晶簇，其余洞底放沙堆 / 碎石 / 风化岩块（deco，不发光）
     { name: '沙岩', body: 'sstone2', rim: 'e_sstone', top: 'e_sstop', spur: 'basalt2', spurRim: 'e_gate', noise: [0.2, 64, 0, 2.6, 0.55], bg: [1.15, 0.92, 0.62], bgSet: 's2', bgTint: 0, amb: [1.0, 0.84, 0.62, 0.76], props: ['fire', 'amber', 'amber'], propP: 0.4, deco: ['mound', 'pebbles', 'spireL', 'spireR', 'pebbles'], decoP: 0.7, room: ['mound', 'pebbles'] },
-    { name: '根须红土', body: 'deep', rim: 'e_dirtrim', top: 'e_dirttop', spur: 'basalt', spurRim: 'e_gate', noise: [0.24, 40, 0], bg: [1.05, 0.7, 0.58], amb: [1.0, 0.86, 0.74, 0.68], props: ['fire', 'mushroom'] },
+    // v0.22 区域 3 根须红土：贴图 = 区域 1 的 deep（土里一张网状根须纹）改砖红；硬块 = 锈红黑的铁壳（basalt2 改色）；土壳 / 顶条 = 区域 1 的改深红褐（tools/build_terrain.py --area3）；
+    //   起伏：比区域 2 圆、略尖一点的团块（红土是一团团的黏土，不是层状）；远景 s3 = map04 森林倒过来当洞顶垂下来的老根；环境光偏红、比区域 2 再暗一档；
+    //   光源 = 火把 + 发光蘑菇（朽根上长蘑菇），洞底放红褐碎岩
+    { name: '根须红土', body: 'rclay', rim: 'e_rclay', top: 'e_rtop', spur: 'ironcrust', spurRim: 'e_iron', noise: [0.24, 40, 0, 1.3], bg: [1.05, 0.7, 0.58], bgSet: 's3', bgTint: 0, amb: [1.0, 0.8, 0.7, 0.7], props: ['fire', 'mushroom', 'mushroom'], propP: 0.45, deco: ['rockT', 'rockW', 'rockW'], decoP: 0.6, room: ['rockT', 'rockW'] },
     { name: '苔藓洞', body: 'moss', rim: 'e_moss', top: 'e_mosstop', spur: 'basalt', spurRim: 'e_gate', noise: [0.24, 34, 0], bg: [0.66, 1.0, 0.7], amb: [0.86, 1.0, 0.8, 0.62], props: ['mushroom', 'crystal'] },
     { name: '紫晶岩', body: 'rock', rim: 'e_rock', top: null, spur: 'basalt', spurRim: 'e_gate', noise: [0.27, 36, 1], bg: [0.92, 0.7, 1.15], amb: [0.92, 0.84, 1.0, 0.6], props: ['crystal', 'crystal2'] },
     { name: '冰窟', body: 'ice', rim: 'e_ice', top: null, spur: 'basalt', spurRim: 'e_gate', noise: [0.27, 30, 1], bg: [0.62, 0.9, 1.2], amb: [0.82, 0.94, 1.0, 0.64], props: ['ice', 'crystal2'] },
@@ -37,8 +40,8 @@
   STAGES.forEach(s => MAT.push({ tex: s.spur, rim: s.spurRim, top: null }));
   MAT.push({ tex: 'gate', rim: 'e_gate', top: null });
   const GATE = 21, NST = STAGES.length;   // NST：1..NST 是各区域的土
-  const RIM_T = { e_dirtrim: 22, e_rock: 18, e_sand: 14, e_sstone: 16, e_bed: 20, e_moss: 22, e_ice: 18, e_teal: 22, e_grey: 18, e_ruin: 20, e_gate: 18 };
-  const TOPSTRIP = { e_grass: { s: 0.26, base: 156, h0: 220 }, e_dirttop: { s: 0.34, base: 52, h0: 113 }, e_mosstop: { s: 0.34, base: 52, h0: 113 }, e_sstop: { s: 0.17, base: 214, h0: 300 } };   // e_sstop：沙岩台面（沙堆 + 碎石往上伸）
+  const RIM_T = { e_dirtrim: 22, e_rock: 18, e_sand: 14, e_sstone: 16, e_rclay: 22, e_iron: 18, e_bed: 20, e_moss: 22, e_ice: 18, e_teal: 22, e_grey: 18, e_ruin: 20, e_gate: 18 };
+  const TOPSTRIP = { e_grass: { s: 0.26, base: 156, h0: 220 }, e_dirttop: { s: 0.34, base: 52, h0: 113 }, e_mosstop: { s: 0.34, base: 52, h0: 113 }, e_sstop: { s: 0.17, base: 214, h0: 300 }, e_rtop: { s: 0.34, base: 52, h0: 113 } };   // e_sstop：沙岩台面（沙堆 + 碎石往上伸）
   const TEX_S = 0.5;   // 内部贴图：1 素材像素 = 0.5 世界像素（和 dig 一样）
 
   // 光源道具（素材来自 dig）：c = 光的颜色，k = 强度，r = 照多远（世界像素）
@@ -54,6 +57,8 @@
     pebbles:  { img: 's2_pebbles', s: 0.2, k: 0 },
     spireL:   { img: 's2_spireL', s: 0.2, k: 0 },
     spireR:   { img: 's2_spireR', s: 0.2, k: 0 },
+    rockT:    { img: 's3_rockT', s: 0.34, k: 0 },   // v0.22 区域 3 洞底红褐碎岩（map04_02）
+    rockW:    { img: 's3_rockW', s: 0.34, k: 0 },
   };
   TR.PROP = PROP;
 
@@ -365,7 +370,7 @@
   const MP = 32;   // 距离场在重画区域四周多算的余量（世界像素）：土壳 + 往外伸的顶条
   let statT = 0, statN = 0; const PF = { fill: 0, dist: 0, crust: 0, top: 0 }, ST = { cpu: 0, hitN: 0, hitLat: 0, hitLatMax: 0 };   // ST：地形重画的纯 CPU 时间、挖一下到画面更新的延迟
   const half = (a, i, fx, fy, stride) => (a[i] * (1 - fx) + a[i + 1] * fx) * (1 - fy) + (a[i + stride] * (1 - fx) + a[i + stride + 1] * fx) * fy;
-  const CAP = { e_grass: 12, e_dirttop: 8, e_mosstop: 8, e_sstop: 9 };
+  const CAP = { e_grass: 12, e_dirttop: 8, e_mosstop: 8, e_sstop: 9, e_rtop: 8 };
   // 重画世界像素矩形 [X0,X1)×[Y0,Y1)：只算一次（跨两块画布时两块都贴），土壳 / 顶条在 1 像素 = 1 世界像素的层上算，放大贴上
   function* renderRegion(X0, Y0, X1, Y1) {
     const t0 = performance.now();
@@ -631,7 +636,7 @@
       for (let c = 0; c < COLS; c++) {
         const cell = G.cell(c, r); if (cell.t !== 0 || r < 1) continue;
         const below = G.cell(c, r + 1);
-        const floor = (below.t === 1 || below.t === 4) && !cell.web && !cell.mon, side = hash2(c, r, 5) < 0.5 ? -1 : 1;
+        const floor = (below.t === 1 || below.t === 4 || below.t === 7 || below.t === 8 || below.t === 10 || below.t === 11) && !cell.web && !cell.mon, side = hash2(c, r, 5) < 0.5 ? -1 : 1;
         if (floor && hash2(c, r, 3) < (st.propP || 0.75)) {   // 怪物洞地面：蘑菇 / 水晶 / 火堆等（发光）
           const kind = st.props[(hash2(c, r, 4) * st.props.length) | 0], x = fitX(kind, c, r, (c + 0.5 + side * 0.3) * CELL);
           if (x !== null) TR.props.push({ kind, c, r: r + 1, on: 'floor', x, y: (r + 1) * CELL, ph: hash2(c, r, 6) * 10 });
@@ -682,6 +687,7 @@
   const BGSETS = {
     cave: [['l1_wall', 0.06, 1.0, 1, 0.25], ['l2_prop01', 0.16, 0.95, 0], ['l3_prop02', 0.28, 0.9, 0], ['l5_crystals', 0.36, 0.85, 0], ['l4_stones', 0.44, 0.9, 1]],
     s2: [['s2_wall', 0.06, 1.0, 1, 0.8], ['s2_shelf', 0.16, 0.95, 0, 0.7], ['s2_ledge', 0.28, 0.9, 0, 0.8], ['s2_rays', 0.36, 0.85, 0, 0.5]],
+    s3: [['s3_wall', 0.06, 1.0, 1, 0.25], ['s3_far', 0.16, 0.95, 0, 0.7], ['s3_near', 0.28, 0.9, 0, 0.8], ['s3_trunk', 0.4, 0.85, 0, 0.8]],   // v0.22 区域 3：洞壁渐变 / 远处垂根 + 洞底土堆 / 近处垂根 + 藤圈 / 最近的粗根
   };
   // 第 5 项 = 存成画布时的清晰度（默认 1）：两套远景同屏（区域交界）时显存 / 画布缓存要装下两套。实测 Canvas 2D（软件渲染）两套原尺寸约 41MB 时
   //   超出缓存、远景每帧 0.2 → 3.5ms，压到约 30MB 就恢复。l1_wall 是纯渐变（1/4 清晰度看不出差别），区域 2 的洞壁 / 岩台 / 沙台本来就柔和

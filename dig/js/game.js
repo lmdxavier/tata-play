@@ -61,9 +61,9 @@
   const PICK_SFX = { wood: 'pick_wood', copper: 'pick_stone', amber: 'pick_stone', silk: 'pick_soft', gel: 'pick_soft', pearl: 'pick_soft',
     iron: 'pick_stone', malachite: 'pick_stone', salt: 'pick_stone', fortstone: 'pick_stone', lzskin: 'pick_soft', venom: 'pick_soft' };   // v0.21 区域 2：矿 / 盐晶 / 石堡碎块硬（石）、皮和毒液软
   // v0.21 场景物（走进去 / 宠物顺手就收）：区域 1 蜘蛛网（web = 1）→ 蛛丝；区域 2 盐结晶（web = 'salt'）→ 岩盐
-  const SCN = { 1: { mat: 'silk', img: 'mat/spider_web.png' }, salt: { mat: 'salt', img: 'mat/halite.png' } };
+  const SCN = { 1: { mat: 'silk', img: 'mat/spider_web.png' }, salt: { mat: 'salt', img: 'mat/halite.png' }, clay: { mat: 'clay', img: 'mat/clay.png', s: 0.56 } };   // v0.22 区域 3：洞底积的红陶土（web = 'clay'）
   // v0.21 每个区域的守卫（第 a 区域 = BOSS_OF[a]，站在本区域倒数第 2 行）；S.boss = 已打败几个守卫（区域 1 = 1、区域 2 = 2）
-  const BOSS_OF = ['Beetle_Red', 'Turtle_Tower'];
+  const BOSS_OF = ['Beetle_Red', 'Turtle_Tower', 'Bear_Grizzly'];
   // 调试：?start=米数 直接从那个深度开局，那以上的守卫都当作已打败（只在本次运行生效，不写存档）
   const DBG_START = Q.get('start') !== null ? Math.max(0, Math.min(B.AREA * B.AREAS_OPEN - 3, parseInt(Q.get('start'), 10) || 0)) : -1;
   let dbgBoss = 0;   // 调试开局时打败的守卫只记在这里（不写存档）
@@ -122,7 +122,7 @@
     DOLL.draw(g, c.width / 2, c.height * 0.9, { scale: c.height / 128 });
   };
   G.dollPlay = a => { if (DOLL) DOLL.play(a, { restart: true, onEnd: () => DOLL.play('Idle') }); };
-  const MON_KINDS = ['Slime_Green', 'Snail_Green', 'Bat_Cave', 'Beetle_Red', 'Lizard_Horn', 'Snake_Bell', 'Beetle_Iron', 'Turtle_Tower'];   // v0.21 + 区域 2 四种
+  const MON_KINDS = ['Slime_Green', 'Snail_Green', 'Bat_Cave', 'Beetle_Red', 'Lizard_Horn', 'Snake_Bell', 'Beetle_Iron', 'Turtle_Tower', 'Crab_Rock', 'Beetle_Blood', 'Snail_Conch', 'Bear_Grizzly'];   // v0.21 + 区域 2 四种；v0.22 + 区域 3 四种
   G.MON_KINDS = MON_KINDS; G.MON_NAME = {}; for (const k in B.MON) G.MON_NAME[k] = B.MON[k].name;
   async function loadPet(name) {
     if (PETS[name]) return PETS[name];
@@ -161,7 +161,8 @@
   const LAYOUT = {};
   function genArea(a) {   // 返回 { rows: [[{t, food, web}]×7]×50, mons: [{c,l,kind}], chest: {c,l}, straw: [] }
     if (LAYOUT[a]) return LAYOUT[a];
-    if (a === 1) return LAYOUT[a] = genSand();   // v0.21 区域 2 沙岩层：自己的布局（见 genSand）；区域 1 下面的代码一行没动
+    if (a === 1) return LAYOUT[a] = genSand();
+    if (a === 2) return LAYOUT[a] = genRoot();   // v0.22 区域 3 根须红土   // v0.21 区域 2 沙岩层：自己的布局（见 genSand）；区域 1 下面的代码一行没动
     const rnd = rng(9173 + a * 101), ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)), N = B.AREA;
     const rows = []; for (let l = 0; l < N; l++) { const row = []; for (let c = 0; c < W; c++) row.push({ t: 1 }); rows.push(row); }
     const busy = new Set(), set = (c, l, o) => { if (l < 0 || l >= N || c < 0 || c >= W) return; Object.assign(rows[l][c], o); busy.add(l * 10 + c); }, isBusy = (c, l) => busy.has(l * 10 + c);
@@ -330,6 +331,102 @@
     for (let c = 0; c < W; c++) { rows[N - 3][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 2][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 1][c] = { t: 3 }; }
     for (let ll = N - 6; ll < N - 3; ll++) for (let c = 0; c < W; c++) if (rows[ll][c].t === 2) rows[ll][c].t = 1;
     return { rows, mons, chest: null, dark: [], bands, caverns, fissures };
+  }
+  /* v0.22 区域 3 根须红土（100–149 米）的地形：和区域 1（两侧交替伸叉）、区域 2（横着的沉积硬层 + 竖裂隙）都不同——
+   * ① 深根帘：一条条竖着往下扎的老树根（深根格子，比土硬一点，掉老根木），每 1–3 行会往左或右歪一格，像真的根一样弯；几条根并排时中间夹着土。
+   * ② 朽根隧道：老根烂掉后留下的斜着往下的空洞，走一格、掉一格的台阶形（主角顺着走就一路往下掉），有的隧道口垂着根须。
+   * ③ 铁壳结核：红土里的铁质硬块（真实的红土层里常见“铁壳 / 铁结核”），2×1 或 2×2 的硬块散在各处（不是整行），绕开或硬挖。
+   * ④ 根洞：4–5 格宽、2 行高的空腔（顶上垂着根须），里面有怪、红陶土、土栾儿。
+   * ⑤ 铝土矿脉：一大团连在一起（4–7 格）的铝土矿，挖开一团收获一大把；另有零散单块。
+   * 只用现有的规则（土 / 硬块 / 空腔 / 矿 / 食物 / 场景物），都能挖穿；主角只往下 / 左右走，不会卡住。返回结构同 genArea(0)，行号是区域内的 0–49。 */
+  function genRoot() {
+    const rnd = rng(9173 + 202), ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)), N = B.AREA;
+    const rows = []; for (let l = 0; l < N; l++) { const row = []; for (let c = 0; c < W; c++) row.push({ t: 1 }); rows.push(row); }
+    const busy = new Set(), set = (c, l, o) => { if (l < 0 || l >= N || c < 0 || c >= W) return; Object.assign(rows[l][c], o); busy.add(l * 10 + c); }, isBusy = (c, l) => busy.has(l * 10 + c);
+    const inR = (c, l) => c >= 0 && c < W && l >= 0 && l < N - 6;
+    // ④ 根洞（先放，别的都绕开它）
+    const caverns = [];
+    for (const t0 of [8, 21, 34]) {
+      let done = false;
+      for (let d = 0; d < 6 && !done; d++) for (const lt of [t0 + d, t0 - d]) {
+        if (done) break; const w = ri(4, 5), c0 = ri(0, W - w);
+        if (lt < 2 || lt + 2 >= N - 6) continue;
+        let ok = true; for (let ll = lt - 1; ll <= lt + 2 && ok; ll++) for (let c = c0 - 1; c <= c0 + w; c++) if (inR(c, ll) && isBusy(c, ll)) ok = false;
+        if (!ok) continue;
+        for (let ll = lt; ll < lt + 2; ll++) for (let c = c0; c < c0 + w; c++) set(c, ll, { t: 0, cave: 1 });
+        caverns.push({ lt, h: 2, w, c0 }); done = true;
+      }
+    }
+    // ② 朽根隧道：台阶形（横走 1–2 格、掉 1 格），5–7 级
+    const tunnels = [];
+    for (const t0 of [3, 15, 28, 40]) {
+      const dir = rnd() < 0.5 ? 1 : -1, steps = ri(5, 7); let c = dir > 0 ? ri(0, 2) : ri(W - 3, W - 1), l = t0; const cells = [];
+      for (let i = 0; i < steps; i++) { const run = ri(1, 2); for (let k = 0; k < run; k++) { cells.push([c, l]); c += dir; if (c < 0 || c >= W) break; } if (c < 0 || c >= W) break; cells.push([c, l]); l++; }
+      if (cells.some(([cc, ll]) => !inR(cc, ll) || isBusy(cc, ll) || isBusy(cc, ll + 1) || ll >= N - 7)) continue;
+      for (const [cc, ll] of cells) set(cc, ll, { t: 0, cave: 1, tun: 1 });
+      tunnels.push({ cells, dir });
+    }
+    // ③ 铁壳结核（硬块，2×1 / 2×2），不碰空腔
+    for (let l = 5; l < N - 8; l += ri(4, 6)) {
+      const w = 2, h = rnd() < 0.4 ? 2 : 1;
+      for (let tries = 0; tries < 6; tries++) {
+        const c0 = ri(0, W - w); let ok = true;
+        for (let ll = l - 1; ll <= l + h && ok; ll++) for (let c = c0 - 1; c <= c0 + w; c++) if (inR(c, ll) && rows[ll][c].t === 0) ok = false;
+        for (let ll = l; ll < l + h && ok; ll++) for (let c = c0; c < c0 + w; c++) if (isBusy(c, ll)) ok = false;
+        if (ok) { for (let ll = l; ll < l + h; ll++) for (let c = c0; c < c0 + w; c++) set(c, ll, { t: 2 }); break; }
+      }
+    }
+    // ① 深根帘：从区域顶上和根洞的顶上往下扎，4–8 格长，每 1–3 行歪一格
+    const roots = [], growRoot = (c, l, len) => { const path = []; let nxt = ri(1, 3); for (let i = 0; i < len; i++) { if (!inR(c, l) || isBusy(c, l)) break; path.push([c, l]); l++; if (--nxt <= 0) { const nc = c + (rnd() < 0.5 ? -1 : 1); if (nc >= 0 && nc < W && inR(nc, l) && !isBusy(nc, l)) { path.push([nc, l - 1]); c = nc; } nxt = ri(1, 3); } } if (path.length >= 3) { for (const [cc, ll] of path) set(cc, ll, { t: 10 }); roots.push(path); } };
+    for (const t0 of [0, 6, 12, 18, 25, 31, 38]) { const c = ri(0, W - 1); growRoot(c, t0 + ri(0, 2), ri(4, 8)); }
+    for (const v of caverns) { const c = v.c0 + ri(0, v.w - 1); growRoot(c, v.lt + 2, ri(3, 5)); }   // 根洞底下接着往下扎（根穿过洞）
+    // 小洞（1–2 格），放怪 / 陶土
+    const pockets = [];
+    for (let l = 4; l < N - 7; l += ri(4, 6)) {
+      const w = ri(1, 2), c0 = ri(0, W - w); let ok = true; for (let c = c0; c < c0 + w; c++) if (isBusy(c, l) || isBusy(c, l - 1) || isBusy(c, l + 1)) ok = false;
+      if (!ok) continue;
+      for (let c = c0; c < c0 + w; c++) set(c, l, { t: 0, cave: 1 });
+      pockets.push({ l, c0, w });
+    }
+    // 怪
+    const mons = [], taken = new Set(), tk = (c, ll) => taken.has(ll * 10 + c);
+    const floorOk = (c, ll) => rows[ll][c].t === 0 && rows[ll + 1] && rows[ll + 1][c].t !== 0 && !tk(c, ll);
+    const airOk = (c, ll) => rows[ll][c].t === 0 && rows[ll][c].cave && !tk(c, ll) && caverns.some(v => ll >= v.lt && ll < v.lt + v.h && c >= v.c0 && c < v.c0 + v.w) && rows[ll + 1][c].t === 0;
+    const PLAN = [[3, 'Crab_Rock'], [6, 'Beetle_Blood'], [9, 'Bat_Cave'], [11, 'Snail_Conch'], [15, 'Crab_Rock'], [18, 'Beetle_Blood'], [22, 'Bat_Cave'], [24, 'Snail_Conch'], [27, 'Crab_Rock'], [31, 'Beetle_Blood'], [35, 'Bat_Cave'], [37, 'Snail_Conch'], [40, 'Crab_Rock'], [43, 'Beetle_Blood']];
+    for (const [t0, kind] of PLAN) {
+      const fly = B.MON[kind].fly, ok = fly ? airOk : floorOk; let put = null;
+      for (let d = 0; d <= 3 && !put; d++) for (const ll of [t0 + d, t0 - d]) { if (put || ll < 1 || ll >= N - 6) continue; for (let i = 0; i < W && !put; i++) { const c = (t0 * 3 + i) % W; if (ok(c, ll) && !mons.some(m => m.l === ll && Math.abs(m.c - c) < 2)) put = { c, l: ll }; } }
+      if (!put && fly) for (let d = 0; d <= 3 && !put; d++) for (const ll of [t0 + d, t0 - d]) { if (put || ll < 1 || ll >= N - 6) continue; for (let i = 0; i < W && !put; i++) { const c = (t0 * 3 + i) % W; if (rows[ll][c].t === 0 && rows[ll][c].cave && !tk(c, ll)) put = { c, l: ll }; } }
+      if (!put && !fly) for (let ll = t0; ll < t0 + 4 && !put; ll++) for (let i = 0; i < 6 && !put; i++) {
+        const c0 = (t0 * 3 + i) % 6, okc = c => rows[ll][c].t === 1 && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && rows[ll - 1][c].t !== 0;
+        if (!okc(c0) || !okc(c0 + 1) || mons.some(m => Math.abs(m.l - ll) < 2)) continue;
+        set(c0, ll, { t: 0, cave: 1 }); set(c0 + 1, ll, { t: 0, cave: 1 }); put = { c: c0 + (ll % 2), l: ll };
+      }
+      if (put) { mons.push({ c: put.c, l: put.l, kind }); taken.add(put.l * 10 + put.c); }
+    }
+    // 场景物 红陶土：洞底 / 隧道底没怪的空格（贴地），附近没有就挖 1 格小凹槽；8 处
+    for (const t0 of [4, 10, 16, 21, 27, 32, 37, 42]) {
+      let done = false;
+      for (let ll = t0; ll < t0 + 3 && !done; ll++) for (let c = 0; c < W && !done; c++) if (rows[ll][c].web) done = true;
+      for (let d = 0; d < 3 && !done; d++) for (let i = 0; i < W && !done; i++) { const ll = t0 + d, c = (t0 + i * 2) % W, k = rows[ll][c]; if (k.cave && floorOk(c, ll)) { k.web = 'clay'; taken.add(ll * 10 + c); done = true; } }
+      for (let d = 0; d < 3 && !done; d++) for (let i = 0; i < W && !done; i++) {
+        const ll = t0 + d, c = (t0 + i * 3) % W, k = rows[ll][c];
+        if (k.t === 1 && !isBusy(c, ll) && rows[ll + 1][c].t !== 0 && rows[ll - 1][c].t !== 0 && !tk(c, ll)) { set(c, ll, { t: 0, cave: 1, web: 'clay' }); taken.add(ll * 10 + c); done = true; }
+      }
+    }
+    // ⑤ 铝土矿：3 团大矿脉（4–7 格连在一起）+ 3 块零散
+    const vein = (lo, hi) => { for (let tries = 0; tries < 20; tries++) { let c = ri(0, W - 1), ll = ri(lo, hi); if (rows[ll][c].t !== 1 || isBusy(c, ll)) continue; const n = ri(4, 7); let got = 0; for (let k = 0; k < n * 3 && got < n; k++) { if (inR(c, ll) && rows[ll][c].t === 1 && !isBusy(c, ll)) { set(c, ll, { t: 11 }); got++; } const r = rnd(); if (r < 0.4) c = Math.max(0, Math.min(W - 1, c + 1)); else if (r < 0.8) c = Math.max(0, Math.min(W - 1, c - 1)); else ll++; } if (got >= 4) return; } };
+    vein(6, 14); vein(19, 28); vein(32, 42);
+    for (let i = 0; i < 3; i++) { const c = ri(0, W - 1), ll = ri(2, 42); if (rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t: 11 }); }
+    // 食物：地老虎每 4–6 行、葛根每 10–12 行（嵌在土里）；土栾儿长在根洞洞壁上 + 朽根隧道的尽头
+    const food = (kind, lo, step) => { for (let ll = lo; ll < N - 4; ll += step()) { const c = ri(0, W - 1); if (rows[ll][c].t === 1 && !isBusy(c, ll)) set(c, ll, { t: 6, food: kind }); } };
+    food('cutworm', 2, () => ri(4, 6)); food('kudzu', 7, () => ri(10, 12));
+    for (const v of caverns) { const ll = v.lt + 1; for (const c of [v.c0 - 1, v.c0 + v.w]) { if (c >= 0 && c < W && rows[ll][c].t === 1 && !isBusy(c, ll)) { set(c, ll, { t: 6, food: 'apios' }); break; } } }
+    for (const tn of tunnels) { const [c, ll] = tn.cells[tn.cells.length - 1], cc = c + tn.dir; if (cc >= 0 && cc < W && rows[ll][cc].t === 1 && !isBusy(cc, ll)) set(cc, ll, { t: 6, food: 'apios' }); }
+    // 守卫房（熊洞：中间 5 格，给洞熊冲撞留跑道）、守卫门
+    for (let c = 0; c < W; c++) { rows[N - 3][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 2][c] = { t: c >= 1 && c <= 5 ? 0 : 1 }; rows[N - 1][c] = { t: 3 }; }
+    for (let ll = N - 6; ll < N - 3; ll++) for (let c = 0; c < W; c++) if (rows[ll][c].t === 2 || rows[ll][c].t === 10) rows[ll][c].t = 1;
+    return { rows, mons, chest: null, dark: [], caverns, tunnels, roots };
   }
   // 图鉴 / 材料“去哪拿”里的深度从区域 1 的真实地形算（怪最浅出现在哪一行、材料方块 / 蜘蛛网出现在哪几行），不手写
   (function () {   // v0.21：所有开放的区域一起算（区域 2 的行号 + 50 = 世界行号 = 米数）
@@ -1112,9 +1209,10 @@
         if (k.t === 4) { im = matImg(c % 2 ? 'mat/branch.png' : 'mat/branch_dead.png'); z = 0.78; rot = ((c * 7 + r * 3) % 5 - 2) * 0.35; }
         else if (k.t === 5) { im = matImg('mat/copper.png'); z = 0.58; rot = ((c + r) % 3 - 1) * 0.3; }
         else if (k.t === 6 && k.food) { im = matImg(B.FOOD[k.food].img); z = 0.56; }
-        else if (k.t === 7 || k.t === 8) { const ci = B.CELL[k.t]; im = matImg(ci.img); z = ci.z; rot = ((c + r) % 3 - 1) * 0.3; }   // v0.21 铁矿、孔雀石（同铜矿的嵌法）
-        if (im && im.width) { const hh = ((c * 73856093) ^ (r * 19349663)) >>> 0, jx = ((hh % 7) - 3) * T * 0.06, jy = (((hh >> 3) % 7) - 3) * T * 0.05, js = 0.85 + ((hh >> 6) % 5) * 0.07; rot += (((hh >> 9) % 9) - 4) * 0.12; if (k.t === 4 && (hh >> 12) % 2) rot += Math.PI * 0.5; const q = 0.55 + 0.45 * Math.max(0, k.hp / k.max), s = T * z * q * js; ctx.save(); ctx.translate(Math.round(x + jx), Math.round(y + jy)); ctx.rotate(rot); ctx.globalAlpha = k.t === 4 ? 0.92 : 1; ctx.drawImage(im, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; }
-        if (k.web === 'salt') { const w = matImg(SCN.salt.img); if (w.width) { const s = T * 0.62, hh = ((c * 92821) ^ (r * 68917)) >>> 0, fl = hh % 2 ? -1 : 1; ctx.save(); ctx.translate(Math.round(x + (((hh >> 2) % 5) - 2) * T * 0.05), Math.round(y + T * 0.5 - s * 0.42)); ctx.scale(fl, 1); ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); } }   // v0.21 岩盐：盐晶长在洞底（底边落在地面上），左右随机翻
+        else if (k.t === 7 || k.t === 8 || k.t === 11) { const ci = B.CELL[k.t]; im = matImg(ci.img); z = ci.z; rot = ((c + r) % 3 - 1) * 0.3; }   // v0.21 铁矿、孔雀石；v0.22 铝土矿（同铜矿的嵌法）
+        else if (k.t === 10) { im = matImg(B.MAT.taproot.img); z = 1.22; rot = -Math.PI / 4 + ((c * 5 + r * 3) % 5 - 2) * 0.1; }   // v0.22 深根：老根图标转成竖着（原图是左下到右上的斜线），一格接一格连成往下扎的根
+        if (im && im.width) { const hh = ((c * 73856093) ^ (r * 19349663)) >>> 0, jx = ((hh % 7) - 3) * T * (k.t === 10 ? 0.02 : 0.06), jy = (((hh >> 3) % 7) - 3) * T * (k.t === 10 ? 0.01 : 0.05), js = 0.85 + ((hh >> 6) % 5) * 0.07; rot += (((hh >> 9) % 9) - 4) * (k.t === 10 ? 0.03 : 0.12); if (k.t === 4 && (hh >> 12) % 2) rot += Math.PI * 0.5; const q = 0.55 + 0.45 * Math.max(0, k.hp / k.max), s = T * z * q * js; ctx.save(); ctx.translate(Math.round(x + jx), Math.round(y + jy)); ctx.rotate(rot); ctx.globalAlpha = k.t === 4 ? 0.92 : 1; ctx.drawImage(im, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; }
+        if (k.web === 'salt' || k.web === 'clay') { const w = matImg(SCN[k.web].img); if (w.width) { const s = T * (SCN[k.web].s || 0.62), hh = ((c * 92821) ^ (r * 68917)) >>> 0, fl = hh % 2 ? -1 : 1; ctx.save(); ctx.translate(Math.round(x + (((hh >> 2) % 5) - 2) * T * 0.05), Math.round(y + T * 0.5 - s * 0.42)); ctx.scale(fl, 1); ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); } }   // v0.21 岩盐：盐晶长在洞底（底边落在地面上），左右随机翻
         else if (k.web) { const w = matImg('mat/spider_web.png'); if (w.width) { const s = T * 0.82, left = c === 0 || cell(c - 1, r).t !== 0; ctx.save(); ctx.translate(Math.round(x + (left ? -1 : 1) * T * 0.1), Math.round(y - T * 0.08)); if (!left) ctx.scale(-1, 1); ctx.globalAlpha = 0.88; ctx.drawImage(w, -s / 2, -s / 2, s, s); ctx.restore(); ctx.globalAlpha = 1; } }
         if (k.dchest || k.dopen) {   // v0.18 暗格宝箱：只在头灯半径内显形；第一次照到冒星星；打开后开盖图淡出
           const ch = k.dchest ? A.img.dchest : A.img.dchestOpen, vis = k.dchest ? darkVis(c, r) : Math.max(0, 1 - (time - k.dopen) / 0.9);
@@ -1321,7 +1419,7 @@
     // 受击期间整只歪着、头缩进壳里；而攻击间隔 < 片段长 0.58 秒，打守卫时一直处在 Hit 里，看起来一直是歪的。
     // 其他 6 类怪的 Hit 都只有后退 + 压扁 + 闪白、结束回原位。这里统一去掉 Hit 里“单关键帧的位置 / 旋转 / 缩放轨道”，只留闪白和弹性动作。
     // v0.21 区域 2 的怪物数据（assets/monsters/monsters_r2.js）：本线不改 index.html，启动时动态加载；合并时可改成 index.html 里直接写 <script>
-    if (!window.ENEMY_MONSTER_DATA.monsters.Turtle_Tower) await new Promise(ok => { const sc = document.createElement('script'); sc.src = 'assets/monsters/monsters_r2.js?v=21'; sc.onload = sc.onerror = ok; document.head.appendChild(sc); });
+    for (const [k, f] of [['Turtle_Tower', 'monsters_r2'], ['Crab_Rock', 'monsters_r3']]) if (!window.ENEMY_MONSTER_DATA.monsters[k]) await new Promise(ok => { const sc = document.createElement('script'); sc.src = 'assets/monsters/' + f + '.js?v=22'; sc.onload = sc.onerror = ok; document.head.appendChild(sc); });   // v0.22 + 区域 3
     for (const c of Object.values(window.ENEMY_MONSTER_DATA.categories)) { const h = c.anims.Hit; if (h) h.tracks = h.tracks.filter(t => t.k === 'on' || t.k === 'spr' || t.c.length > 1); }
     MLIB = await EnemyMonsters.load(window.ENEMY_MONSTER_DATA, 'assets/monsters/');
     petCv = document.createElement('canvas'); petCv.width = petCv.height = Math.ceil(T * 1.6); petG = petCv.getContext('2d'); SR = new spine.SkeletonRenderer(petG); SR.triangleRendering = true;

@@ -4,7 +4,7 @@
   const B = {};
   B.W = 7;
   B.AREA = 50;            // 每区域 50 行（1 行 = 1 米）
-  B.AREAS_OPEN = 2;       // v0.4 只开放区域 1；v0.21 区域 2 线：开放到区域 2（沙岩层，50–99 米），99 行守卫门之后不再往下
+  B.AREAS_OPEN = 3;       // v0.4 只开放区域 1；v0.21 开放到区域 2（沙岩层）；v0.22 开放到区域 3（根须红土，100–149 米），149 行守卫门之后不再往下
   B.STAGES = 10;          // 外观表（terrain.js）仍按 10 个区域
   B.STAGE = B.AREA;
   B.areaOf = r => Math.max(0, Math.floor(r / B.AREA));
@@ -30,6 +30,11 @@
     // 常识：砂岩里常见含铁的“铁质结核 / 铁矿层”（砂岩发红就是氧化铁）；孔雀石：红色砂岩里的“砂岩型铜矿”（红层铜矿，如美国科罗拉多高原、云南）出露氧化后就是绿色的孔雀石，比铁矿少、更深
     7: { name: '铁矿', hp: 2, coin: 5, mat: 'iron', img: 'mat/ironstone.png', z: 0.6 },
     8: { name: '孔雀石', hp: 2.6, coin: 8, mat: 'malachite', img: 'mat/malachite.png', z: 0.54 },
+    // （9 是 game.js 里地图边界 / 地底的墙，不能用）
+    // v0.22 区域 3 根须红土：深根（一条条竖着往下扎的老树根，画法见 game.js drawRoot）、铝土矿（红土化：湿热地区的岩石风化成红土，铝留下来富集成铝土矿，
+    //   外观是粉红底色里嵌着一粒粒橙红色的豆状颗粒，图标 bauxite 就是这个样子；矿脉成团）
+    10: { name: '深根', hp: 1.6, coin: 1.5, mat: 'taproot' },
+    11: { name: '铝土矿', hp: 2.2, coin: 6, mat: 'bauxite', img: 'mat/bauxite.png', z: 0.58 },
   };
   B.cellHp = (t, r) => B.dirtHp(r) * (B.CELL[t] ? B.CELL[t].hp : 1);
   B.FOOD = {
@@ -40,6 +45,11 @@
     termite: { name: '白蚁', img: 'mat/termite.png', sec: 2 },
     soldier: { name: '兵蚁', img: 'mat/termite_soldier.png', sec: 3 },
     truffle: { name: '沙漠松露', img: 'mat/potato.png', sec: 4 },
+    // v0.22 区域 3（三档同前：2 / 3 / 4 秒）。常识：地老虎是夜蛾的幼虫，白天钻在土里啃根（图标是绿色幼虫）；葛根是葛藤的块根，能长到一两米长、
+    //   切片晒干就是常见的葛根片；土栾儿（Apios）是豆科藤本，地下结一串褐色卵圆形块根，可以煮着吃
+    cutworm: { name: '地老虎', img: 'mat/larva.png', sec: 2 },
+    kudzu: { name: '葛根', img: 'mat/cinnamon.png', sec: 3 },
+    apios: { name: '土栾儿', img: 'mat/cocoa.png', sec: 4 },
   };
   // v0.20 用户 23:17「后期体力永远是满的」：食物、打怪回气原来按体力上限的百分比回（上限涨回得也涨，后期溢出）。
   // 改成按“所在深度掉体力的秒数”回：回多少 = sec × 每秒掉速（B.drain），和上限无关；上限越大，同一个蘑菇占比越小，体力始终是约束
@@ -59,6 +69,13 @@
     // 守卫 堡垒龟：数值按区域 1 守卫 × 区域倍数推（系统与数值 20.3：怪血 / 怪攻 1.045^50 ≈ 9.03、金币 1.05^50 ≈ 11.5、宝石 1.04^50 ≈ 7.1）
     // 2000 × 9.03 ≈ 18000，72 × 9.03 ≈ 650，宝石 30 × 7.1 ≈ 210，金币 400 × 11.5 = 4600
     Turtle_Tower: { name: '堡垒龟', hp: 18000, atk: 650, gem: 210, coin: 4600, mat: 'fortstone', boss: true },
+    // v0.22 区域 3 根须红土（基础值和前两区同档，100 米处按深度公式已是区域 1 同名档的 ×81）
+    Beetle_Blood: { name: '犀角甲虫', hp: 34, atk: 12, gem: 2 },                                // 犀角（独角仙一类）的幼虫在腐殖土、朽根里长大，成虫用角顶；不掉材料（同铁甲虫）
+    Crab_Rock: { name: '石鼠妇', hp: 30, atk: 10, gem: 1, mat: 'plate', p: 0.45, pity: 3 },   // 鼠妇（潮虫）住在潮湿的土里和朽根下，受惊蜷成一个球；这里的个头大、背甲像石头
+    Snail_Conch: { name: '白壳洞螺', hp: 38, atk: 12, gem: 2, mat: 'shell', p: 0.35, pity: 4 },  // 洞穴里的螺类壳色发白发淡、不见光（素材是淡蓝白色；原名“盲螺”和素材的红眼柄冲突，改名）
+    // 守卫 洞熊（史前洞熊在洞穴里冬眠，洞底常挖出成堆的洞熊骨头）：区域 2 守卫 × 区域倍数（血 / 攻 ×9.03、宝石 ×7.1、金币 ×11.5）
+    // 18000 × 9.03 ≈ 162500，650 × 9.03 ≈ 5870，宝石 210 × 7.1 ≈ 1490，金币 4600 × 11.5 ≈ 52900
+    Bear_Grizzly: { name: '洞熊', hp: 162500, atk: 5870, gem: 1490, coin: 52900, mat: 'bearfur', boss: true },
   };
   /* ---------- 怪物行为（v0.18，用户 18:21：不能都是“跑过来打一下”的同一模板；区域 1 取偏慢的值）----------
    * 时间单位秒，距离单位格。sight = 沿空腔 / 挖开的通道能走到主角身边的最长步数（隔着土走不过去就不追）。
@@ -71,6 +88,10 @@
     Lizard_Horn: { type: 'hop', sight: 5, hop: 0.26, hopH: 0.1, rest: 0.15, wind: 0.4, lunge: 0.2, cd: 1.15, sfxHop: null, sfxHit: 'boss_bite', hitVol: 0.5 },   // 窜得快、贴地（不跳高）；咬
     Snake_Bell: { type: 'crawl', sight: 4, step: 0.75, wind: 0.75, cd: 1.6, reach: 0.3 },                                                  // 爬；前摇长（摇尾示警），咬得重
     Beetle_Iron: { type: 'crawl', sight: 3, step: 1.1, wind: 0.6, cd: 1.6, shellHits: 4, shellWin: 2.5, shellT: 2.0, shellDR: 0.8, shellCd: 3, reach: 0.2 },   // 连挨 4 下缩进甲壳 2 秒，受伤 −80%
+    // v0.22 区域 3
+    Beetle_Blood: { type: 'crawl', sight: 5, step: 0.55, wind: 0.5, cd: 1.3, reach: 0.34 },                                                 // 爬得快（区域里最快的地面怪），低头用角往前猛顶
+    Crab_Rock: { type: 'hop', sight: 4, hop: 0.36, hopH: 0, rest: 0.25, wind: 0.5, lunge: 0.22, cd: 1.4, sfxHop: null, roll: true },      // 蜷成球一格一格滚过来（滚的时候整只转圈），到身边展开撞
+    Snail_Conch: { type: 'crawl', sight: 3, step: 1.2, wind: 0.6, cd: 1.6, shellHits: 4, shellWin: 2.5, shellT: 2.4, shellDR: 0.75, shellCd: 3 },   // 慢爬；连挨 4 下缩进壳 2.4 秒（壳更厚，缩得更久）
   };
   /* 守卫红甲虫王：三种招式轮换 + 半血二阶段（每对数字 = [一阶段, 二阶段]），伤害 = 攻击 × 倍数 */
   B.BOSS = {
@@ -101,6 +122,20 @@
       sfx: { wake: 'boss_growl', rage: 'boss_growl', rageRate: 0.75, shell: 'snail_shell' },   // 不用红甲虫王的“巨型昆虫尖叫”（龟不是昆虫）
     },
   };
+  /* v0.22 区域 3 守卫 洞熊：同一套招式系统；和红甲虫王（快、连咬）、堡垒龟（慢、缩壳）都不同——
+   * 近身连拍（熊掌左右开弓，一阶段 2 下、二阶段 3 下）；冲撞 = 四脚着地往前扑（不打滚）；砸地 = 人立起来双掌拍地（跳得低、不翻跟头，冲击波短但伤害高）；
+   * 没有缩壳，二阶段整体加快、轮换里冲撞更多。被吵醒的冬眠熊：醒来距离更近（3 行），醒来咆哮 */
+  B.BOSSES.Bear_Grizzly = {
+    wake: 3,
+    walk: [0.55, 0.42],
+    gap: [0.95, 0.6],
+    seq: [['near', 'charge', 'near', 'slam'], ['near', 'charge', 'slam', 'near', 'charge']],
+    bite: { wind: [0.55, 0.42], lunge: 0.28, dmg: 0.8, rec: [0.65, 0.45], times: [2, 3] },
+    charge: { wind: [0.9, 0.65], speed: [8, 10], dmg: 1.5, stun: [1.5, 1.1], stunTaken: 1.5 },
+    slam: { wind: [0.95, 0.7], air: [0.4, 0.35], h: 0.3, dmg: 1.6, wave: 6, waveLen: 2, waveDmg: 1.0, rec: [0.95, 0.65], times: [1, 2], noFlip: true },
+    rage: 0.5, roar: 1.3,
+    sfx: { wake: 'boss_growl', rage: 'boss_growl', rageRate: 0.85 },
+  };
   B.bossOf = k => B.BOSSES[k] || B.BOSS;
   B.HOP = { t: 0.5, h: 0.8 };    // 主角小跳（摇杆 / 方向键往上，头顶没有怪时）：0.5 秒，跳过冲撞和冲击波
   // bfix（用户「血量根本没有什么用」根因：怪在出手前就被打死）：普通怪血量从浅处 ×1 渐变到 20 米以下 ×1.6，让深处一场战斗长到怪能出手 1–2 次；浅处新手照旧几下打死
@@ -128,8 +163,15 @@
     lzskin: { name: '角蜥皮', img: 'mat/leather.png', src: '', srcT: '角蜥（{Lizard_Horn} 米起）45% 掉落（连续 3 只没掉必掉）', mon: 'Lizard_Horn', area: 1 },
     venom: { name: '响尾蛇毒液', img: 'mat/tree_sap_gold.png', src: '', srcT: '响尾蛇（{Snake_Bell} 米起）35% 掉落（连续 4 只没掉必掉）', mon: 'Snake_Bell', area: 1 },   // 常识：响尾蛇毒液是淡黄色的
     fortstone: { name: '石堡碎块', img: 'mat/granite_piece.png', src: '', srcT: '{Turtle_Tower} 米守卫“堡垒龟”首次击败必掉', mon: 'Turtle_Tower', boss: 1, area: 1 },   // 堡垒龟背上石堡打碎掉下的灰色石块（图标 granite_piece = 灰石块 + 碎渣）；原“龟纹石”图标是圆斑、不是龟甲网纹，改成和图标、守卫外形一致
+    // v0.22 区域 3 根须红土
+    taproot: { name: '老根木', img: 'mat/branch_broken.png', src: '', srcT: '{taproot} 米的深根', area: 2 },   // 图标是扭曲、断开的老根
+    bauxite: { name: '铝土矿', img: 'mat/bauxite.png', src: '', srcT: '{bauxite} 米的铝土矿方块', area: 2 },
+    clay: { name: '红陶土', img: 'mat/clay.png', src: '', srcT: '{clay} 米洞底积存的陶土', area: 2 },   // 常识：洞里渗下来的水把细泥带到低处，洞底积出一层细腻的黏土
+    plate: { name: '鼠妇甲片', img: 'mat/shingle.png', src: '', srcT: '石鼠妇（{Crab_Rock} 米起）45% 掉落（连续 3 只没掉必掉）', mon: 'Crab_Rock', area: 2 },
+    shell: { name: '白螺壳', img: 'mat/diatomite_piece.png', src: '', srcT: '白壳洞螺（{Snail_Conch} 米起）35% 掉落（连续 4 只没掉必掉）', mon: 'Snail_Conch', area: 2 },
+    bearfur: { name: '洞熊毛', img: 'mat/pelage.png', src: '', srcT: '{Bear_Grizzly} 米守卫“洞熊”首次击败必掉', mon: 'Bear_Grizzly', boss: 1, area: 2 },
   };
-  B.MAT_ORDER = ['wood', 'silk', 'copper', 'gel', 'pearl', 'amber', 'iron', 'malachite', 'salt', 'lzskin', 'venom', 'fortstone'];
+  B.MAT_ORDER = ['wood', 'silk', 'copper', 'gel', 'pearl', 'amber', 'iron', 'malachite', 'salt', 'lzskin', 'venom', 'fortstone', 'taproot', 'bauxite', 'clay', 'plate', 'shell', 'bearfur'];
   /* 深度文字（v0.18 修：原来手写“蜗牛 15 米起 / 蝙蝠 8 米起 / 50 米守卫”，和地形对不上）：不手写数字，
    * 由 game.js 生成区域地形后调 B.fillDepths(info) 填进去 —— 怪物 B.MON[k].from = 最浅出现的那一行（= 米数，见 depthM），
    * 材料 src 里的 {wood} {silk} {copper} = 地形里实际出现的 “最浅–最深” 米数，{怪名} = 那种怪的最浅米数。 */

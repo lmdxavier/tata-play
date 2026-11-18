@@ -112,6 +112,7 @@
   const SHELLS = {
     Snail_Green: { hide: { Body: 1, Hit: 1, Hit_2: 1, Attack: 1, Up_Hit: 1, Front_Hit: 1 }, show: { Up: 1, Front: 1 }, drop: [0.2, 0.2] },
     Beetle_Iron: { hide: { Head: 1, Attack: 1, Hit: 1 }, show: { Body: 1 }, drop: [0, 0.04] },
+    Snail_Conch: { hide: { Body: 1, Hit: 1, Hit_2: 1, Attack: 1, Up_Hit: 1 }, show: { Up: 1 }, drop: [0.12, 0.2] },   // v0.22 白壳洞螺：只剩螺壳
     Turtle_Tower: { hide: { Arm: 1, Arm2: 1, Leg: 1, Leg2: 1, Eye: 1, Arm_Hit: 1, Arm2_Hit: 1, Leg_Hit: 1, Leg2_Hit: 1, Hit: 1 }, show: { Body: 1, Up: 1 }, drop: [0, 0.06] },
   };
   function shellPose(m) { const S = SHELLS[m.kind]; if (!S) return; const N = m.m.def.nodes, on = m.m.s.on; for (let i = 0; i < N.length; i++) { if (S.hide[N[i].name]) on[i] = 0; else if (S.show[N[i].name]) on[i] = 1; } }
@@ -120,12 +121,12 @@
     const ai = m.ai, T = E.T(); if (!ai) { m.m.update(dt); return; }
     m.m.update(dt); if (m.st === 'shell') shellPose(m);
     if (m.shellCd > 0) m.shellCd -= dt;
-    m.warn = 0; m.ox = m.oy = 0; m.sx = m.sy = 1; m.rot = 0;
+    m.warn = 0; m.ox = m.oy = 0; m.sx = m.sy = 1; m.rot = 0; m.ph = 0;
     if (m.mv > 0) { m.mv -= dt; if (m.mv <= 0) { m.mv = 0; if (m.mvKind === 'hop') { m.land = 0.12; } } }
     if (m.land > 0) { m.land -= dt; const k = Math.max(0, m.land / 0.12); m.sy = 1 - 0.18 * k; m.sx = 1 + 0.14 * k; }
     // 重力（飞行怪不受）
     if (!m.fly && !m.mv && !support(m.c, m.r, m) && free(m.c, m.r + 1, m)) { startMove(m, 0, 1, 0.13, 'fall'); return; }
-    if (m.mv) return;
+    if (m.mv) { if (ai.roll && m.mvKind === 'hop') { m.rot = (1 - m.mv / ai.hop) * 360 * (m.face || -1); m.ph = 0.3 * T; } return; }   // v0.22 石鼠妇：蜷成球滚过来（滚一格转一圈）
     m.t -= dt;
     const h = H(), busyHero = h.mv > 0;
     switch (m.st) {
@@ -159,7 +160,7 @@
     if (m.t > 0) return;
     m.st = 'act'; m.t = 0; m.u = 0; m.hit = false;
     if (ai.type === 'hop') { anim(m, 'Attack', { restart: true }); }
-    else if (ai.type === 'crawl') { if (m.kind === 'Beetle_Iron') anim(m, 'Walk', { restart: true, speed: 3 }); else anim(m, 'Attack', { restart: true, onEnd: () => anim(m, 'Idle') }); E.sfx('mon_attack', 0.5); }   // 铁甲虫的 Attack 片段是翻跟头，改用快走 + 代码前顶（用角顶）
+    else if (ai.type === 'crawl') { if (m.kind === 'Beetle_Iron' || m.kind === 'Beetle_Blood') anim(m, 'Walk', { restart: true, speed: 3 }); else anim(m, 'Attack', { restart: true, onEnd: () => anim(m, 'Idle') }); E.sfx('mon_attack', 0.5); }   // 铁甲虫的 Attack 片段是翻跟头，改用快走 + 代码前顶（用角顶）
     else { anim(m, 'Attack', { restart: true }); E.sfx('bat_swoop', 0.8); }
   }
   function actMon(m, dt) {
