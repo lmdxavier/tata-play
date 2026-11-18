@@ -890,6 +890,7 @@ function levelUp() {
 function die(i) {
   if (SIM) { status = "dead"; return; }
   status = "dead"; killer = i;
+  { const k = rowKey(cells[i]); if (k && GUIDE.some(r => r[0] === k) && !DEX.s.includes(k)) { DEX.s.push(k); saveDex(); } }
   // 亮图、横幅、震屏在战斗演出播完后由 finishDeath() 做
 }
 
