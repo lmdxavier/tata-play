@@ -1040,6 +1040,8 @@ function explain(S, k, H, kind) {
   else if (w && w.k === "count") head = `${powLabel(w.v)}都已找到`;
   else if (w && w.k === "only") head = `${powLabel(w.v)}只剩这里能放`;
   else head = m <= 0 ? "怪都已找到" : `剩下的怪最大 ${m}`;
+  const mim = S.hidden(k) && dom[k].includes(11);   // 可能是没现形的宝箱怪：第一下只翻开，算安全
+  if (kind === "zero" && mim) return `${head.replace("，别的格已凑满", "")} → 黄圈${dom[k].every(v => v === 11) ? "是" : "可能是"}宝箱怪（11）：第一下只翻开、不扣血，别点第二下`;
   if (kind === "zero") return `${head} → 黄圈没怪`;
   if (kind === "chest") return `${head} → 不是宝箱怪`;
   const what = exact.length === 1 ? (POW_LABEL[m] ? `是${POW_LABEL[m]}（${m}）` : `是 ${m} 战力`) : `最多 ${m} 战力`;
