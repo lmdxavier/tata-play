@@ -3347,7 +3347,7 @@ const GUIDE = [
 ];
 
 // ---------------------------------------------------------------- v22 图鉴分层解锁
-const PAT = {rat: "箭头指向蜗牛王所在的方向", garg: "两两成对、上下或左右相邻，箭头指向同伴", mino: "守在一个宝箱左右，箭头指向宝箱", guard: "四个象限各一个",
+const PAT = {rat: "箭头指向蜗牛王所在的方向", garg: "两两成对、上下或左右相邻，箭头指向同伴", mino: "紧挨着一个宝箱（可以在斜角，不会在正上下），箭头指向它", guard: "四个象限各一个",
   bigslime: "围在猫头鹰法师身边", giantA: "两只在同一行，以炎龙所在列左右对称", mineking: "在四个角之一", wizard: "在边上但不在角上"};
 let DEX = (() => { try { const d = JSON.parse(localStorage.getItem("wyrmnest_dex") || "null"); if (d && Array.isArray(d.s)) return Object.assign({p: {}, d: []}, d); } catch (e) {} return {s: [], p: {}, d: []}; })();
 function saveDex() { try { localStorage.setItem("wyrmnest_dex", JSON.stringify(DEX)); } catch (e) {} }
