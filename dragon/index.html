@@ -2526,6 +2526,21 @@ function resize() {
   Object.assign(bannerEl.style, {left: Math.round(VW / 2 * scale) + "px", top: Math.round((STAGE_H - 3) * scale) + "px", fontSize: fs + "px", maxWidth: Math.round(VW * 0.94 * scale) + "px"}); placeBanner();
 }
 
+function dirVec(c, i) {   // 显示坐标下的方向 [dx, dy]（各取 -1/0/1）
+  let tx = -1, ty = -1;
+  if (c.t === "rat") {
+    const k = cells.findIndex(b => b.t === "ratking");
+    if (k < 0 || X(k) === X(i)) return null;
+    tx = X(k); ty = Y(i);
+  } else if (c.t === "mino" && c.cx >= 0) { tx = c.cx; ty = c.cy; }
+  else if (c.t === "garg") {
+    const k = cells.findIndex((b, j) => j !== i && b.t === "garg" && b.name === c.name);
+    if (k >= 0) { tx = X(k); ty = Y(k); }
+  }
+  if (tx < 0) return null;
+  const sx = Math.sign(tx - X(i)), sy = Math.sign(ty - Y(i));
+  return PORT ? [sy, sx] : [sx, sy];
+}
 function dirArrow(c, i) {
   let tx = -1, ty = -1;
   if (c.t === "rat") {
@@ -2613,15 +2628,19 @@ function drawCell(i, hover) {
     } else if (c.mon && !(c.t === "mimic" && c.mimic) && c.t !== "mine") {
       const key = monKey(c), k = cellK(key);
       let flip = false;
-      const ar = (!c.def) ? dispDir(dirArrow(c, i)) : null;
-      if (ar === "R") flip = true;
+      const dv = (!c.def) ? dirVec(c, i) : null;
+      if (dv && dv[0] > 0) flip = true;
       monFrame(key, cx, y + 21.5 + (key === "dragon" ? 7.5 : 0), k, time + i * 0.37, [1, 1, 1, (c.def ? 0.5 : 1) * dim], flip);
-      if (ar) icon("arrow" + ar, ar === "L" ? x + 3.5 : ar === "R" ? x + CELL - 3.5 : cx + 7, ar === "U" ? y + 4 : ar === "D" ? y + CELL - 4 : y + 13, 6, W1);
+      if (dv) {
+        const rr = (dv[0] && dv[1]) ? CELL / 2 - 4.6 : CELL / 2 - 4, ax = cx + dv[0] * rr, ay = y + CELL / 2 + dv[1] * rr, rot = Math.atan2(dv[1], dv[0]);
+        iconX("arrowR", ax, ay, 10.5, {rot, col: [0, 0, 0, 0.75 * dim]});
+        iconX("arrowR", ax, ay, 8.5, {rot, col: W1});
+      }
       if (c.t === "giant" && !c.def) {
         const alive = cells.some((b, j) => j !== i && b.t === "giant" && !b.def);
         icon("Economy_Heart_03_Red", x + CELL - 4.5, y + 4.5, 7, alive ? W1 : [0.35, 0.35, 0.4, dim]);
       }
-      if (!c.def && c.lvl > 0) text(String(c.lvl), x + CELL - 4.5, y + CELL - 4.5, 7, withA(C_YELLOW, dim));
+      if (!c.def && c.lvl > 0) text(String(c.lvl), dv && dv[0] > 0 && dv[1] > 0 ? x + 4.5 : x + CELL - 4.5, y + CELL - 4.5, 7, withA(C_YELLOW, dim));
     } else if (c.t === "wall") {
       const sh = 1 - 0.1 * (c.wmax - c.whp);
       iconX((i & 1) ? "dg_boulder2" : "dg_boulder", cx + shk, y + 21, 19 * (0.92 + 0.08 * sh), {ay: 1, col: [0.95 * sh, 0.9 * sh, 0.86 * sh, dim]});
@@ -3347,7 +3366,7 @@ const GUIDE = [
 ];
 
 // ---------------------------------------------------------------- v22 图鉴分层解锁
-const PAT = {rat: "箭头指向蜗牛王所在的方向", garg: "两两成对、上下或左右相邻，箭头指向同伴", mino: "紧挨着一个宝箱（可以在斜角，不会在正上下），箭头指向它", guard: "四个象限各一个",
+const PAT = {rat: "箭头指向蜗牛王所在的方向", garg: "两两成对、上下或左右相邻，箭头指向同伴", mino: "紧挨着一个宝箱（可以在斜角，不会在正上下），脚边箭头指向它", guard: "四个象限各一个",
   bigslime: "围在猫头鹰法师身边", giantA: "两只在同一行，以炎龙所在列左右对称", mineking: "在四个角之一", wizard: "在边上但不在角上"};
 let DEX = (() => { try { const d = JSON.parse(localStorage.getItem("wyrmnest_dex") || "null"); if (d && Array.isArray(d.s)) return Object.assign({p: {}, d: []}, d); } catch (e) {} return {s: [], p: {}, d: []}; })();
 function saveDex() { try { localStorage.setItem("wyrmnest_dex", JSON.stringify(DEX)); } catch (e) {} }
