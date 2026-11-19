@@ -1161,6 +1161,7 @@ function tutorAdvice() {
   if (status !== "play") return null;
   const hp = player.hp, H = hp - 1;
   const S = tutorSolve(), {vars, vi, dom, why, rem, dmax, hidden} = S;
+  TUTOR_S = S;
   const ready = player.xp >= nextXP(player.level);
   const firstRev = pred => { for (let i = 0; i < N; i++) if (cells[i].rev && vi[i] < 0 && pred(cells[i], i)) return i; return -1; };
   let i;
@@ -1243,24 +1244,59 @@ function bestGuess(S, hp) {
   return best;
 }
 
-function reasonCell(w) {
+// v28：依据要圈全——数字约束里“别的格”如果是靠别的推理定下的，把那些依据也圈出来（1 层）
+let TUTOR_S = null;
+const minPos = (S, j) => Math.min(...S.dom[j].filter(v => !(v === 11 && S.hidden(j)))) > 0;
+function supportOf(S, k, con) {
+  const out = [];
+  for (const j of con.U) {
+    if (j === k) continue;
+    const w = S.why[j];
+    if (w && w.con !== con && minPos(S, j)) out.push({j, w});   // 只说真的占了数的格
+  }
+  return out;
+}
+function reasonCell(w, depth, seen) {
   if (!w) return [];
-  if (w.k === "num") return [w.con.c];
-  if (w.k === "enum") return w.cons.map(c => c.c);
-  if (w.k === "giant" || w.k === "garg") return [w.c];
-  return [];
+  depth = depth || 0; seen = seen || new Set();
+  if (seen.has(w)) return [];
+  seen.add(w);
+  let r = [];
+  if (w.k === "num") r = [w.con.c];
+  else if (w.k === "enum") r = w.cons.map(c => c.c);
+  else if (w.k === "giant" || w.k === "garg") r = [w.c];
+  if (TUTOR_S && depth < 1) {
+    const cons = w.k === "num" ? [w.con] : w.k === "enum" ? w.cons : [];
+    for (const con of cons) for (const k of con.U) {
+      const w2 = TUTOR_S.why[k];
+      if (w2 && w2.con !== con) r = r.concat(reasonCell(w2, depth + 1, seen));
+    }
+  }
+  return [...new Set(r)];
+}
+function supText(S, w, j) {
+  const src = (w.k === "num" || w.k === "enum") ? "被别的蓝圈" : w.k === "giant" ? "按熊左右对称" : w.k === "garg" ? "按塔龟箭头" : "按剩下的数量";
+  const d = S.dom[j].filter(v => !(v === 11 && S.hidden(j)));
+  if (d.length === 1) return src + "定为" + (d[0] === 100 ? "炸弹" : ` ${d[0]}`);
+  return src + `算出至少 ${Math.min(...d)}`;
 }
 
 function explain(S, k, H, kind) {
+  TUTOR_S = S;
   const {dom, why, dmax} = S, w = why[k], m = dmax(k);
   const exact = dom[k].filter(v => !(v === 11 && S.hidden(k)));
-  let head;
+  let head, tail = "";
   if (w && w.k === "num") {
-    const {n, K, R} = w.con;
+    const {n, R, c} = w.con;
+    const shown = typeof remainNum === "function" ? remainNum(c) : R;
     if (n === 0) head = "蓝圈空白 = 周围没怪";
-    else head = K ? `蓝圈 ${n} − 已知 ${K} = ${R}` : `蓝圈 ${n}`;
-    if (n && kind !== "fight" && R > 0) head += "，别的格已凑满";
-    else if (kind === "fight" && m < R) head += "，别的格分走一部分";
+    else if (R === 0) head = "蓝圈 0 = 周围的怪都已看到";
+    else head = shown === R ? `蓝圈 ${R}` : `蓝圈 ${shown}（不算你的标记是 ${R}）`;
+    const sup = R > 0 ? supportOf(S, k, w.con) : [];
+    if (sup.length === 1) head += `：旁边那格${supText(S, sup[0].w, sup[0].j)}`;
+    else if (sup.length > 1) head += `：旁边 ${sup.length} 格已被别的蓝圈定下`;
+    if (R > 0 && kind !== "fight") tail = sup.length ? "，已凑满" : "，别的格已凑满";
+    else if (kind === "fight" && m < R) tail = sup.length ? "，分走一部分" : "，别的格分走一部分";
   } else if (w && w.k === "enum") head = "几个蓝圈的数字合起来算";
   else if (w && w.k === "giant") head = "两只熊左右对称成对";
   else if (w && w.k === "garg") head = "塔龟箭头指向同伴";
@@ -1268,7 +1304,8 @@ function explain(S, k, H, kind) {
   else if (w && w.k === "only") head = `${powLabel(w.v)}只剩这里能放`;
   else head = m <= 0 ? "怪都已找到" : `剩下的怪最大 ${m}`;
   const mim = S.hidden(k) && dom[k].includes(11);   // 可能是没现形的宝箱怪：第一下只翻开，算安全
-  if (kind === "zero" && mim) return `${head.replace("，别的格已凑满", "")} → 黄圈${dom[k].every(v => v === 11) ? "是" : "可能是"}宝箱怪（11）：第一下只翻开、不扣血，别点第二下`;
+  if (kind === "zero" && mim) return `${head} → 黄圈${dom[k].every(v => v === 11) ? "是" : "可能是"}宝箱怪（11）：第一下只翻开、不扣血，别点第二下`;
+  head += tail;
   if (kind === "zero") return `${head} → 黄圈没怪`;
   if (kind === "chest") return `${head} → 不是宝箱怪`;
   const what = exact.length === 1 ? (POW_LABEL[m] ? `是${POW_LABEL[m]}（${m}）` : `是 ${m} 战力`) : `最多 ${m} 战力`;
