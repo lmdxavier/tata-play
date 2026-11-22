@@ -11,22 +11,28 @@
    第 2 章场景 v1（_dev，未合并）：主题（THEMES）= 地面色、格子色、草边、各类道具的素材表、两侧固定道具、落叶。
      第 1 章 = forest（数值和 73 版完全一样）；第 2 章默认 autumn（金秋牧场），候选 blossom（樱粉花谷）。
      关卡 id 以 2- 开头自动用第 2 章主题；关卡数据里写 theme 可以指定；网址 ?theme=autumn|blossom 强制（预览对比用）。
+   第 3 章场景 v1（_dev，未合并）：海岸。主题 beach（阳光海滩，默认）/ wreck（沉船海湾）；id 以 3- 开头自动用第 3 章主题。
+     和森林 / 秋天的区别：棋盘上方不是三排树冠，而是海（T.sea）：最远处一条海平线 + 岛（远景素材只放在这里），
+     近岸是浪花（assets/scene3/surf_*，每帧只贴图），怪从海里上岸；两侧是棕榈、热带灌木、沙岩。说明见 _dev/第3章场景/v1/说明.md
    ===================================================================== */
 const SCENE = (()=>{
   const E = window.ENV1, IM = {}, IM2 = {};
+  Object.assign(E, window.SCENE3||{});   // 第 3 章场景 v1：scene3 的图（冲浪板、贝壳、远景岛）和 env1 一样按名字用，dir 字段 = 所在文件夹
   let GROUND=[97,134,78], DEEP=[62,98,60];
   const rgb=(c,a=1)=>`rgba(${c[0]},${c[1]},${c[2]},${a})`;
   function rng(seed){ return ()=>{ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   let PROPS=[], DECALS=[], PARTS=[], STATIC=null, KEY='', BAKED=new Map();
 
   // 第 2 章场景 v1：第 2 章才用的道具图（秋叶树、粉树、枯树、秋花）不挡开场，开场后后台加载；没加载完时第 2 章的关先等它（ensure 里判断）
-  const C2_ONLY = n => /^(Town_|Tree_Orange|Tree_Yellow_\d|Small_Tree_Orange|Small_Tree_Yellow_\d|Birch_Yellow_\d|Dead_Tree|Tree_Bare|Tree_Pink|Autumn_Flower|Road_up_Autumn)/.test(n);
-  const SRC_OF = n => /^Town_/.test(n) ? 'assets/scene2/town/'+n.slice(5)+'.png' : 'assets/env1/'+n+'.png';   // 第 2 章场景 v2：Town 包的摆件放在 scene2/town
+  const C2_ONLY = n => /^(Town_|Tree_Orange|Tree_Yellow_\d|Small_Tree_Orange|Small_Tree_Yellow_\d|Birch_Yellow_\d|Dead_Tree|Tree_Bare|Tree_Pink|Autumn_Flower|Road_up_Autumn|Plam_Green|Coconut)/.test(n) || !!(E[n]&&E[n].dir);   // 93：第 3 章棕榈、椰子、scene3 的图也后台加载
+  const SRC_OF = n => /^Town_/.test(n) ? 'assets/scene2/town/'+n.slice(5)+'.png' : 'assets/'+((E[n]&&E[n].dir)||'env1')+'/'+n+'.png';   // Town 包摆件在 scene2/town；scene3 的图带 dir
   const SCENE2_IMG = ['fringe_autumn','fringe_blossom','leaf_orange','leaf_red','leaf_yellow','leaf_pink'];
+  const SCENE3_IMG = ['surf_beach','surf_wreck','surf_foam','fringe_beach','fringe_wreck'];
   let LATE_DONE = false, LATE_P = null;
   function loadLate(){ if(LATE_P) return LATE_P;
     LATE_P = Promise.all([...Object.keys(E).filter(C2_ONLY).map(async n=>{ const i=await loadImage(SRC_OF(n)); if(i) IM[n]=i; }),
-      ...SCENE2_IMG.map(async n=>{ const i=await loadImage('assets/scene2/'+n+'.png'); if(i) IM2[n]=i; })]).then(()=>{ LATE_DONE=true; KEY=''; });
+      ...SCENE2_IMG.map(async n=>{ const i=await loadImage('assets/scene2/'+n+'.png'); if(i) IM2[n]=i; }),
+      ...SCENE3_IMG.map(async n=>{ const i=await loadImage('assets/scene3/'+n+'.png'); if(i) IM2[n]=i; })]).then(()=>{ LATE_DONE=true; KEY=''; });
     return LATE_P; }
   async function load(){
     await Promise.all(Object.keys(E).filter(n=>!C2_ONLY(n)).map(async n=>{ const i=await loadImage(SRC_OF(n)); if(i) IM[n]=i; }));   // 56 版：用 render.js 的 loadImage（多轮重试），原来失败一次这棵树 / 石头就永远不画
@@ -121,12 +127,74 @@ const SCENE = (()=>{
           [[1,3.75],[-1,1.65],[-1,6.45],[1,7.05]], N.disco ? ['Rhythm_Hall_05',1.05] : null);
       },
       top:['Lute_House_05','Lute_House_04','Market_04','Fountain'] },
+    /* 第 3 章场景 v1 ——————————————————————————————————————————————
+       阳光海滩：Environment 1 的棕榈（Plam_Green / Plam_Yellow_Green 共 6 张）+ 热带大叶灌木 + 沙岩（Stone_Yellow）+ 石像（Stone_Gray2_08，复活节岛那种）+ 椰子；
+       地面是偏粉的沙色（参照 Simple Sidescroll map03 的沙滩），格子是浅沙色两种（比第 2 章的麦秆色白、饱和度低）；
+       棋盘上方是海：海平线和远处的岛（map03 的拱门岛、尖山、小山，远景素材只放这一条）、近处礁石和停着海鸥的礁石，
+       近岸浪花（map09_01 翻转换色）一直在涨落，怪从海里走上沙滩。冲浪板（map03_10，补了描边）插在两边沙里。 */
+    beach:{ name:'阳光海滩', GROUND:[236,198,152], DEEP:[150,110,70], cell:[[248,230,192],[236,213,172]], board:'rgb(242,222,182)', boardShadow:'rgba(150,100,50,.30)',
+      blob:['255,248,228','176,120,70'], cblob:['255,255,240,.10','170,120,70,.05'], fringe:'fringe_beach', grass:null, pebble:false, leafBase:10, shells:true,
+      sea:{ sky:[[124,206,246],[214,244,252]], deep:[44,138,222], near:[64,196,222], wet:[214,170,124], surf:'surf_beach', foamGlow:'#7ff6ff',
+        far:[['far_13_arch',0.12,0.62],['far_16_peak',0.56,0.5],['far_15_hill',0.9,0.72]], rocks:[['far_19_gull',0.3,0.42],['far_25_rock2',0.74,0.3],['far_18_rock',0.86,0.22]] },
+      set:{
+        big:  ['Plam_Green_01','Plam_Yellow_Green_01','Plam_Green_02','Plam_Yellow_Green_02'],
+        back: ['Plam_Green_02','Plam_Yellow_Green_01','Plam_Green_03','Plam_Yellow_Green_03'],
+        pine: ['Plam_Green_03','Plam_Yellow_Green_03'],
+        mid:  ['Plam_Yellow_Green_02','Plam_Green_01','Plam_Yellow_Green_01','Plam_Green_02'],
+        small:['Bush_Green_01','Bush_Yellow_Green_02','Bush_Green_02','Bush_Yellow_Green_01'],
+        bush: ['Bush_Green_03','Bush_Yellow_Green_03','Bush_Green_01'],
+        leaf: ['Bush_Green_04','Bush_Yellow_Green_04','Bush_Green_05','Bush_Yellow_Green_05'],
+        stone:['Stone_Yellow_01','Stone_Yellow_02','Stone_Yellow_04','Stone_Yellow_07','Stone_Yellow_03'],
+        pebble:['Stone_Yellow_05','Stone_Yellow_06'],
+        shroom:['Stone_Yellow_05','Stone_Yellow_06','Coconut_02'],
+        flower:['shell_pink','shell_conch','pebble_teal'],
+      },
+      flowerCell:['shell_pink','shell_conch','pebble_teal'],
+      ord:['mid','leaf','pine','big','stone','small','back','bush'],
+      rhy:{ '-1':[['big',1.0],['leaf',0.95],['pine',0.8],['stone',0.8],['big',1.1],['small',0.95],['mid',0.85],['leaf',1.0],['big',1.0]],
+             '1':[['mid',0.9],['stone',0.75],['big',1.05],['leaf',0.95],['pine',0.8],['small',0.9],['big',1.1],['stone',0.7],['mid',0.85]] },
+      extras(side1, COLS, N){
+        side1('Stone_Gray2_08',1,2.3,1.0); side1('Stone_Yellow_06',1,2.46,0.5);   // 右上：石像 + 小石头
+        side1('surfboard_green',-1,4.62,0.95); side1('Coconut_01',-1,4.74,0.45);   // 左边：插在沙里的冲浪板 + 椰子
+        side1('Stone_Yellow_02',-1,COLS+0.72,1.05); side1('Coconut_02',-1,COLS+0.86,0.5);   // 左下：沙岩 + 椰子
+        side1('surfboard_yellow',1,COLS+0.58,0.9); side1('Stone_Yellow_05',1,COLS+0.84,0.7);   // 右下：冲浪板 + 小石
+      } },
+    /* 沉船海湾：同样的棕榈（只用绿的 3 张，配深色）+ 灰绿石头、深色礁石、木桶、枯木（漂流木）；海是 map08 那种翡翠绿泻湖色，
+       远处是 map08 的两段沉船（船身、翘起的船头和桅杆）；地面是偏灰绿的沙。比阳光海滩暗、冷，素材比它少（map08 的宝箱、锚都画在地面图层里，只抠出了锚） */
+    wreck:{ name:'沉船海湾', GROUND:[204,198,150], DEEP:[90,110,80], cell:[[238,234,200],[224,218,182]], board:'rgb(232,226,192)', boardShadow:'rgba(70,90,60,.32)',
+      blob:['250,255,235','100,110,70'], cblob:['255,255,240,.08','90,110,70,.05'], fringe:'fringe_wreck', grass:null, pebble:false, leafBase:10, shells:true,
+      sea:{ sky:[[120,214,176],[236,242,190]], deep:[28,120,118], near:[46,168,150], wet:[176,170,124], surf:'surf_wreck', foamGlow:'#8affd8',
+        far:[['far_wreck_hull',0.2,1.05],['far_wreck_bow',0.8,0.82]], rocks:[['far_25_rock2',0.48,0.3],['far_18_rock',0.62,0.22]] },
+      set:{
+        big:  ['Plam_Green_01','Plam_Green_02','Plam_Yellow_Green_01'],
+        back: ['Plam_Green_02','Plam_Green_03','Plam_Green_01'],
+        pine: ['Plam_Green_03','Plam_Yellow_Green_03'],
+        mid:  ['Plam_Green_01','Plam_Green_02','Dead_Tree_Brown_01','Dead_Tree_Brown_03'],
+        small:['Bush_Green_01','Bush_Green_02','Dead_Tree_Brown_02'],
+        bush: ['Bush_Green_03','Bush_Green_01','Bush_Green_02'],
+        leaf: ['Bush_Green_04','Bush_Green_05'],
+        stone:['Stone_Gray2_01','Stone_Gray2_02','Stone_Gray2_04','Stone_Dark_01','Stone_Dark_02','Stone_Gray2_07'],
+        pebble:['Stone_Gray2_05','Stone_Gray2_06'],
+        shroom:['Stone_Gray2_05','Stone_Gray2_06','Ork'],
+        flower:['shell_conch','pebble_teal','shell_pink'],
+      },
+      flowerCell:['shell_conch','pebble_teal','shell_pink'],
+      ord:['mid','leaf','pine','big','stone','small','back','bush'],
+      rhy:{ '-1':[['big',1.0],['stone',0.85],['pine',0.8],['leaf',0.95],['mid',0.9],['small',0.95],['big',1.1],['stone',0.75],['big',1.0]],
+             '1':[['mid',0.9],['leaf',0.95],['big',1.05],['stone',0.8],['pine',0.8],['small',0.9],['big',1.1],['leaf',0.9],['mid',0.85]] },
+      extras(side1, COLS, N){
+        side1('anchor',1,2.35,1.0); side1('Stone_Gray2_06',1,2.5,0.5);   // 右上：半埋在沙里的船锚
+        side1('Ork',-1,4.6,0.85); side1('Stone_Dark_03',-1,4.76,0.6);   // 左边：冲上岸的木桶
+        side1('Stone_Dark_01',-1,COLS+0.72,1.05); side1('Ork',-1,COLS+0.88,0.6);
+        side1('Stone_Gray2_04',1,COLS+0.62,0.9); side1('Stone_Gray2_05',1,COLS+0.86,0.6);
+      } },
   };
   let THEME_FORCE = (/[?&]theme=(\w+)\b/.exec(location.search)||[])[1] || null;
   let CH2_THEME = 'blossom';   // 89 版（用户 2026-11-15）：第 2 章 = 樱粉花谷；金秋那套保留给后面的章节
-  const themeKey = () => { if(THEME_FORCE && THEMES[THEME_FORCE]) return THEME_FORCE; const lv=DATA.level||{}; if(lv.theme && THEMES[lv.theme]) return lv.theme; return /^2-/.test(String(lv.id||'')) ? CH2_THEME : 'forest'; };
+  let CH3_THEME = 'beach';     // 93 版（用户 2026-11-22 交给 Claude 定）：第 3 章 = 阳光海滩；沉船海湾留作候选
+  const themeKey = () => { if(THEME_FORCE && THEMES[THEME_FORCE]) return THEME_FORCE; const lv=DATA.level||{}; if(lv.theme && THEMES[lv.theme]) return lv.theme; const id=String(lv.id||''); return /^2-/.test(id) ? CH2_THEME : /^3-/.test(id) ? CH3_THEME : 'forest'; };
   let T = THEMES.forest, SET = SET_FOREST;
-  const SWAY = n=>/^Tree|^Birch/.test(n)?0.022 : /^Small_Tree/.test(n)?0.04 : /^Bush/.test(n)?0.03 : 0;
+  const SWAY = n=>/^Tree|^Birch/.test(n)?0.022 : /^Plam/.test(n)?0.026 : /^Small_Tree/.test(n)?0.04 : /^Bush/.test(n)?0.03 : 0;
 
   /* ---------- 摆放 ---------- */
   function layout(){
@@ -153,6 +221,9 @@ const SCENE = (()=>{
 
     // 1) 棋盘上方：三排树冠（后排更深、更小），怪物从树林里走出来
     const rows=[{fy:oy+0.06*cs, set:'big', s:1.0, tone:1, gap:1.05},{fy:oy-0.5*cs, set:'back', s:0.95, tone:0.86, gap:0.95},{fy:oy-1.05*cs, set:'back', s:0.9, tone:0.74, gap:0.9}];
+    if(T.sea){   // 第 3 章 v1：上方是海，不铺树冠；两个上角各一棵棕榈，树冠伸到海面上方（脚在沙滩上，不进海）
+      addSide(pick('big'),-1,oy+0.12*cs,{lim:0.1,s:1.0,flip:false}); addSide(pick('big'),1,oy+0.3*cs,{lim:0.1,s:0.95,flip:true});
+    } else
     rows.forEach((r,ri)=>{ let x=xmin-0.6*cs+R()*0.5*cs;
       while(x<xmax+0.8*cs){ const n=pick(r.set), q=add(n,x,r.fy-R()*0.12*cs,{s:r.s,tone:r.tone}); if(!q) break;
         x+=q.w*r.gap*(0.42+R()*0.14); }
@@ -165,10 +236,11 @@ const SCENE = (()=>{
     // 每侧一串「大小 + 种类」的节奏，左右错开，不对称
     const RHY={ '-1':[['big',0.95],['pine',0.75],['small',1.0],['big',1.1],['mid',0.8],['pine',0.85],['big',1.0],['small',0.95],['mid',0.9]],
                  '1':[['mid',0.85],['big',1.05],['small',0.9],['pine',0.8],['big',0.95],['mid',0.75],['big',1.1],['pine',0.75],['small',1.0]] };
+    const RH=T.rhy||RHY;   // 第 3 章 v1：海岸的节奏表（棕榈、大叶灌木、沙岩轮流）
     for(const side of [-1,1]){
-      let y=oy+(side<0?0.75:1.05)*cs, i=0;
+      let y=oy+(side<0?0.75:1.05)*cs+(T.sea?0.35*cs:0), i=0;
       while(y<by+0.35*cs){
-        const [set,sc]=RHY[side][i%RHY[side].length];
+        const [set,sc]=RH[side][i%RH[side].length];
         const n=pick(set==='pine'?'pine':set);
         // 大树：保持大尺寸，露一半；小树 / 中树 / 松树：缩到大部分能露出来（露 75%~100%），这样有大有小
         const avail=m+0.12*cs, show=0.75+R()*0.25;
@@ -183,7 +255,7 @@ const SCENE = (()=>{
     //   种类和里排错开、颜色逐排压暗（像树林深处）、上下位置和里排交错。两边只露半格（主屏幕全屏）时不加，画面和原来一样。
     for(const side of [-1,1]){
       for(let k=1; k*0.8*cs < m-0.1*cs; k++){
-        const ORD=['mid','back','pine','big','small','back'];
+        const ORD=T.ord||['mid','back','pine','big','small','back'];   // 第 3 章 v1：海岸外排也混进大叶灌木和沙岩，不全是棕榈
         let y=oy+(0.3+0.45*((k+(side<0?0:1))%2))*cs, i=k*3+(side<0?0:2);
         while(y<by+0.8*cs){
           const set=ORD[i%ORD.length], n=pick(set);
@@ -203,7 +275,7 @@ const SCENE = (()=>{
           const s2=Math.min(sc, fit(n, cs*(big?1.05:0.8)));
           const q=add(n, cx+(R()-0.5)*0.3*cs, y, {s:s2, tone});
           if(q){ const [sa,sb]=solid(q); if(l<lo && sb>ax0+0.06*cs) q.x-=sb-(ax0+0.06*cs); if(l>hi && sa<ax1-0.06*cs) q.x+=(ax1-0.06*cs)-sa; }
-          if(R()<0.6) flowerPatch(cx+(R()-0.5)*0.6*cs, y+0.2*cs, 2+Math.floor(R()*3));
+          if(T.sea){ if(R()<0.3) flowerPatch(cx+(R()-0.5)*0.6*cs, y+0.2*cs, 1+Math.floor(R()*2)); } else if(R()<0.6) flowerPatch(cx+(R()-0.5)*0.6*cs, y+0.2*cs, 2+Math.floor(R()*3));   // 第 3 章 v1：贝壳比花稀
           y+=(big?0.78:0.5)*cs+R()*0.16*cs; i++;
         }
       }
@@ -229,12 +301,18 @@ const SCENE = (()=>{
         PROPS=PROPS.filter(keep); } }
     // 3) 棋盘上方左右两角：各一棵完整可见的小树（在信息栏下面，露出树冠）
     // 4) 底边（家门口）：警钟之间点缀小花和草；下方一道矮树篱，被卡槽盖住一半，像花园的边
-    for(let l=0;l<=LANES;l++){ const x=ox+l*cs; flowerPatch(x, by+0.62*cs, 3); }
+    for(let l=0;l<=LANES;l++){ const x=ox+l*cs; if(T.sea){ if(R()<0.55) flowerPatch(x+(R()-0.5)*0.4*cs, by+0.62*cs, 1+Math.floor(R()*2)); } else flowerPatch(x, by+0.62*cs, 3); }   // 第 3 章 v1：贝壳比花稀，家门口零星几颗
     // 6) 地面点缀（画进静态底图）：小花一丛一丛，草丛零星；不进棋盘
     const area=(xmax-xmin)*H/(cs*cs);
+    if(T.sea){   // 第 3 章 v1：上方是海，地面点缀（贝壳、海螺、青石子）撒在两侧和家门口；近岸湿沙上也有几颗；退潮那关多
+      const fl=mood().flowers||1, shore=oy+(mood().shore??-0.3)*cs;
+      for(let i=0;i<Math.round(9*fl);i++){ const side=R()<0.5?-1:1, x=side<0? R()*(ox-0.06*cs) : ox+bw+0.06*cs+R()*Math.max(0,W-ox-bw-0.06*cs), y=oy+R()*(bh+1.1*cs); decal(pick('flower'),x,y,0.85+R()*0.35); }
+      for(let i=0;i<Math.round(5*fl);i++){ const x=R()*W, y=shore+(0.12+R()*Math.max(0.05,oy-shore-0.2*cs)/cs)*cs; if(y<oy-0.06*cs) decal(pick('flower'),x,y,0.8+R()*0.3); }
+    } else {
     for(let i=0;i<area*0.07*(mood().flowers||1);i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.3*cs)) continue; flowerPatch(x,y,3+Math.floor(R()*4)); }
     if(T.grass!==null) for(let i=0;i<area*0.1;i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.2*cs)) continue; decal(T.grass||'Forest_Grass',x,y,0.9+R()*0.4); }
     if(T.pebble) for(let i=0;i<area*0.03;i++){ const x=xmin+R()*(xmax-xmin), y=R()*(oy+0.1*cs); if(inBoard(x,y,0.3*cs)) continue; decal(SET.pebble[Math.floor(R()*SET.pebble.length)],x,y,0.45+R()*0.2); }   // 第 2 章 v1：金秋没有草丛贴图，零星小碎石
+    }
     BAKED.clear(); STATIC=null;
     const P=rng(7); PARTS=[]; for(let i=0;i<40;i++) PARTS.push({x:xmin+P()*(xmax-xmin),y:P()*H,a:P()*6.28,s:P(),v:P()});
   }
@@ -254,7 +332,8 @@ const SCENE = (()=>{
       const gr=g.createRadialGradient(x,y,0,x,y,r); gr.addColorStop(0,`rgba(${d>0?BL[0]:BL[1]},${0.05+R()*0.04})`); gr.addColorStop(1,'rgba(0,0,0,0)');
       g.fillStyle=gr; g.beginPath(); g.ellipse(x,y,r,r*0.7,R()*3,0,7); g.fill(); }
     // 树林深处：棋盘上方往上逐渐变成深林色
-    const tg=g.createLinearGradient(0,oy-1.6*cs,0,oy+0.2*cs); tg.addColorStop(0,rgb(DEEP)); tg.addColorStop(1,rgb(DEEP,0)); g.fillStyle=tg; g.fillRect(xmin,0,span,oy+0.2*cs);
+    if(T.sea) paintSea(g, cs, oy); else {
+    const tg=g.createLinearGradient(0,oy-1.6*cs,0,oy+0.2*cs); tg.addColorStop(0,rgb(DEEP)); tg.addColorStop(1,rgb(DEEP,0)); g.fillStyle=tg; g.fillRect(xmin,0,span,oy+0.2*cs); }
     // 地面点缀
     for(const d of DECALS){ g.save(); g.translate(d.x,d.y); if(d.flip) g.scale(-1,1); g.drawImage(d.im,-d.w/2,-d.h/2,d.w,d.h); g.restore(); }
     // 棋盘：底下一圈很淡的阴影，让它像略低一点的空地
@@ -286,6 +365,67 @@ const SCENE = (()=>{
     STATIC=c;
   }
 
+  /* ---------- 第 3 章场景 v1：海（画进静态底图）——天空 → 海平线和远处的岛 → 由深到浅的海 → 近处礁石 → 湿沙 ----------
+     浪花边（surf）每帧画（drawSea），总是盖住这里海的下沿，所以这里的海只画到 shore - 0.45 格。
+     远景素材（岛、沉船）只放在海平线上、按「原图 1 像素 ≤ 屏幕 1 像素」缩小，混 35% 天色当空气透视；不拿到近景放大。 */
+  const SEA = { shore:0, hz:0 };
+  function paintSea(g, cs, oy){
+    const S=T.sea, shore=oy+(mood().shore??-0.3)*cs, hz=Math.max(0, shore-1.75*cs), R=rng(77);
+    SEA.shore=shore; SEA.hz=hz;
+    // 湿沙：岸线往下一窄条深一点的沙色，往下淡掉（浪退下去时露出来）
+    let gr=g.createLinearGradient(0,shore-0.1*cs,0,shore+0.62*cs); gr.addColorStop(0,rgb(S.wet,1)); gr.addColorStop(0.45,rgb(S.wet,0.55)); gr.addColorStop(1,rgb(S.wet,0)); g.fillStyle=gr; g.fillRect(0,shore-0.1*cs,W,0.72*cs);
+    // 天空（只有最上面很窄一条，多半在状态栏和信息栏后面）
+    if(hz>0){ gr=g.createLinearGradient(0,0,0,hz); gr.addColorStop(0,rgb(S.sky[0])); gr.addColorStop(1,rgb(S.sky[1])); g.fillStyle=gr; g.fillRect(0,0,W,hz+1); }
+    // 海：海平线处带一点天色雾，往近处变成近岸色
+    gr=g.createLinearGradient(0,hz,0,shore); gr.addColorStop(0,rgb(S.deep.map((v,i)=>v*0.7+S.sky[1][i]*0.3))); gr.addColorStop(0.18,rgb(S.deep)); gr.addColorStop(1,rgb(S.near));
+    g.fillStyle=gr; g.fillRect(0,hz,W,shore-hz-0.45*cs);
+    // 远景：海平线上的岛 / 沉船（混天色，越远越淡）
+    const farImg=(n,x,hC,yb,haze)=>{ const m=E[n], im=IM[n]; if(!m||!im) return; const h=hC*cs, w=h*m.w/m.h, k=Math.min(1, h*DPR/m.h);   // 远景不放大（k ≤ 1）
+      const c=document.createElement('canvas'); c.width=Math.ceil(w*DPR); c.height=Math.ceil(h*DPR); const cg=c.getContext('2d'); cg.imageSmoothingQuality='high'; cg.drawImage(im,0,0,c.width,c.height);
+      cg.globalCompositeOperation='source-atop'; cg.fillStyle=rgb(S.sky[1],haze); cg.fillRect(0,0,c.width,c.height);
+      g.drawImage(c, x-w/2, yb-h*m.foot, w, h); c.width=0; c.height=0; };
+    for(const [n,fx,hC] of S.far) farImg(n, fx*W, hC*Math.min(1,(shore-hz)/(1.75*cs)), hz+0.08*cs, 0.35);
+    // 近处礁石（停着海鸥那块），在海面中段
+    for(const [n,fx,hC] of S.rocks){ const y=hz+(0.45+R()*0.25)*(shore-hz-0.25*cs); farImg(n, fx*W, hC*Math.min(1,(shore-hz)/(1.75*cs)), y, 0.12); }
+  }
+  // 浪花：两层，同一张 map09_01（左右能接上），预先横向拼成「屏幕宽 + 一块」的整张（接缝在整像素上，不出竖线），每帧只贴两次
+  let SURF=null;
+  function surfSprite(){
+    if(SURF) return SURF; const S=T.sea, im=IM2[S.surf]; if(!im) return null;
+    // 浪花边高 0.55 格（浪头起伏约 0.36 格），横向拉宽 1.4 倍（浪头不陡）；上面再接 0.6 格同色的海水，保证总能盖住静态海的下沿
+    const cs=L.cs, hw=Math.round(0.55*cs*DPR), ext=Math.round(0.6*cs*DPR), h=hw+ext, tw=Math.round(hw*im.width/im.height*1.4), n=Math.ceil(W*DPR/tw)+2;
+    const mk=(src,tint)=>{ const c=document.createElement('canvas'); c.width=tw*n; c.height=h; const g=c.getContext('2d'); g.imageSmoothingQuality='high';
+      if(!tint){ g.fillStyle=rgb(S.near); g.fillRect(0,0,c.width,ext+1); }
+      for(let i=0;i<n;i++) g.drawImage(src, i*tw, ext, tw, hw);
+      if(tint){ g.globalCompositeOperation='source-in'; g.fillStyle=tint; g.fillRect(0,0,c.width,c.height); g.globalCompositeOperation='source-over'; }
+      else { const N=mood(); if(N.env){ const m=document.createElement('canvas'); m.width=c.width; m.height=c.height; m.getContext('2d').drawImage(c,0,0); moodPaint(g,c.width,c.height,N,m); m.width=0; m.height=0; } }
+      c.complete=true; c.naturalWidth=c.width; c.naturalHeight=c.height; return c; };
+    const N=mood(), fg=N.glowfoam && IM2.surf_foam ? mk(IM2.surf_foam, N.glowfoam===true?S.foamGlow:N.glowfoam) : null;
+    return SURF={img:mk(im), glow:fg, tw, h};
+  }
+  const GLINT=[];
+  function drawSea(ctx,t){
+    const sp=surfSprite(); if(!sp) return; const N=mood(), cs=L.cs, sw=N.surf||{}, A=(sw.a??1)*0.13*cs, f=(sw.f??1);
+    const dw=sp.img.width/DPR, dh=sp.h/DPR, tw=sp.tw/DPR, rp=v=>Math.round(v*DPR)/DPR;
+    // 后面一层（上一道浪，淡）+ 前面一层（涨到最高时盖过湿沙一点点，退下去露出湿沙）
+    const lay=(ph,xo,yo,al)=>{ const k=Math.sin(t*0.62*f+ph), y=rp(SEA.shore+yo+A*k-dh), x=-rp(((t*cs*0.07*f+xo)%tw+tw)%tw);
+      ctx.globalAlpha=al; ctx.drawImage(sp.img, x, y, dw, dh);
+      if(sp.glow){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=al*(0.55+0.25*Math.sin(t*1.3+ph)); ctx.drawImage(sp.glow, x, y, dw, dh); ctx.restore(); } };
+    ctx.save(); lay(2.1, tw*0.43, -0.16*cs, 0.55); lay(0, 0, 0.06*cs, 1); ctx.restore();
+    // 海面闪光：只在海上（棋盘上方），一闪一闪；正午那关多
+    const gl=(typeof tinted==='function') ? tinted('gui/Glow_Circle02.png', N.glintC||'#ffffff') : null, nG=Math.round(10*(N.glints??1));
+    if(gl && nG>0 && SEA.shore-SEA.hz>cs*0.3){ if(GLINT.length<nG) for(let i=GLINT.length;i<nG;i++) GLINT.push({x:Math.random()*W, y:0, ph:Math.random()*6.28, v:0.7+Math.random()*0.8, s:0.6+Math.random()*0.6});
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      for(let i=0;i<nG;i++){ const p=GLINT[i], b=Math.sin(t*p.v*1.7+p.ph); if(b<=0.05){ if(b<-0.97){ p.x=Math.random()*W; p.y=0; } continue; }
+        if(!p.y) p.y=SEA.hz+0.15*cs+Math.random()*Math.max(1,SEA.shore-SEA.hz-0.55*cs);
+        const s=cs*0.22*p.s*(0.6+0.4*b); ctx.globalAlpha=b*0.75; ctx.drawImage(gl, p.x-s, p.y-s*0.18, s*2, s*0.36); ctx.globalAlpha=b*0.9; ctx.drawImage(gl, p.x-s*0.2, p.y-s*0.2, s*0.4, s*0.4); }
+      ctx.restore(); }
+    if(N.sunpath && typeof tinted==='function'){ const gi=tinted('gui/Glow_Circle01.png','#ffb26b'); if(gi){   // 夕阳：海面上一条落日倒影，轻轻晃
+      ctx.save(); ctx.globalCompositeOperation='lighter'; const cx=W*0.62, y0=SEA.hz, y1=SEA.shore-0.1*cs;
+      for(let i=0;i<5;i++){ const yy=y0+(i+0.5)/5*(y1-y0), w=cs*(0.9+i*0.35)*(1+0.12*Math.sin(t*1.4+i)); ctx.globalAlpha=0.32-i*0.03; ctx.drawImage(gi, cx-w/2+Math.sin(t*0.9+i*1.7)*cs*0.06, yy-cs*0.09, w, cs*0.18); }
+      ctx.restore(); } }
+  }
+
   /* ---------- 72 版：每关的场景氛围（明暗、滤镜、环境动态、摆放）；场景与美术.md「72 版」 ----------
      env = 场景最终乘色（地面和道具烘焙时一次乘好，每帧不多花）；chr = 角色、落叶每帧再乘的一层（全屏一次），烘焙时用 env / chr。
      light = 左上来的光（颜色、强度），clouds = 云影，leaves = 落叶数量倍数，flowers = 战场外小花密度倍数，
@@ -315,6 +455,22 @@ const SCENE = (()=>{
     c2rain: {name:'细雨', env:[168,180,204], chr:[224,230,242], light:null, clouds:false, leaves:0.4, rain:true, bare:true},
     c2twi:  {name:'暮色', env:[156,128,186], chr:[222,212,240], light:null, clouds:false, leaves:0.4, fire:true, shroom:true, bare:true},
     c2disco:{name:'迪斯科之夜', env:[66,72,142], chr:[182,188,232], light:null, clouds:false, leaves:0.3, disco:true, shroom:true, bare:true},
+    /* 第 3 章场景 v1：海岸 10 关（_dev/第3章场景/v1/说明.md 有表）。和第 1 章（森林白天 → 三种夜）、第 2 章（秋天白天 → 雨 → 暮色 → 迪斯科夜）都不一样：
+       每关的主角是海——浪的大小、潮位、海面的光；最后三关是 暴风雨 → 月夜磷光 → Boss 奥库塔的墨色海。
+       新字段：surf 浪（a 幅度、f 快慢），shore 岸线位置（格，默认 -0.3；退潮往上），glints 海面闪光数量倍数（glintC 颜色），sunpath 落日倒影，
+       seafog 海雾（海面上大团白雾，两侧加晨雾 mist），sparkle 两侧和湿沙上的水光，flash 闪电，glowfoam 浪花发光（true = 主题色，或颜色），ink 墨雾，
+       rain 可以是对象（n 雨丝数、v 速度、slant 斜度、a 两侧透明度、ai 格子上方透明度）。leaves = 落下的绿叶（只有起风的关）。 */
+    c3sun:   {name:'晴空', light:{c:[255,246,214], a:0.14}, leaves:0, flowers:1},
+    c3fog:   {name:'海雾', env:[216,226,236], chr:[244,247,252], light:{c:[232,240,255], a:0.08}, clouds:false, leaves:0, mist:true, seafog:true, glints:0.2, surf:{a:0.7, f:0.8}},
+    c3ebb:   {name:'退潮', env:[255,236,220], chr:[255,250,246], light:{c:[255,222,190], a:0.16}, leaves:0, shore:-0.85, flowers:2.4, surf:{a:0.55, f:0.7}, glints:0.8},
+    c3glare: {name:'烈日', env:[255,250,226], light:{c:[255,250,214], a:0.3}, clouds:false, leaves:0, glints:2.6, flowers:0.8, sparkle:'#fff3c0'},
+    c3surge: {name:'大浪', env:[220,236,246], chr:[246,250,255], light:{c:[240,248,255], a:0.12}, leaves:0.5, surf:{a:2.0, f:1.35}, shore:-0.18, glints:1.4, wind:{a:1.5, f:1.2, g:1.5, drift:2.4}, sparkle:'#e8fbff'},
+    c3lagoon:{name:'碧水浅湾', env:[222,248,242], chr:[246,255,252], light:{c:[210,255,246], a:0.13}, leaves:0, glints:1.2, glintC:'#d8fff6', sparkle:'#9ff6ff', flowers:1.3},
+    c3sunset:{name:'夕阳', env:[255,186,156], chr:[255,226,210], light:{c:[255,136,84], a:0.26}, clouds:false, leaves:0, glints:1.6, glintC:'#ffc58a', sunpath:true},
+    c3storm: {name:'暴风雨', env:[132,150,172], chr:[212,220,232], light:null, clouds:false, leaves:1.6, glints:0, surf:{a:2.3, f:1.6}, shore:-0.15,
+              wind:{a:2.2, f:1.6, g:2.2, drift:4.5}, rain:{n:200, v:10.5, slant:2.8, rot:0.3, a:0.6, ai:0.3}, flash:true},
+    c3glow:  {name:'月夜磷光', env:[82,102,170], chr:[194,204,240], light:null, clouds:false, leaves:0, moon:true, glints:0.6, glintC:'#bfe9ff', glowfoam:true, sparkle:'#7ff6ff'},
+    c3ink:   {name:'墨色深海', env:[72,58,116], chr:[178,170,216], light:null, clouds:false, leaves:0, glints:0.3, glintC:'#d0a8ff', glowfoam:'#b47cff', ink:true, surf:{a:1.4, f:0.9}},
   };
   const NOWIND={a:1,f:1,g:1,drift:1}; let WIND=NOWIND;
   const DEF_LIGHT={c:[255,240,190], a:0.12};
@@ -392,18 +548,19 @@ const SCENE = (()=>{
   function drawLate(ctx,t,dt){
     const MD=mood(), cs=L.cs, ln=DATA.level.lanes, bx0=L.ox+Math.min(...ln)*cs, bx1=L.ox+(Math.max(...ln)+1)*cs, by0=L.oy, by1=L.oy+COLS*cs;
     const inB=(x,y)=>x>bx0&&x<bx1&&y>by0&&y<by1;
-    if(MD.rain){   // 细雨：斜着落的雨丝，落地一圈小水花；格子上方更淡
-      const di=dropImg(), ri=ringImg();
-      if(!RAIN.length) for(let i=0;i<130;i++) RAIN.push({x:Math.random()*(W+cs*2), y:Math.random()*H, v:0.85+Math.random()*0.3, l:0.32+Math.random()*0.18, end:Math.random()*H*1.1, sp:-1});
+    if(MD.rain){   // 细雨：斜着落的雨丝，落地一圈小水花；格子上方更淡（第 3 章 v1：rain 可以是对象，暴风雨更密、更快、更斜）
+      const di=dropImg(), ri=ringImg(), RP=MD.rain===true?{}:MD.rain, RN=RP.n||130, RV=RP.v||8, RS=RP.slant||1.7, RR=RP.rot||0.21, RA=RP.a||0.55, RAI=RP.ai||0.3;
+      if(RAIN.length!==RN){ RAIN.length=0; for(let i=0;i<RN;i++) RAIN.push({x:Math.random()*(W+cs*3), y:Math.random()*H, v:0.85+Math.random()*0.3, l:0.32+Math.random()*0.18, end:Math.random()*H*1.1, sp:-1}); }
       ctx.save();
       for(const r of RAIN){
-        if(r.sp<0){ r.y+=dt*cs*8*r.v; r.x-=dt*cs*1.7*r.v; if(r.y>r.end){ r.sp=0; r.sx=r.x; r.sy=r.y; }
-          const len=cs*r.l, wd=Math.max(1.5,cs*0.034);
-          ctx.globalAlpha=inB(r.x,r.y)?0.3:0.55; ctx.save(); ctx.translate(r.x,r.y); ctx.rotate(0.21); ctx.drawImage(di,-wd/2,-len,wd,len); ctx.restore(); }
+        if(r.sp<0){ r.y+=dt*cs*RV*r.v; r.x-=dt*cs*RS*r.v; if(r.y>r.end){ r.sp=0; r.sx=r.x; r.sy=r.y; }
+          const len=cs*r.l*(RV/8), wd=Math.max(1.5,cs*0.034);
+          ctx.globalAlpha=inB(r.x,r.y)?RAI:RA; ctx.save(); ctx.translate(r.x,r.y); ctx.rotate(RR); ctx.drawImage(di,-wd/2,-len,wd,len); ctx.restore(); }
         else { r.sp+=dt*2.4; const k=Math.min(1,r.sp), w=cs*0.26*(0.35+k);
           ctx.globalAlpha=(1-k)*(inB(r.sx,r.sy)?0.24:0.45); ctx.drawImage(ri, r.sx-w/2, r.sy-w*0.21, w, w*0.42);
-          if(r.sp>=1){ r.sp=-1; r.x=Math.random()*(W+cs*2); r.y=-Math.random()*cs*2; r.end=Math.random()*H*1.1; } } }
+          if(r.sp>=1){ r.sp=-1; r.x=Math.random()*(W+cs*3); r.y=-Math.random()*cs*2; r.end=Math.random()*H*1.1; } } }
       ctx.restore(); }
+    drawLate3(ctx,t,dt,MD,inB,bx0,bx1,by0,by1);
     if(MD.disco){   // Boss 巴隆的迪斯科之夜：从棋盘上方的树林里打下几束彩色舞台光，慢慢左右扫，跟着节拍轻轻一亮；树林、两边、家门口有彩色光斑
       const glow=(typeof img==='function')?img('gui/Glow_Circle01.png'):null;
       if(!DISCO){ const C=['rgba(255,95,180,A)','rgba(95,214,255,A)','rgba(255,216,74,A)','rgba(155,123,255,A)']; DISCO=C.map((c,i)=>({c, hex:['#ff5fb4','#5fd6ff','#ffd84a','#9b7bff'][i], ph:i*1.7, sp:0.32+i*0.06, x:(i+0.5)/C.length})); }
@@ -418,12 +575,43 @@ const SCENE = (()=>{
       ctx.restore(); }
   }
 
+  /* ---------- 第 3 章场景 v1：角色乘色之后画的海岸效果（全部是贴图）：海雾、水光、闪电、墨雾 ----------
+     原则同上：两侧和海面上可以明显，格子上方一律很淡。 */
+  const FOG3=[], SPK=[], INK=[]; let FLASH={next:4, t:-1};
+  function drawLate3(ctx,t,dt,MD,inB,bx0,bx1,by0,by1){
+    if(!T.sea || typeof tinted!=='function') return; const cs=L.cs;
+    if(MD.seafog){ const im=tinted('gui/Glow_Circle01.png','#f2f6fa'); if(im){   // 海雾：海面上几大团白雾慢慢横飘；格子上方只有最上面一点
+      if(!FOG3.length) for(let i=0;i<7;i++) FOG3.push({x:Math.random()*W, y:SEA.hz+Math.random()*(SEA.shore-SEA.hz+0.4*cs), s:2.4+Math.random()*1.6, v:0.12+Math.random()*0.1, ph:Math.random()*6.28});
+      ctx.save(); ctx.globalCompositeOperation='screen';
+      for(const f of FOG3){ f.x+=dt*cs*f.v; if(f.x>W+cs*2) f.x=-cs*2; const s=cs*f.s; ctx.globalAlpha=0.5+0.12*Math.sin(t*0.4+f.ph); ctx.drawImage(im, f.x-s/2, f.y-s*0.3, s, s*0.6); }
+      ctx.restore(); } }
+    if(MD.sparkle){ const im=tinted('gui/Glow_Circle02.png',MD.sparkle); if(im){   // 水光 / 磷光：两侧沙地和近岸湿沙上一点点亮起又暗下；格子上方很淡
+      if(!SPK.length) for(let i=0;i<22;i++) SPK.push({side:i%2?1:-1, x:0, y:0, ph:Math.random()*6.28, v:0.5+Math.random()*0.7, s:0.18+Math.random()*0.18});
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      for(let i=0;i<SPK.length;i++){ const p=SPK[i], b=Math.sin(t*p.v+p.ph);
+        if(b<=0.02){ if(b<-0.97 || !p.y){ if(i%3===0){ p.x=Math.random()*W; p.y=SEA.shore-0.1*cs+Math.random()*0.5*cs; } else { p.x=p.side<0? Math.random()*bx0 : bx1+Math.random()*(W-bx1); p.y=by0+Math.random()*(by1-by0+cs); } } continue; }
+        const k=inB(p.x,p.y)?0.15:1, s=cs*p.s; ctx.globalAlpha=b*0.7*k; ctx.drawImage(im, p.x-s/2, p.y-s/2, s, s); }
+      ctx.restore(); } }
+    if(MD.ink){ const im=tinted('gui/Glow_Circle01.png','#3a2456'), gl=tinted('gui/Glow_Circle01.png','#9b5cff'); if(im){   // Boss 奥库塔：海面和两侧的墨雾慢慢翻涌；海里一团紫光一明一暗（Boss 在水下）
+      if(!INK.length) for(let i=0;i<12;i++) INK.push({side:i%2?1:-1, y:i<4? SEA.hz+Math.random()*(SEA.shore-SEA.hz) : by0+Math.random()*(by1-by0), x:i<4? Math.random()*W : 0, s:1.6+Math.random()*1.2, ph:Math.random()*6.28, sea:i<4});
+      ctx.save(); ctx.globalCompositeOperation='multiply';
+      for(const m of INK){ const x=m.sea? m.x+Math.sin(t*0.2+m.ph)*cs*0.6 : (m.side<0? bx0-cs*0.45 : bx1+cs*0.45)+Math.sin(t*0.3+m.ph)*cs*0.25, y=m.y+Math.sin(t*0.25+m.ph*2)*cs*0.3, s=cs*m.s;
+        ctx.globalAlpha=0.55+0.15*Math.sin(t*0.5+m.ph); ctx.drawImage(im, x-s/2, y-s*0.4, s, s*0.8); }
+      ctx.restore();
+      if(gl){ ctx.save(); ctx.globalCompositeOperation='lighter'; const b=0.5+0.5*Math.sin(t*0.8), s=cs*3.2; ctx.globalAlpha=0.18+0.14*b; ctx.drawImage(gl, W*0.5-s/2, SEA.hz+(SEA.shore-SEA.hz)*0.45-s*0.2, s, s*0.4); ctx.restore(); } } }
+    if(MD.flash){   // 闪电：隔 7～12 秒，天和海先亮（上面强），整屏只淡淡一闪，0.3 秒内两下
+      if(FLASH.t<0 && t>FLASH.next){ FLASH.t=0; FLASH.next=t+7+Math.random()*5; }
+      if(FLASH.t>=0){ FLASH.t+=dt; const a=FLASH.t<0.08? 1 : FLASH.t<0.14? 0.2 : FLASH.t<0.22? 0.75 : Math.max(0,1-(FLASH.t-0.22)/0.35)*0.75; if(FLASH.t>0.6) FLASH.t=-1;
+        ctx.save(); ctx.globalCompositeOperation='screen'; const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,`rgba(225,232,255,${0.5*a})`); g.addColorStop(Math.min(0.9,(SEA.shore+cs)/H),`rgba(225,232,255,${0.16*a})`); g.addColorStop(1,`rgba(225,232,255,${0.08*a})`);
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.restore(); } }
+  }
+
   return {
-    load, THEMES:Object.keys(THEMES), get theme(){ return themeKey(); }, setTheme(k){ THEME_FORCE=k||null; }, setCh2Theme(k){ if(THEMES[k]) CH2_THEME=k; }, themeName(){ return THEMES[themeKey()].name; },
+    load, THEMES:Object.keys(THEMES), get theme(){ return themeKey(); }, setTheme(k){ THEME_FORCE=k||null; }, setCh2Theme(k){ if(THEMES[k]) CH2_THEME=k; }, setCh3Theme(k){ if(THEMES[k]) CH3_THEME=k; }, themeName(){ return THEMES[themeKey()].name; },
     MOODS, mood, moodKey, setMood(k){ MOOD_FORCE=k; }, lateReady:()=>LATE_DONE,
-    ensure(cells){ const tk=themeKey(), key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join(''),moodKey(),tk].join('|'); if(key!==KEY){ KEY=key; T=THEMES[tk]; SET=SET_FOREST; GROUND=T.GROUND; DEEP=T.DEEP; WIND=mood().wind||NOWIND; if(tk!=='forest') loadLate(); if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
+    ensure(cells){ const tk=themeKey(), key=[W,H,DPR,L.cs,DATA.level.id,DATA.level.lanes.join(''),moodKey(),tk].join('|'); if(key!==KEY){ KEY=key; T=THEMES[tk]; SET=SET_FOREST; GROUND=T.GROUND; DEEP=T.DEEP; WIND=mood().wind||NOWIND; if(tk!=='forest') loadLate(); if(SURF){ for(const c of [SURF.img,SURF.glow]) if(c){ c.width=0; c.height=0; } SURF=null; } GLINT.length=0; FOG3.length=0; SPK.length=0; INK.length=0; if(STATIC){ STATIC.width=0; STATIC.height=0; } for(const b of BAKED.values()){ b.img.width=0; b.img.height=0; } layout(); } if(!STATIC) buildStatic(cells); },
     drawLate,
-    drawGround(ctx){ ctx.drawImage(STATIC,0,0,W,H); },
+    drawGround(ctx){ ctx.drawImage(STATIC,0,0,W,H); if(T.sea) drawSea(ctx, typeof ENV_T==='number'?ENV_T:performance.now()/1000); },
     props(){ return PROPS; }, drawProp, drawFx,
   };
 })();

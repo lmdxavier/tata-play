@@ -40,6 +40,21 @@ window.MAP_DATA = {
         {id:'2-9', name:'暮色花谷', lanes:5, first:[['shard','bomb',15]], again:[['coin',75]]},
         {id:'2-10', name:'巴隆的舞会', lanes:5, first:[['coin',800],['star',15]], again:[['coin',100]], boss:'disco'},
       ] },
-    { id:3, name:'海岸', soon:true },
+    { id:3, name:'阳光海滩',   // 93 版：战斗数据在 levels.js 的 3-1～3-10；场景见 scene.js 的 beach
+      far:{sky:'ch1_sky', far1:'ch3_far1', far2:'ch3_far2'},
+      final:[['coin',1000], ['star',20]],
+      levels:[
+        {id:'3-1', name:'椰林海滩', lanes:5, first:[['shard','crab',15]], again:[['coin',80]], newPet:'crab'},
+        {id:'3-2', name:'起雾的海湾', lanes:5, first:[['shard','pumpkin',15]], again:[['coin',80]]},
+        {id:'3-3', name:'退潮礁石滩', lanes:5, first:[['shard','lizard',20]], again:[['coin',85]]},
+        {id:'3-4', name:'正午沙滩', lanes:5, first:[['shard','jelly',15]], again:[['coin',85]], newPet:'jelly'},
+        {id:'3-5', name:'大浪拍岸', lanes:5, first:[['shard','flower',20]], again:[['coin',90]]},
+        {id:'3-6', name:'碧水浅湾', lanes:5, first:[['shard','bomb',20]], again:[['coin',90]]},
+        {id:'3-7', name:'落日海岸', lanes:5, first:[['shard','turtle',25]], again:[['coin',95]], newPet:'turtle'},
+        {id:'3-8', name:'暴风雨海岸', lanes:5, first:[['shard','redbird',15]], again:[['coin',95]]},
+        {id:'3-9', name:'荧光海滩', lanes:5, first:[['shard','mushgoat',15]], again:[['coin',100]]},
+        {id:'3-10', name:'奥库塔的墨潮', lanes:5, first:[['coin',1000],['star',20]], again:[['coin',120]], boss:'kraken'},
+      ] },
+    { id:4, name:'冰雪', soon:true },
   ],
 };

@@ -24,8 +24,9 @@ const PET_SPINE = { flower:'Flower', goldfish:'Goldfish', pug:'Pug', pumpkin:'Pu
 const PET_MON   = { lizard:'Lizard_Fire', snail:'Snail_Green', fox:'Animal_Fox', mushgoat:'Goat_Mushroom', bear:'Bear_Grizzly' };
 // 91 版：其余 15 只怪的宠物形态用同一套怪物图（ENEMY_MON 在下一行定义，这里等它定义完再补）   // 第2章角色 v1：+ 迅火狐、菇背羊、格鲁姆（宠物）
 const ENEMY_MON = { slime:'Slime_Green', beetle:'Beetle_Red', snail:'Snail_Green', fox:'Animal_Fox', bear:'Bear_Grizzly', hornliz:'Lizard_Horn', hornbug:'Beetle_Blood', lizard:'Lizard_Fire', snake:'Snake_Green', gull:'Bird_Gull',
-  goat:'Goat_Angry', cat:'Animal_Cat', bellsnake:'Snake_Bell', mushgoat:'Goat_Mushroom', redbird:'Bird_Red', wildox:'Buffalo_Wild', disco:'Buffalo_Disco', toucan:'Bird_Toucan', mushsnake:'Snake_Mushroom', shellliz:'Lizard_Snail' };   // 第2章角色 v1
-for(const k of ['slime','beetle','snake','hornliz','hornbug','gull','shellliz','goat','cat','bellsnake','redbird','mushsnake','wildox','toucan','disco']) PET_MON[k]=ENEMY_MON[k];
+  goat:'Goat_Angry', cat:'Animal_Cat', bellsnake:'Snake_Bell', mushgoat:'Goat_Mushroom', redbird:'Bird_Red', wildox:'Buffalo_Wild', disco:'Buffalo_Disco', toucan:'Bird_Toucan', mushsnake:'Snake_Mushroom', shellliz:'Lizard_Snail',   // 第2章角色 v1
+  crab:'Crab_Rock', puffer:'Blowfish_Angry', helmfish:'Goby_Helmet', jelly:'Jellyfish_Bouncy', inkocto:'Octopus_Pirate', turtle:'Turtle_Tower', mudfish:'Goby_Mad', parrot:'Bird_Parrot', beast:'Blowfish_Beast', kraken:'Octopus_Ringed' };   // 第3章角色 v1
+for(const k of ['slime','beetle','snake','hornliz','hornbug','gull','shellliz','goat','cat','bellsnake','redbird','mushsnake','wildox','toucan','disco','crab','turtle','puffer','helmfish','jelly','inkocto','mudfish','parrot','beast','kraken']) PET_MON[k]=ENEMY_MON[k];
 const PET_SIZE  = { flower:0.62, goldfish:0.66, pug:0.62, pumpkin:0.78, bomb:0.5, lizard:0.75, snail:0.6 };   // 身高，单位：格
 const PROJ_ICON = { water:'Economy_Water_01_Blue', fire:'Misc_Fire_01_Red', grass:'Misc_Leaf_01_Green', light:'Misc_Sun_01', dark:'Economy_Gem_01_Purple' };   // 91 版：+ 光、暗（同一套图标）
 
@@ -52,7 +53,7 @@ async function loadLater(){
   // 先让营地界面自己按需加载的图（图标、按钮等，img() 懒加载）下完，再开始后台大下载，免得抢网速、界面图标迟迟不出来
   for(let i=0;i<150;i++){ await new Promise(r=>setTimeout(r,200)); if(i>=3 && Object.values(IMG).every(im=>im.complete)) break; }
   // 营地也有音效（投喂、收取、按钮），音效数据和战斗图一起下，不排在后面
-  const sfx = loadScript('assets/combos/audio.js', 8, ()=>!!window.COMBO_AUDIO).then(ok=>loadScript('assets/combos/audio_ch2.js', 8, ()=>!!window.COMBO_AUDIO_CH2)).then(()=>COMBO.audioData());   // 第2章角色 v1：新组合的音效（audio.js 之后加载，不被覆盖）
+  const sfx = loadScript('assets/combos/audio.js', 8, ()=>!!window.COMBO_AUDIO).then(ok=>loadScript('assets/combos/audio_ch2.js', 8, ()=>!!window.COMBO_AUDIO_CH2)).then(ok=>loadScript('assets/combos/audio_ch3.js', 8, ()=>!!window.COMBO_AUDIO_CH3)).then(()=>COMBO.audioData());   // 第2章角色 v1：新组合的音效（audio.js 之后加载，不被覆盖）
   await Promise.all([
     pool(vfx, 2, async p=>{ if(!IMG[p]){ const i=await loadImage(ASSET+p); if(i) IMG[p]=i; } vd++; show(); }),
     COMBO.preload((d,t)=>{ cd=d; ct=t; show(); }, 3) ]);
@@ -607,7 +608,7 @@ HOOKS.push((type, d)=>{
       FX.death(e); break; }
     case 'petdeath': { const p=d.pet, f=feet(p.lane,p.col+0.5); corpses.push({v:visOf(p,true), lane:p.lane, p:p.col+0.5, t:0, isPet:true});
       COMBO.play('宠物死亡', atPet(p,0.3), {freeze:[visOf(p,true)]}); break; }
-    case 'boom': FX.boom(d.pet); break;
+    case 'boom': if(d.pet.key==='puffer'){ const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('鼓气鲀-炸开', {x:f.x, y:f.y-L.cs*0.35, gx:f.x, gy:f.y, dir:fwd()}); shakeDir(0.04,0.25); } else FX.boom(d.pet); break;   // 93 版：鼓气鲀（宠物）用自己的炸开
     case 'crate': { const s=L.toScreen(d.c.lane,d.c.col+0.5), y=s.y+L.cs*FEET-L.cs*0.3;
       if(d.broken){ vfxXY('puff',s.x,y,1.1); sparks(s.x,y,9,{x:0,y:-1},4,4.5,'#d89a55',0.4); sfx('crateBreak'); shakeDir(0.03,0.15); }
       else { flashAt(s.x,y,0.6,0.08); sparks(s.x,y,3,{x:0,y:-1},2.5,3,'#d89a55',0.25); sfx('crate'); } break; }
@@ -842,6 +843,7 @@ function drawPet(pet, dt){
   if(pet.def.shape==='mine' && pet.armT>0) text('装填 '+Math.ceil(pet.armT-1e-6), f.x, f.y-cs*0.5, cs*0.15, '#fff');
   if(dancing){ const b=G.t*Math.PI*2; drawImgC(img('hero/PictoIcon_Music.png'), f.x+cs*0.22+Math.sin(b)*cs*0.04, f.y-(v.dh||cs*0.8)-cs*0.02-Math.abs(Math.sin(b))*cs*0.08, cs*0.34); }
   if(pet.spored>0) COMBO.drawLoop('晕眩', f.x, f.y-(v.dh||cs*0.8)*0.82, G.t);
+  if(pet.zap>0) COMBO.drawLoop('麻痹', f.x, f.y-(v.dh||cs*0.8)*0.5, G.t);   // 第3章角色 v1：飘电水母的麻痹
 }
 
 function drawEnemy(e, dt){
@@ -858,7 +860,8 @@ function drawEnemy(e, dt){
     f={x:f.x, y:f.y-air}; }
   if(e.haste>0) COMBO.drawLoop('加速光环', ground0.x, ground0.y-cs*0.02, G.t);
   if(e.def.charge && !e.charged && e.p<COLS+0.2){ v.dust=(v.dust||0)-dt; if(v.dust<=0){ v.dust=0.22; const g=feet(e.lane,e.p+0.12); COMBO.play('冲撞-扬尘', {x:g.x, y:g.y-cs*0.08, dir:fwd()}); } }   // 扬尘贴着脚，尾巴拖在身后
-  if(e.lmv){ const a=feet(e.lmv.from, e.p + (v.kb||0) + v.back), k=Math.min(1,e.lmv.t/0.6), q=k*k*(3-2*k); f={x:a.x+(f.x-a.x)*q, y:a.y+(f.y-a.y)*q - Math.sin(k*Math.PI)*cs*0.25}; }   // 70 版：Boss 换路，横移带一点跳
+  if(e.fall>0){ const k=e.fall/0.45; f={x:f.x, y:f.y-cs*1.1*k*k}; }   // 第3章角色 v1：船长鹦鹉丢下的蟹往下掉
+  if(e.lmv){ const a=feet(e.lmv.from, e.p + (v.kb||0) + v.back), k=Math.min(1,e.lmv.t/(e.def.side?e.def.side.t:0.6)), q=k*k*(3-2*k); f={x:a.x+(f.x-a.x)*q, y:a.y+(f.y-a.y)*q - Math.sin(k*Math.PI)*cs*0.25}; }   // 70 版：Boss 换路，横移带一点跳
   if(!v.state){ const want = (e.blocked || tutCur()) ? 'Idle' : 'Walk'; if(v.cur!==want){ v.m.play(want); v.cur=want; } } else v.cur=null;
   v.m.update(dt*(e.slow>0?0.85:1)*(e.def.speed>0.4||e.rage?1.5:1)*(e.def.charge&&!e.charged?2:1)*(e.haste>0?1.4:1));
   groundShadow(f.x, ground0.y, cs*(e.def.role==='elite'?0.95:0.68)*(air>0?0.75:1), air>0?0.75:1);
@@ -866,7 +869,10 @@ function drawEnemy(e, dt){
   ctx.save(); if(v.squash){ v.squash=Math.max(0,v.squash-dt); const k=v.squash/0.12; ctx.translate(f.x,f.y); ctx.scale(1+0.16*k,1-0.18*k); ctx.translate(-f.x,-f.y); }
   let fl = Math.max(v.hitFlash>0?0.8:0, e.flash>0?0.6:0);
   if(fl>0 && e.def.role!=='minor'){ if(!(G.t-v.flT<0.5)) v.flT=G.t; if(G.t-v.flT>0.14) fl=0; }   // 89 版（用户 2026-11-15）：精英 / Boss 闪白限频——0.5 秒内只闪一次（0.14 秒），亮度不减；同一路多只泡泡鱼连续命中时不会整只发白
-  v.dh = drawV(v, f.x, f.y, {fc:true, flash:fl, tint: e.danceT>0 ? `hsla(${(G.t*360)%360},90%,70%,.28)` : e.slow>0 ? 'rgba(120,190,255,.22)' : e.sticky>0 ? 'rgba(150,220,110,.24)' : e.rage ? `rgba(255,60,40,${0.2+0.08*Math.sin(G.t*10)})` : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : e.venom ? 'rgba(120,230,90,.24)' : null});
+  let emul=1, etint=null; if(e.puffT>0){ const k=Math.min(1,e.puffT/e.def.puff.t); emul=1+0.55*k; f={x:f.x+Math.sin(G.t*60)*cs*0.025*k, y:f.y}; etint=`rgba(255,70,60,${0.12+0.2*k*(0.5+0.5*Math.sin(G.t*30))})`; }
+  if(e.lv) emul*=1+e.def.grow.size*e.lv;
+  if(e.def.ferry && !e.dropped){ if(!v.crab){ v.crab=newMon(ENEMY_MON.crab,'Idle'); v.crab.fit=FIT.enemy; v.crab.id=v.id; } v.crab.m.update(dt); drawV(v.crab, f.x, f.y+cs*0.42, {mul:0.78}); }   // 抓着的蟹画在鸟下面
+  v.dh = drawV(v, f.x, f.y, {fc:emul===1&&!e.leave, mul:emul, flip:!!e.leave, flash:fl, tint: etint ? etint : e.danceT>0 ? `hsla(${(G.t*360)%360},90%,70%,.28)` : e.slow>0 ? 'rgba(120,190,255,.22)' : e.sticky>0 ? 'rgba(150,220,110,.24)' : e.rage ? `rgba(255,60,40,${0.2+0.08*Math.sin(G.t*10)})` : e.burn ? `rgba(255,110,40,${0.12+0.08*Math.sin(G.t*14)})` : e.venom ? 'rgba(120,230,90,.24)' : null});
   ctx.restore();
   const hpF=e.hp/e.maxHp; v.hpGhost += (hpF-v.hpGhost)*Math.min(1,dt*3);
   const hy=f.y-v.dh-8;
@@ -874,6 +880,7 @@ function drawEnemy(e, dt){
   // 9 版：删掉灼烧的小火苗序列帧和火星粒子（画风不搭，用户要求删除）；灼烧状态只保留身上的淡橙色闪烁
   if(e.slow>0) drawImgC(icon('Misc_Snowflake_01'), f.x+cs*0.24, f.y-v.dh*0.5, cs*0.22);
   if(e.daze>0) COMBO.drawLoop('晕眩', f.x, f.y-v.dh*0.82, G.t);   // 第2章角色 v1：莽角羊撞完、巨喙鸟扑空
+  if(e.held>0) COMBO.drawLoop('晕眩', f.x, f.y-v.dh*0.82, G.t);   // 第3章角色 v1：被岩钳蟹（宠物）钳住，不能动（和晕眩同一种表现）
   if(e.lootV && e.lootV.length){ const ix=f.x-cs*0.3, iy=f.y-v.dh*0.62; drawImgC(energyIcon(), ix, iy, cs*0.26); text('×'+e.lootV.length, ix+cs*0.02, iy+cs*0.13, cs*0.13, '#fff'); }   // 灰原喵叼着的能量
 }
 // ===== 第2章角色 v1：地面层（角色下面）——巴隆的舞池灯光 / 冲刺预警、巨喙鸟的锁定圈 =====
@@ -909,6 +916,76 @@ function drawCarry(dt){
     ctx.restore(); }
   for(let i=CARRY.length-1;i>=0;i--) if(CARRY[i].t>1.1) CARRY.splice(i,1);
 }
+
+// ===== 第3章角色 v1：地面层——墨、泥潭、潮浪预警和浪头 =====
+function drawCh3Floor(){
+  if(!G) return; const cs=L.cs, fr='gui/Frame/BasicFrame_Round24.png';
+  if(G.ink && G.ink.length){ const t=tinted(fr,'#241b38'); if(t) for(const c of G.ink){ const r=L.cellRect(c.lane,c.col), left=c.until-G.t, a=Math.min(1,(G.t-c.t0)/0.25)*Math.min(1,left/0.5);
+      ctx.globalAlpha=0.62*a; nine(t, r.x+2, r.y+2, cs-4, cs-4, 20, cs*0.26); ctx.globalAlpha=1;
+      COMBO.drawLoop('墨区', r.x+cs/2, r.y+cs*0.55, G.t+c.col*0.37+c.lane*0.61, {alpha:a}); } }
+  if(G.mud && G.mud.length){ const t=tinted(fr,'#6e4b2a'); if(t) for(const c of G.mud){ if(G.t<c.from) continue; const r=L.cellRect(c.lane,c.col), left=c.until-G.t, a=Math.min(1,(G.t-c.from)/0.2)*Math.min(1,left/0.5);
+      ctx.globalAlpha=0.7*a; nine(t, r.x+5, r.y+5, cs-10, cs-10, 20, cs*0.3); ctx.globalAlpha=1; } }   // 93 版：没有「泥潭」循环组合，只画着色框
+  if(G.pink && G.pink.length){ const t=tinted(fr,'#241b38'); if(t) for(const z of G.pink){ const left=z.until-G.t, a=Math.min(1,left/0.5);   // 93 版：喷墨章鱼（宠物）的墨区
+      for(let c=Math.floor(z.c0); c<Math.ceil(z.c1); c++){ const r=L.cellRect(z.lane,c); ctx.globalAlpha=0.38*a; nine(t, r.x+4, r.y+4, cs-8, cs-8, 20, cs*0.26); ctx.globalAlpha=1;
+        if((c+z.lane)%2===0) COMBO.drawLoop('墨区', r.x+cs/2, r.y+cs*0.6, G.t+c*0.37+z.lane*0.61, {alpha:0.45*a}); } } }   // 我方的墨比敌方淡：只隔格冒烟，不盖住怪
+  if(G.wave){ const w=G.wave, K=DATA.enemies.kraken.kraken;
+    if(w.phase==='warn'){ const t=tinted(fr,'#2f9bff'); if(t){ ctx.globalAlpha = Math.sin(w.t*Math.PI*5)>0 ? 0.42 : 0.14;
+        for(const l of w.lanes) for(let c=0;c<COLS;c++){ const r=L.cellRect(l,c); nine(t, r.x+3, r.y+3, cs-6, cs-6, 20, cs*0.22); } ctx.globalAlpha=1; } }
+    else { const front=COLS+0.5-(COLS+1.5)*Math.min(1,w.t/K.sweep);
+      for(const l of w.lanes){ const s=feet(l, front); COMBO.drawLoop('浪头', s.x, s.y-cs*0.25, w.t); } } }
+}
+// 喷墨：每一路一团墨从嘴里飞到最远那格，落下时这一路被盖的格子逐格溅开
+const INKFX = [];
+function inkShots(e, cells){
+  const from=hitPoint(e), by={}; for(const [l,c] of cells) (by[l]=by[l]||[]).push(c);
+  for(const l in by){ const cs=by[l].sort((a,b)=>b-a), far=cs[cs.length-1], to=feet(+l, far+0.5); INKFX.push({from, to:{x:to.x, y:to.y-L.cs*0.3}, lane:+l, cells:cs, t:0, dur:0.32+0.04*cs.length}); }
+}
+let LOBCRAB=null;
+function drawLobs(dt){
+  for(const q of INKFX){ q.t+=dt; const k=Math.min(1,q.t/q.dur), x=q.from.x+(q.to.x-q.from.x)*k, y=q.from.y+(q.to.y-q.from.y)*k-Math.sin(k*Math.PI)*L.cs*0.5;
+    if(k<1) COMBO.drawLoop('墨团-飞行', x, y, q.t, {rot:Math.atan2(q.to.y-q.from.y, q.to.x-q.from.x)+Math.PI});
+    else if(!q.done){ q.done=true; q.cells.forEach((c,i)=>COMBO.later(i*0.05, ()=>{ const f=feet(q.lane,c+0.5); COMBO.play('墨-溅开', {x:f.x, y:f.y-L.cs*0.2}); })); } }
+  for(let i=INKFX.length-1;i>=0;i--) if(INKFX[i].done) INKFX.splice(i,1);
+  if(!G || !G.lobs.length) return; const cs=L.cs, im=img('env1/Stone_Gray1_03.png');
+  for(const b of G.lobs){ const k=Math.min(1,b.t/b.dur), a=feet(b.lane,b.from), z=feet(b.lane,b.to), x=a.x+(z.x-a.x)*k, y=a.y+(z.y-a.y)*k-cs*0.45-Math.sin(k*Math.PI)*cs*1.5;
+    groundShadow(x, a.y+(z.y-a.y)*k, cs*0.3*(0.6+0.4*k), 0.6);
+    if(b.src && b.src.def.toss && b.src.def.toss.crab){ if(!LOBCRAB){ LOBCRAB=newMon(ENEMY_MON.crab,'Idle'); LOBCRAB.fit=FIT.enemy; LOBCRAB.id=-7; } LOBCRAB.m.update(dt/Math.max(1,G.lobs.length)); drawV(LOBCRAB, x, y+cs*0.2, {mul:0.5}); }   // 93 版：船长鹦鹉（宠物）丢的是小岩钳蟹
+    else drawImgC(im, x, y, cs*0.34); }
+}
+HOOKS.push((type, d)=>{
+  if(!READY) return;
+  const attackAnim = e => { const v=visOf(e,false); v.state='Attack'; v.m.play('Attack',{restart:true, onEnd:()=>{ v.state=null; }}); return v; };
+  switch(type){
+    case 'sidestep': COMBO.play('横行', atE(d.e)); break;
+    case 'puffStart': COMBO.play('鼓气', atE(d.e)); break;
+    case 'puffBoom': { const e=d.e, s=feet(e.lane, d.col+0.5); COMBO.play('鼓气鲀-炸开', {x:s.x, y:s.y-L.cs*0.35, gx:s.x, gy:s.y, dir:fwd()}); shakeDir(0.05,0.3);
+      for(const p of d.pets){ const pv=visOf(p,true); pv.hitFlash=0.15; pv.squash=0.12; } break; }
+    case 'butt': { const v=attackAnim(d.e), pv=visOf(d.pet,true); pv.hitFlash=0.12; pv.squash=0.12; COMBO.play('铁盔-顶', atPet(d.pet,0.4), {freeze:[v,pv]}); floatText(d.pet.lane, d.pet.col+0.5, d.pushed?'被顶退':'顶不动 ×2', '#ffb14a', 12); break; }
+    case 'zap': { COMBO.play('放电', atPet(d.pet,0.45)); for(const p of d.list){ COMBO.play('电链', atPet(p,0.45), {silent:true}); const pv=visOf(p,true); pv.hitFlash=0.1; floatText(p.lane, p.col+0.5, '麻痹', '#ffe14d', 12); } break; }
+    case 'ink': { attackAnim(d.e); COMBO.play('喷墨', null); inkShots(d.e, d.cells); break; }
+    case 'krInk': { const v=attackAnim(d.e); v.squash=0.12; COMBO.play('墨潮', null); inkShots(d.e, d.cells); G.fx.push({kind:'banner', text:'奥库塔喷出墨潮', t:0, life:1.4, color:'#c9a8ff'}); break; }
+    case 'inkFizz': break;
+    case 'mudThrow': { attackAnim(d.e); COMBO.later(0.35, ()=>{ const f=feet(d.lane,d.col+0.5); COMBO.play('泥团-落地', {x:f.x, y:f.y-L.cs*0.15, gx:f.x, gy:f.y}); }); break; }
+    case 'lobStart': if(d.e) attackAnim(d.e); { const at = d.e ? atE(d.e) : atPet(d.pet,0.5); COMBO.play('投石-出手', at); } break;
+    case 'lobHit': if(d.b.src && d.b.src.def.toss && d.b.src.def.toss.crab){ const f=feet(d.b.lane, d.b.to); COMBO.play('钳-夹', {x:f.x, y:f.y-L.cs*0.3, gx:f.x, gy:f.y}); if(d.list && d.list[0]) floatText(d.list[0].lane, d.list[0].p, '钳住', '#ffb14a', 12); break; }   // 93 版
+    { const b=d.b, f=feet(b.lane, b.side==='e'?Math.floor(b.to)+0.5:b.to); COMBO.play('投石-落地', {x:f.x, y:f.y-L.cs*0.2, gx:f.x, gy:f.y}); if(d.pet){ const pv=visOf(d.pet,true); pv.hitFlash=0.12; pv.squash=0.1; } break; }
+    case 'ferryDrop': { const v=visOf(d.e,false); v.squash=0.12; COMBO.play('鹦鹉-丢下', atE(d.e)); break; }
+    case 'land': { const g=atE(d.e); COMBO.play('落地-水花', {x:g.gx, y:g.gy-L.cs*0.1, gx:g.gx, gy:g.gy}); break; }
+    case 'grow': { const v=visOf(d.e,false); v.squash=0.12; COMBO.play('长大', atE(d.e)); floatText(d.e.lane, d.e.p, '长大 '+d.lv+' 级', '#ff9a3d', 12); break; }
+    case 'krWaveWarn': sfx('alert'); G.fx.push({kind:'banner', text:'潮水要冲第 '+d.lanes.map(l=>l+1).join('、')+' 路', t:0, life:2.2, color:'#7fc8ff'}); break;
+    case 'krWave': COMBO.play('潮浪', null); shakeDir(0.03,0.5); break;
+    // ===== 93 版：第 3 章怪物宠物的技能表现（复用敌方同一招的效果组合）=====
+    case 'petZap': { d.list.forEach((e,i)=>{ COMBO.play('电链', atE(e), {silent:i>0}); }); for(const e of d.list){ if(!e.def.boss) floatText(e.lane, e.p, '麻痹', '#ffe14d', 12); } break; }
+    case 'petInk': { petPlay(d.pet,'Attack','Idle'); COMBO.play('喷墨', null); const a=atPet(d.pet,0.4), cells=[]; for(let c=Math.floor(d.z.c0); c<Math.ceil(d.z.c1); c++) cells.push(c);
+      const far=cells[cells.length-1], to=feet(d.pet.lane, far+0.5); INKFX.push({from:{x:a.x, y:a.y}, to:{x:to.x, y:to.y-L.cs*0.3}, lane:d.pet.lane, cells:cells.slice().reverse(), t:0, dur:0.32+0.04*cells.length}); break; }
+    case 'petMud': { petPlay(d.pet,'Attack','Idle'); COMBO.later(0.3, ()=>{ const f=feet(d.pet.lane, d.at); COMBO.play('泥团-落地', {x:f.x, y:f.y-L.cs*0.15, gx:f.x, gy:f.y}); for(const e of d.list) if(!e.dead) floatText(e.lane, e.p, '陷住', '#c8925a', 12); }); break; }
+    case 'petTide': { petPlay(d.pet,'Attack','Idle'); COMBO.play('潮浪', null); shakeDir(0.025,0.4); for(const e of d.list) COMBO.play('潮浪-命中', atE(e), {silent:true}); break; }
+    case 'waveHit': { const pv=visOf(d.pet,true); pv.hitFlash=0.12; pv.squash=0.12; COMBO.play('潮浪-命中', atPet(d.pet,0.3), {silent:true}); break; }
+    case 'krCrew': { const v=attackAnim(d.e), g=atE(d.e); v.squash=0.12; COMBO.play('Boss-咆哮', g); vfxXY('ring_shockwave_white', g.x, g.y, 2.4); shakeDir(0.04,0.4); G.fx.push({kind:'banner', text:'奥库塔叫来了船员', t:0, life:1.6, color:'#ff9be6'}); break; }
+    case 'spawn': if(d.e.def.ferry) COMBO.later(0.2, ()=>{ if(!d.e.dead) COMBO.play('鹦鹉-叫', null); }); break;
+    case 'melee': if(d.pet.def.clamp) for(const e of d.hits) COMBO.play('钳-夹', atE(e), {noFx:true}); break;
+  }
+});
 
 // ---------- 72 版：每关场景氛围的每帧部分：角色那层乘色、月光、蘑菇发光、萤火虫、晨雾、光斑 ----------
 // 原则（用户 2026-11-14）：场景的动态和亮点不能比宠物、敌人更抢眼。两侧不挡视线的地方可以强；战场中间的一律减弱
@@ -1562,7 +1639,7 @@ function draw(){
     let sx, sy; if(shake.dx||shake.dy){ sx=shake.dx*a*w+(Math.random()-0.5)*a*0.4; sy=shake.dy*a*w+(Math.random()-0.5)*a*0.4; } else { sx=(Math.random()-0.5)*a*2; sy=(Math.random()-0.5)*a*2; }
     if(!/[?&]shake=0\b/.test(location.search)){ const q=ctx.getTransform().a||1; sx=Math.round(sx*q)/q; sy=Math.round(sy*q)/q; }   // game-test 试改：震屏偏移对齐到整数个屏幕像素（?shake=0 回到原样）
     ctx.translate(sx, sy); }
-  SCENE.drawGround(ctx); COMBO.draw(adt,'ground'); drawPreviewLanes(); drawCh2Floor(); drawPlacement(); drawAuras();   // 放置提示框在地面层，不盖在角色身上
+  SCENE.drawGround(ctx); COMBO.draw(adt,'ground'); drawPreviewLanes(); drawCh2Floor(); drawCh3Floor(); drawPlacement(); drawAuras();   // 放置提示框在地面层，不盖在角色身上
   // 道具、角色、木箱按脚底 y 排序：前面的挡住后面的
   const list=[];
   for(const p of SCENE.props()) if(!p.flat) list.push([p.y, ()=>SCENE.drawProp(ctx,p,ENV_T)]);
@@ -1574,7 +1651,7 @@ function draw(){
   list.sort((a,b)=>a[0]-b[0]);
   for(const [,fn] of list) fn();
   BONUS.drawAir(); EVO.drawWorld();   // 87 版：待进化提示、环射水弹；75 版：属性小弹、3 连传导、稀有度触手 / 链子（在角色上面）
-  drawCorpses(adt); drawMonFx(adt); drawCarry(adt); drawSteal(adt);
+  drawCorpses(adt); drawMonFx(adt); drawCarry(adt); drawSteal(adt); drawLobs(adt);   // 93 版：第 3 章投石 / 丢蟹 drawLobs(adt);
   SCENE.drawFx(ctx, ENV_T, dt, icon('Misc_Leaf_01_Green'));
   drawNight(dt);
   drawVFX(adt); COMBO.draw(adt,'world'); COMBO.draw(dt,'screen'); drawDamage(adt); drawOrbs(); drawTexts();

@@ -20,7 +20,7 @@ const CHAPTER_MAP = (()=>{
   const D = window.MAP_DATA;
   const BASE = () => window.MAP_BASE || 'map/';          // 相对 assets/：游戏里放 assets/map/；测试页指到 _dev 目录
   const mi = n => img(BASE()+n+'.png');
-  const envImg = n => img('env1/'+n+'.png');
+  const envImg = n => img((n.includes('/')?'':'env1/')+n+'.png');   // 93 版：带文件夹的名字（scene3/shell_pink）照原样
   const KEY = 'tata_map';
   let GROUND = [138,183,96], DEEP = [62,98,60], ROAD = [184,148,117];   // 地面 = 战斗棋盘两种亮格的中间色；树林深处 = 战斗场景 DEEP；路 = Road_Forest
   const rgb = (c,a=1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -85,7 +85,17 @@ const CHAPTER_MAP = (()=>{
     small:    ['Small_Tree_Green_01','Small_Tree_Green_02','Small_Tree_Green_03'],
     bush:     ['Bush_Green_01','Bush_Green_02','Bush_Green_03','Bush_Green_04','Bush_Green_05'],
     stone:    ['Stone_Yellow_01','Stone_Yellow_02','Stone_Yellow_03','Stone_Yellow_04'],
-    shroom:   ['Mushroom_Pink_01','Mushroom_Pink_02','Mushroom_Wihte_01','Mushroom_Wihte_02'] } } };
+    shroom:   ['Mushroom_Pink_01','Mushroom_Pink_02','Mushroom_Wihte_01','Mushroom_Wihte_02'] } },
+    // 93 版：第 3 章 = 阳光海滩（和战斗场景 scene.js 的 beach 同一套：沙地、棕榈、热带灌木、沙岩、椰子、贝壳；树墙后面是海，远景是岛）
+    3:{ ground:[238,208,162], deep:[96,186,214], road:[214,176,132], lip:'ch3_lip', patchL:'252,234,200', patchD:'196,150,104', roadEdge:'rgba(150,104,64,.35)',
+      decals:[['scene3/shell_pink',0.3,8],['scene3/shell_conch',0.25,9],['scene3/pebble_teal',0.25,7],['Stone_Yellow_05',0.2,8]], set:{
+    wallBack: ['Plam_Green_01','Plam_Green_02','Plam_Green_03','Plam_Yellow_Green_01','Plam_Yellow_Green_02','Plam_Yellow_Green_03'],
+    wallFront:['Plam_Yellow_Green_01','Plam_Green_02','Plam_Yellow_Green_03','Plam_Green_01'],
+    mid:      ['Plam_Green_01','Plam_Yellow_Green_02','Plam_Green_03'],
+    small:    ['Plam_Yellow_Green_03','Plam_Green_03','Bush_Yellow_Green_01'],
+    bush:     ['Bush_Yellow_Green_01','Bush_Yellow_Green_02','Bush_Green_01','Bush_Green_02','Stone_Yellow_05'],
+    stone:    ['Stone_Yellow_01','Stone_Yellow_02','Stone_Yellow_03','Stone_Yellow_04','Stone_Gray2_08'],
+    shroom:   ['Coconut_01','Coconut_02','Stone_Yellow_06'] } } };
   const TH = () => Object.assign({}, TH1, THEMES[P.ch]||{});
   const useTheme = () => { const T=TH(); GROUND=T.ground; DEEP=T.deep; ROAD=T.road; return T; };
   function gotoChapter(id){ const c=D.chapters.find(q=>q.id===id); if(!c || !c.levels) return; P.ch=id; P.sel=null; save();
@@ -118,6 +128,7 @@ const CHAPTER_MAP = (()=>{
   function makeDecals(g){   // 贴地的小草、小花、小石子：画进地面层，不参与前后排序
     const R = seeded(77031), out = [];
     for(let i=0;i<g.width/7;i++){ const x=R()*g.width, y=g.wallY+20+R()*(g.chU-g.wallY-20); if(distPath(g.path,x,y)<ROAD_W/2+6) continue;
+      const DC=TH().decals; if(DC){ if(R()>0.45) continue; let r=R(), j=0; while(j<DC.length-1 && r>DC[j][1]){ r-=DC[j][1]; j++; } out.push({n:DC[j][0], x, y, h:DC[j][2]+R()*3, flip:R()<0.5}); continue; }   // 93 版：海滩撒贝壳、青石子，比草稀
       const r=R(); out.push({n: r<0.62?'Forest_Grass':r<0.8?'Forest_Flower_01':r<0.93?'Forest_Flower_02':'Stone_Gray1_05', x, y, h: r<0.62?8+R()*4 : r<0.93?8+R()*3 : 7+R()*3, flip:R()<0.5}); }
     return out;
   }
@@ -125,7 +136,7 @@ const CHAPTER_MAP = (()=>{
   // ---------- 地面层（离屏画布，设备像素一一对应）----------
   function bakeGround(g, S0){
     const T = useTheme(), k = `${S.gkey}|${S0}`; if(S.bake && S.bkey===k) return S.bake;
-    const need = ['Road_up_Forest','Forest_Grass','Forest_Flower_01','Forest_Flower_02','Stone_Gray1_05'].map(envImg).concat([mi(TH().lip)]);
+    const need = (TH().decals ? TH().decals.map(q=>q[0]) : ['Road_up_Forest','Forest_Grass','Forest_Flower_01','Forest_Flower_02','Stone_Gray1_05']).map(envImg).concat([mi(TH().lip)]);
     if(!need.every(ok)) return null;
     // 两端各多画 OVER（拖过头回弹时不露出底色）
     const sc = g.u*S0, cw = Math.ceil((g.width+OVER*2)*sc)+2, ch = Math.ceil((g.chU-g.groundTop)*sc)+2;
@@ -138,7 +149,7 @@ const CHAPTER_MAP = (()=>{
     // 路：Road_Forest 的颜色，两边压上 Road_up_Forest 草边（主色已换成地面色，草从路边盖进来一点）
     x.lineJoin='round'; x.lineCap='round';
     x.beginPath(); g.path.forEach((p,i)=>i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));
-    x.strokeStyle='rgba(120,92,66,.35)'; x.lineWidth=ROAD_W+3; x.stroke();
+    x.strokeStyle=T.roadEdge||'rgba(120,92,66,.35)'; x.lineWidth=ROAD_W+3; x.stroke();
     x.strokeStyle=rgb(ROAD); x.lineWidth=ROAD_W; x.stroke();
     // 草边按短段（原图的 1/12 宽）沿曲线贴，弯道处不会伸出直线头；每段取原图里接着的那一截，花纹连续
     const lip = mi(TH().lip), lh = 11, lk = lh/lip.naturalHeight, segW = lip.naturalWidth/12, sw = segW*lk;

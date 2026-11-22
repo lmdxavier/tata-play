@@ -192,3 +192,47 @@
     spawns:[ ...spread('slime',10,260,18,[2,1,3,0,4]), ...spread('cat',40,200,4,[1,3]), ...spread('bellsnake',60,250,5,[0,4,2]), ...spread('redbird',80,240,5,[1,3,2]), ...spread('shellliz',100,250,4,[0,4]), ...spread('goat',30,120,5,[2,1,3]), [140,'disco',2] ],
     events:[ {t:134, kind:'banner', text:'巴隆从中路过来', until:140} ], reward:{chest:{coin:800, star:15}} };
 })();
+
+// =====================================================================
+// 93 版：第 3 章「阳光海滩」10 关（出怪表来自 _dev/第3章角色/v1；场景氛围和关卡名来自 _dev/第3章场景/v1；数值见 docs/关卡设计.md「93 版」）
+// =====================================================================
+(function(){
+  const L = window.LEVELS;
+  const ALL=[0,1,2,3,4], CELLS=[ {lane:1,col:2,type:'flower'}, {lane:3,col:2,type:'flower'} ];
+  const spread = (type, from, to, n, lanes) => Array.from({length:n}, (_,i)=>[+(from+(to-from)*(n<=1?0:i/(n-1))).toFixed(1), type, lanes[i%lanes.length]]);
+  const FAR = [[99999,'slime',2]];
+  const BIG = t => ({t, kind:'banner', text:'一大波敌人正在接近', until:t+6});
+  L['3-T'] = { scene:'day', title:'第 3 章角色测试', lanes:ALL, startEnergy:3000, skyDrop:{every:6, value:25, firstAt:3}, duration:600, marks:[], cells:CELLS, spawns:FAR };
+  L['3-D'] = { scene:'day', title:'机制演示', lanes:ALL, startEnergy:99999, skyDrop:null, duration:600, marks:[], cells:[], spawns:FAR };
+
+  L['3-1'] = { scene:'c3sun', title:'椰林海滩', lanes:ALL, startEnergy:200, skyDrop:{every:12, value:25, firstAt:6}, duration:200, marks:[8,60,120,160], cells:CELLS,
+    spawns:[ ...spread('slime',8,170,14,[2,1,3,0,4]), ...spread('crab',35,180,10,[2,1,3,0,4]), ...spread('beetle',70,165,5,[0,4,2]), ...spread('goat',90,175,4,[1,3]) ],
+    events:[ BIG(152) ], reward:{shard:['crab',15]} };
+  L['3-2'] = { scene:'c3fog', title:'起雾的海湾', lanes:ALL, startEnergy:200, skyDrop:{every:12, value:25, firstAt:6}, duration:210, marks:[8,60,120,170], cells:CELLS,
+    spawns:[ ...spread('slime',8,180,14,[2,1,3,0,4]), ...spread('crab',30,180,6,[1,3,2]), ...spread('puffer',45,190,8,[2,0,4,1,3]), ...spread('cat',60,170,3,[1,3]), ...spread('beetle',90,180,4,[0,4]) ],
+    events:[ BIG(162) ], reward:{shard:['pumpkin',15]} };
+  L['3-3'] = { scene:'c3ebb', title:'退潮礁石滩', lanes:ALL, startEnergy:200, skyDrop:{every:12, value:25, firstAt:6}, duration:220, marks:[8,60,120,180], cells:CELLS,
+    spawns:[ ...spread('slime',8,195,14,[2,1,3,0,4]), ...spread('inkocto',40,200,7,[2,1,3,0,4]), ...spread('crab',30,190,6,[0,4,2]), ...spread('puffer',80,195,4,[1,3]), ...spread('shellliz',100,200,4,[2,0,4]) ],
+    events:[ {t:34, kind:'preview', lanes:[2], until:46, text:'预告：喷墨章鱼走中路'}, BIG(172) ], reward:{shard:['lizard',20]} };
+  L['3-4'] = { scene:'c3glare', title:'正午沙滩', lanes:ALL, startEnergy:175, skyDrop:{every:13, value:25, firstAt:6}, duration:230, marks:[8,60,130,190], cells:CELLS,
+    spawns:[ ...spread('slime',8,205,14,[2,1,3,0,4]), ...spread('jelly',40,210,8,[2,1,3,0,4]), ...spread('inkocto',70,200,4,[1,3]), ...spread('crab',30,205,5,[0,4,2]), ...spread('bellsnake',100,205,3,[2,0,4]) ],
+    events:[ BIG(182) ], reward:{shard:['jelly',15]} };
+  L['3-5'] = { scene:'c3surge', title:'大浪拍岸', lanes:ALL, startEnergy:200, skyDrop:{every:16, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
+    spawns:[ ...spread('slime',8,215,14,[2,1,3,0,4]), ...spread('helmfish',40,220,8,[2,1,3,0,4]), ...spread('jelly',70,210,4,[0,4]), ...spread('puffer',60,215,4,[1,3]), ...spread('redbird',90,215,4,[0,4,2]) ],
+    events:[ BIG(192) ], reward:{shard:['flower',20]} };
+  L['3-6'] = { scene:'c3lagoon', title:'碧水浅湾', lanes:ALL, startEnergy:200, skyDrop:{every:17, value:25, firstAt:6}, duration:240, marks:[8,60,130,200], cells:CELLS,
+    spawns:[ ...spread('slime',8,215,14,[2,1,3,0,4]), ...spread('turtle',45,210,6,[1,3,2,0,4]), ...spread('helmfish',70,215,4,[2,0,4]), ...spread('crab',30,220,6,[1,3]), ...spread('mushgoat',100,215,3,[0,4,2]) ],
+    events:[ {t:40, kind:'preview', lanes:[1], until:52, text:'预告：炮台龟走第 2 路'}, BIG(192) ], reward:{shard:['bomb',20]} };
+  L['3-7'] = { cond:{name:'夕阳', prod:0.8}, scene:'c3sunset', title:'落日海岸', lanes:ALL, startEnergy:225, skyDrop:{every:14, value:25, firstAt:6}, duration:250, marks:[8,70,140,205], cells:CELLS,
+    spawns:[ ...spread('slime',8,225,14,[2,1,3,0,4]), ...spread('parrot',40,225,8,[1,3,2,0,4]), ...spread('turtle',90,210,3,[0,4,2]), ...spread('jelly',60,220,4,[1,3]), ...spread('inkocto',80,220,4,[2,0,4]), ...spread('goat',30,200,4,[1,3]) ],
+    events:[ {t:34, kind:'preview', lanes:[1], until:46, text:'预告：船长鹦鹉走第 2 路'}, BIG(198) ], reward:{shard:['turtle',25]} };
+  L['3-8'] = { cond:{name:'暴风雨'}, scene:'c3storm', title:'暴风雨海岸', lanes:ALL, startEnergy:250, skyDrop:null, duration:260, marks:[8,70,140,210], cells:CELLS,
+    spawns:[ ...spread('slime',8,235,14,[2,1,3,0,4]), ...spread('mudfish',40,235,8,[2,1,3,0,4]), ...spread('parrot',80,225,4,[0,4]), ...spread('helmfish',60,230,4,[1,3]), ...spread('puffer',100,230,4,[2,0,4]), [150,'wildox',2], [228,'wildox',1] ],
+    events:[ {t:144, kind:'preview', lanes:[2], until:156, text:'预告：蛮角牛走中路'}, BIG(205) ], reward:{shard:['redbird',15]} };
+  L['3-9'] = { cond:{name:'夜晚', prod:0.8}, scene:'c3glow', title:'荧光海滩', lanes:ALL, startEnergy:300, skyDrop:null, duration:270, marks:[8,70,150,215], cells:CELLS,
+    spawns:[ ...spread('slime',8,245,14,[2,1,3,0,4]), ...spread('beast',40,240,7,[2,1,3,0,4]), ...spread('puffer',90,230,3,[1,3]), ...spread('mudfish',60,240,4,[0,4]), ...spread('jelly',80,235,4,[2,1,3]), ...spread('turtle',110,220,3,[0,4]), [160,'wildox',2], [232,'wildox',3] ],
+    events:[ BIG(215) ], reward:{shard:['mushgoat',15]} };
+  L['3-10'] = { cond:{name:'夜晚'}, scene:'c3ink', title:'奥库塔的墨潮', lanes:ALL, startEnergy:375, skyDrop:null, duration:300, marks:[10,70,140,200], cells:CELLS,
+    spawns:[ ...spread('slime',10,260,16,[2,1,3,0,4]), ...spread('crab',30,200,6,[1,3,0,4]), ...spread('inkocto',50,220,4,[1,3]), ...spread('jelly',70,240,4,[0,4]), ...spread('helmfish',90,250,3,[2,1,3]), ...spread('beast',110,250,3,[0,4,2]), [140,'kraken',2] ],
+    events:[ {t:134, kind:'banner', text:'奥库塔从中路过来', until:140} ], reward:{chest:{coin:1000, star:20}} };
+})();

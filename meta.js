@@ -54,7 +54,8 @@ const ROLE_CN = {producer:'生产', shooter:'远程', melee:'近战', wall:'坦�
 const EL_CN = {fire:'火', water:'水', grass:'草', light:'光', dark:'暗', none:'无'};
 const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pug:'近战 · 前方群体', pumpkin:'坦克 · 阻挡', bomb:'地雷 · 范围爆发', lizard:'近战 · 喷火灼烧', snail:'坦克 · 减速', fox:'近战 · 三路横扫', mushgoat:'治疗 · 周围 3×3', bear:'坦克 · 拍击击退',
   slime:'远程 · 减速', beetle:'近战 · 带刺反伤', snake:'近战 · 中毒', hornliz:'近战 · 半血发怒', hornbug:'近战 · 同路加成', gull:'远程 · 越过道具', shellliz:'坦克 · 挡远程',
-  goat:'近战 · 冲撞击退', cat:'辅助 · 自动收能量', bellsnake:'辅助 · 加攻速', redbird:'远程 · 打最远', mushsnake:'控制 · 孢子定身', wildox:'坦克 · 冲锋', toucan:'控制 · 叼走', disco:'控制 · 群体定身'};   // 91 版   // 第2章角色 v1
+  goat:'近战 · 冲撞击退', cat:'辅助 · 自动收能量', bellsnake:'辅助 · 加攻速', redbird:'远程 · 打最远', mushsnake:'控制 · 孢子定身', wildox:'坦克 · 冲锋', toucan:'控制 · 叼走', disco:'控制 · 群体定身',
+  crab:'近战 · 钳住定身', turtle:'远程 · 抛投溅射', puffer:'地雷 · 鼓气炸开', helmfish:'近战 · 顶退', jelly:'近战 · 放电麻痹', inkocto:'控制 · 墨区减速', mudfish:'控制 · 甩泥陷住', parrot:'远程 · 丢蟹钳住', beast:'近战 · 越打越凶', kraken:'控制 · 潮浪推回'};   // 93 版：第 3 章   // 91 版   // 第2章角色 v1
 // 升星后攻击方式的变化：照抄 docs/vfx-design.md 9.1（提案），那边改了这里跟着改
 const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
@@ -1064,7 +1065,7 @@ function statRows(e){
   if(d.dmg) rows.push(['伤害', `${d.dmg}`, statIco('dmg')]);
   if(d.int) rows.push(['攻击间隔', `${d.int} 秒`, statIco('int')]);
   if(d.prod) rows.push(['产能', `${d.prod} / ${d.prodInt} 秒`, statIco('prod')]);
-  const range = d.sweep ? '本路和上下两路的前方 1 格' : d.heal ? '周围 3×3' : {shooter:'本路前方', melee:`前方 ${d.reach||1} 格`, mine:'周围 3×3'}[d.shape]||'—';   // 第2章角色 v1
+  const range = d.toss ? (d.toss.near ? '本路最近的地面敌人' : '本路最靠后的地面敌人') : d.tide ? '本路和上下两路' : d.inkP ? '本路前方 3 格' : d.mudP ? '本路前方 3 格内最近的' : d.zap ? '前方 1 格 + 周围 1.5 格' : d.clamp ? '前方 1 格最近的一个' : d.sweep ? '本路和上下两路的前方 1 格' : d.heal ? '周围 3×3' : {shooter:'本路前方', melee:`前方 ${d.reach||1} 格`, mine:'周围 3×3'}[d.shape]||'—';   // 第2章角色 v1
   if(range!=='—') rows.push(['范围', range, statIco('range')]);
   rows.push(['冷却', `${d.cd} 秒`, statIco('cd')]);
   return rows;
