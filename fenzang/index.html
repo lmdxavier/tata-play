@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>分赃背包（原型）</title>
+<script>
+window.__BUILD = 'v1-1123a';
+// 版本自检：线上 build.txt 和页面里的号不一样（手机还在用缓存的旧页面）就带新号重新打开
+(function () {
+  if (location.protocol === 'file:') return;
+  fetch('build.txt?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+    t = (t || '').trim();
+    if (t && t !== window.__BUILD && location.search.indexOf('b=' + t) < 0) { var q = new URLSearchParams(location.search); q.set('b', t); location.replace(location.pathname + '?' + q.toString()); }
+  }).catch(function () {});
+})();
+</script>
+<link rel="stylesheet" href="style.css?v=v1-1123a">
+</head>
+<body>
+<div id="stage">
+  <div id="top" class="blk"></div>
+  <div id="opp" class="blk"></div>
+  <div id="mid" class="blk"></div>
+  <div id="info" class="blk"></div>
+  <div id="me" class="blk"></div>
+  <div id="bagwrap" class="blk"><div id="bag"></div></div>
+  <div id="btns" class="blk"></div>
+  <div id="fx"></div>
+  <div id="overlay"></div>
+</div>
+<script src="logic.js?v=v1-1123a"></script>
+<script src="bots.js?v=v1-1123a"></script>
+<script src="ui.js?v=v1-1123a"></script>
+</body>
+</html>
