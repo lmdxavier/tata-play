@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>卡片走格（暂名）</title>
+<script>window.__BUILD = 'v1-1123a';</script>
+<link rel="stylesheet" href="style.css?v=v1-1123a">
+</head>
+<body>
+<div id="stage">
+  <div id="hud">
+    <div id="room"></div>
+    <div id="hpbar"><div id="hpfill"></div><span id="hptext"></span></div>
+    <button id="mute" class="hbtn" aria-label="声音">🔊</button>
+    <button id="restart" class="hbtn" aria-label="重开">↺</button>
+  </div>
+  <div id="boardwrap"><canvas id="board"></canvas></div>
+  <div id="info"></div>
+  <div id="slots"></div>
+  <button id="waitbtn">原地等一回合</button>
+  <div id="overlay" class="hidden"></div>
+</div>
+<script src="logic.js?v=v1-1123a"></script>
+<script src="ui.js?v=v1-1123a"></script>
+</body>
+</html>
