@@ -67,14 +67,15 @@ const STAR_ROUTE = {
   pumpkin:['生命 +40%：2000 → 2800','被咬时反弹 20% 伤害'],
   fox:['横扫附带灼烧：每秒 6 点，持续 3 秒','横扫范围 前方 1 格 → 2 格（3 路）'],   // 90 版：2 星用户 2026-11-15 定；96 版 3 星 Claude 定
   // 96 版：其余 28 只的 2 星（Claude 定，用户 2026-11-23「2 星也一起做」）；数值在 game.js STAR_FX，两处一起改
-  snail:['咬它的敌人变慢 30% → 50%'], mushgoat:['每次回复 80 → 120 生命'], bear:['拍击 本路 → 本路和上下两路'],
-  crab:['钳住 1.5 → 2.5 秒（精英、Boss 0.8 秒）'], turtle:['溅射范围 前后 0.5 格 → 1 格'], puffer:['炸开伤害 300 → 450'],
-  helmfish:['顶回 1 格 → 1.5 格'], jelly:['放电 最多 3 只 → 5 只'], inkocto:['喷墨 前方 3 格 → 5 格'],
-  mudfish:['陷住 1.5 → 2.5 秒（精英、Boss 0.8 秒）'], parrot:['钳住 1 → 2 秒（精英、Boss 0.5 秒）'], beast:['每损失 150 → 100 生命，攻击 +50%'],
-  kraken:['潮浪 每 18 秒 → 每 13 秒'], slime:['减速 20% → 35%'], beetle:['反伤 每口 15 → 30'], snake:['中毒 每秒 5 → 9 伤害'],
-  hornliz:['生命低于 50% → 70% 就发怒'], hornbug:['同路每只 +15% → +25%（最多 +100%）'], gull:['水弹命中减速 20%，持续 2 秒'],
-  goat:['冲撞 每 12 秒 → 每 8 秒'], cat:['收能量范围 3×3 → 5×3'], bellsnake:['攻速加成 +25% → +40%'], redbird:['俯冲伤害 40 → 56'],
-  mushsnake:['定身 1.5 秒 → 2.5 秒'], shellliz:['生命 1400 → 2000'], wildox:['冲锋 2 格 → 3 格'], toucan:['叼走 每 20 秒 → 每 14 秒'], disco:['定身 4 只 → 6 只'],
+  // 97 版：这 28 只的 3 星（Claude 定，vfx-design.md 9.1）；数值在 game.js STAR_FX 第 2 项，两处一起改
+  snail:['咬它的敌人变慢 30% → 50%','同一个敌人咬满 3 口，被粘住 1.5 秒（精英、Boss 0.5 秒）'], mushgoat:['每次回复 80 → 120 生命','回复时顺便解除中毒、麻痹、孢子停手'], bear:['拍击 本路 → 本路和上下两路','被拍中的敌人停下 1 秒（Boss 不受影响）'],
+  crab:['钳住 1.5 → 2.5 秒（精英、Boss 0.8 秒）','一次钳住前方最近的 2 个敌人'], turtle:['溅射范围 前后 0.5 格 → 1 格','每次投 2 块：本路最靠后的 2 只地面敌人各一块'], puffer:['炸开伤害 300 → 450','炸开后 6 秒重新鼓气，能炸 2 次'],
+  helmfish:['顶回 1 格 → 1.5 格','顶回的敌人撞到身后 1 格内的敌人：各受 40 伤害、后退 0.5 格'], jelly:['放电 最多 3 只 → 5 只','每第 3 次攻击放大电：周围 2.5 格内的敌人全部受 30 伤害、麻痹 1.5 秒'], inkocto:['喷墨 前方 3 格 → 5 格','喷墨 本路 → 本路和上下两路'],
+  mudfish:['陷住 1.5 → 2.5 秒（精英、Boss 0.8 秒）','泥团落地留下泥地 4 秒：经过的敌人变慢 40%'], parrot:['钳住 1 → 2 秒（精英、Boss 0.5 秒）','也能丢中飞行的敌人，并把它钳住'], beast:['每损失 150 → 100 生命，攻击 +50%','咬中时回复造成伤害的 30%'],
+  kraken:['潮浪 每 18 秒 → 每 13 秒','潮浪 本路和上下两路 → 全场所有路'], slime:['减速 20% → 35%','粘液弹穿透：最多打 2 个敌人，第 2 个 85% 伤害'], beetle:['反伤 每口 15 → 30','咬它的敌人着火：每秒 6 点，持续 3 秒'], snake:['中毒 每秒 5 → 9 伤害','中毒最多叠 3 层：每层每秒 9 伤害'],
+  hornliz:['生命低于 50% → 70% 就发怒','发怒后攻击范围 前方 1 格 → 2 格'], hornbug:['同路每只 +15% → +25%（最多 +100%）','上下相邻路的尖角虫也算同伴'], gull:['水弹命中减速 20%，持续 2 秒','同时朝本路和上下两路各抛一颗水弹（旁路有敌人时）'],
+  goat:['冲撞 每 12 秒 → 每 8 秒','撞中的敌人停下 1.5 秒（Boss 不受影响）'], cat:['收能量范围 3×3 → 5×3','每 25 秒自己叼来一颗 25 能量'], bellsnake:['攻速加成 +25% → +40%','摇铃范围 3×3 → 5×3'], redbird:['俯冲伤害 40 → 56','俯冲路过的敌人各受 50% 伤害'],
+  mushsnake:['定身 1.5 秒 → 2.5 秒','孢子带毒：被定住的敌人中毒，每秒 6 伤害，持续 4 秒'], shellliz:['生命 1400 → 2000','挡下的远程攻击，反弹 50% 伤害给出手的敌人'], wildox:['冲锋 2 格 → 3 格','冲锋每撞到一只敌人，自己回复 60 生命'], toucan:['叼走 每 20 秒 → 每 14 秒','精英也叼得走（Boss 叼不走）'], disco:['定身 4 只 → 6 只','开灯时全场宠物攻击速度 +30%，持续 3 秒'],
 };
 const RAR_RANK = {legend:3, epic:2, rare:1, common:0};
 // 稀有度配色：角色区 top / glow / bot 取自 Fantasy Hero 的 Collection_Detail_1~4 预制体；
@@ -1115,14 +1116,15 @@ function drawDetail(e, view){
     if(route){ MT.starSecY=y-y0; text('升星', x+pad, y+10, 15, MT._behind?'#ffe3a6':MT_UI.gold, 'left', 800, MT_UI.stroke); y+=22;
       // 74 版：已达到的星级正常显示、没达到的变淡；升星演出时刚解锁的那行弹弹地放大并发金光
       const cur=starOf(e.key), sh=MT.show&&MT.show.k===e.key&&MT.show.ph===1 ? (performance.now()-MT.show.t0)/1000-1.45 : -1;
-      route.forEach((t,i)=>{ const bh2=40, by=y+i*(bh2+8), got=i+2<=cur, fresh=i+2===cur && sh>=0 && sh<2.2;
+      const rows=route.map((t,i)=>{ const ls=wrapCN(t, w-pad*2-(16+(i+2)*15+6)-12, 13); return {ls, h:40+19*(ls.length-1)}; }); let yy=y;   // 97 版：3 星描述变长，按宽度换行，行高跟着变
+      route.forEach((t,i)=>{ const bh2=rows[i].h, by=yy; yy+=bh2+8; const got=i+2<=cur, fresh=i+2===cur && sh>=0 && sh<2.2;
         let sc=1, glow=0; if(fresh){ const q=Math.min(1,sh/1.1); sc=1+0.16*Math.sin(q*Math.PI*3)*(1-q)*(1-q)+(q<0.12?0.1*q/0.12:0); glow=Math.max(0,1-sh/2.2); }
         ctx.save(); const cx0=x+w/2, cy0=by+bh2/2; ctx.translate(cx0,cy0); ctx.scale(sc,sc); ctx.translate(-cx0,-cy0); if(!got) ctx.globalAlpha*=0.45;
         if(glow>0){ ctx.save(); ctx.shadowColor='#ffd84a'; ctx.shadowBlur=22*DPR*glow; ctx.globalAlpha*=glow; mtNine4(heroT('BaseFrame_Basic_Rectangle_H50', '#ffd84a'), x+pad-3, by-3, w-pad*2+6, bh2+6, [25,25,25,25], 0.6); ctx.restore(); }
         mtBox(x+pad, by, w-pad*2, bh2);
         for(let k=0;k<i+2;k++){ const ks=fresh&&k===i+1 ? 1+0.6*Math.max(0,1-sh/0.5) : 1; drawIconSh(hero('Grade_Star'), x+pad+16+k*15, by+bh2/2, 16*ks); }
-        text(t, x+pad+16+(i+2)*15+6, by+bh2/2, 13, MT_UI.txt, 'left', 800, false); ctx.restore(); });
-      y+=route.length*48+8; }
+        rows[i].ls.forEach((l,j)=>text(l, x+pad+16+(i+2)*15+6, by+bh2/2-(rows[i].ls.length-1)*9.5+j*19, 13, MT_UI.txt, 'left', 800, false)); ctx.restore(); });
+      y=yy+8; }
   } else {
     const have=shardHave(e.key), need=RAR[e.rar].need;
     mtBox(x+pad, y, w-pad*2, 84);

@@ -121,13 +121,17 @@ const STAR_FX = {
   pumpkin:[{hp:2800}, {reflect:0.2}],
   fox:[{burn:{dps:6, t:3}}, {reach:2}],
   // 96 版：其余 28 只的 2 星（Claude 定，用户 2026-11-23「2 星也一起做」）
-  snail:[{sticky:{k:0.5}}], mushgoat:[{heal:{amt:120}}], bear:[{sweep:true}], crab:[{clamp:{t:2.5, big:0.8}}],
-  turtle:[{toss:{splash:1}}], puffer:[{dmg:450}], helmfish:[{knock:1.5}], jelly:[{zap:{n:5}}],
-  inkocto:[{inkP:{len:5}}], mudfish:[{mudP:{t:2.5, big:0.8}}], parrot:[{toss:{clamp:2, big:0.5}}], beast:[{growP:{per:100}}],
-  kraken:[{tide:{every:13}}], slime:[{spit:{k:0.65}}], beetle:[{thorns:30}], snake:[{venom:{dps:9}}],
-  hornliz:[{fury:{at:0.7}}], hornbug:[{pack:{k:0.25}}], gull:[{soak:{k:0.8, t:2}}], goat:[{ram:{every:8}}],
-  cat:[{magnet:{dp:2.5}}], bellsnake:[{chime:{k:1.4}}], redbird:[{dmg:56}], mushsnake:[{sporeP:{t:2.5}}],
-  shellliz:[{hp:2000}], wildox:[{rush:{len:3}}], toucan:[{pluck:{every:14}}], disco:[{lights:{n:6}}],
+  // 97 版：这 28 只的 3 星（Claude 定，vfx-design.md 9.1）。新字段：glue 咬满 n 口粘住、heal.clean 解除负面、slamDaze 拍中停下、clamp.n 钳几只、toss.n 投几块、
+  //   uses/rearm 地雷能炸几次、bump 顶回撞身后、bigZap 每第 n 次大放电、inkP.dl 墨盖上下路、mudP.floor 留泥地、toss.air 能打飞行、leech 吸血比例、tide.all 全场、
+  //   spit.pierce 穿透、thornsBurn 反伤点火、venom.stack 毒叠层、fury.reach 发怒加射程、pack.adj 相邻路算同伴、lob3 三路抛、ram.daze 撞晕、gift 自己产能量、
+  //   chime.dp 铃声范围、pass 俯冲路过伤害、sporeP.venom 孢子带毒、shellBack 远程反弹、rush.leech 冲锋回血、pluck.elite 叼精英、lights.party 开灯全场加速
+  snail:[{sticky:{k:0.5}}, {glue:{n:3, t:1.5, big:0.5}}], mushgoat:[{heal:{amt:120}}, {heal:{clean:true}}], bear:[{sweep:true}, {slamDaze:1}], crab:[{clamp:{t:2.5, big:0.8}}, {clamp:{n:2}}],
+  turtle:[{toss:{splash:1}}, {toss:{n:2}}], puffer:[{dmg:450}, {uses:2, rearm:6}], helmfish:[{knock:1.5}, {bump:{r:1, dmg:40, push:0.5}}], jelly:[{zap:{n:5}}, {bigZap:{every:3, r:2.5, dmg:30, t:1.5}}],
+  inkocto:[{inkP:{len:5}}, {inkP:{dl:1}}], mudfish:[{mudP:{t:2.5, big:0.8}}, {mudP:{floor:{t:4, k:0.6}}}], parrot:[{toss:{clamp:2, big:0.5}}, {toss:{air:true}}], beast:[{growP:{per:100}}, {leech:0.3}],
+  kraken:[{tide:{every:13}}, {tide:{all:true}}], slime:[{spit:{k:0.65}}, {spit:{pierce:2, pk:0.85}}], beetle:[{thorns:30}, {thornsBurn:{dps:6, t:3}}], snake:[{venom:{dps:9}}, {venom:{stack:3}}],
+  hornliz:[{fury:{at:0.7}}, {fury:{reach:2}}], hornbug:[{pack:{k:0.25}}, {pack:{adj:true}}], gull:[{soak:{k:0.8, t:2}}, {lob3:true}], goat:[{ram:{every:8}}, {ram:{daze:1.5}}],
+  cat:[{magnet:{dp:2.5}}, {gift:{every:25, v:25}}], bellsnake:[{chime:{k:1.4}}, {chime:{dp:2}}], redbird:[{dmg:56}, {pass:0.5}], mushsnake:[{sporeP:{t:2.5}}, {sporeP:{venom:{dps:6, t:4}}}],
+  shellliz:[{hp:2000}, {shellBack:0.5}], wildox:[{rush:{len:3}}, {rush:{leech:60}}], toucan:[{pluck:{every:14}}, {pluck:{elite:true}}], disco:[{lights:{n:6}}, {lights:{party:{k:1.3, t:3}}}],
 };
 const STAR_DEF_CACHE = {};
 function starDef(key, star){ const base=DATA.pets[key], P=STAR_FX[key]; star=star||starOf(key); if(!base || !P || star<2) return base;
@@ -484,7 +488,8 @@ function hitEnemy(e, dmg, el, opts){
   if(e.def.grow){ const Gr=e.def.grow; e.taken=(e.taken||0)+d; const lv=Math.min(Gr.max, Math.floor(e.taken/Gr.per)); if(lv>(e.lv||0) && e.hp>0){ e.lv=lv; emit('grow',{e,lv}); } }   // 第3章角色 v1：棘皮鲀越打越大
   if(opts && opts.burn){ e.burn = {dps:Math.max(e.burn?e.burn.dps:0, opts.burn.dps), t:opts.burn.t}; }
   if(opts && opts.slow){ const k=opts.slowK||0.85; e.slowK = e.slow>0 ? Math.min(e.slowK||0.85, k) : k; e.slow = Math.max(e.slow||0, opts.slow); }
-  if(opts && opts.venom){ const fresh=!e.venom; e.venom={dps:opts.venom.dps, t:opts.venom.t}; if(fresh) emit('venom',{e}); }   // 91 版：翠颈蛇（宠物）的毒
+  if(opts && opts.venom){ const V=opts.venom, fresh=!e.venom, n0=(e.venom&&e.venom.n)||0, n=V.stack ? Math.min(V.stack, n0+1) : 1;   // 97 版：翠颈蛇 3 星毒叠 3 层
+    if(!e.venom || V.dps*n>=e.venom.dps){ e.venom={dps:V.dps*n, t:V.t, n}; if(fresh) emit('venom',{e}); else if(V.stack && n>n0) emit('venomStack',{e, n}); } else e.venom.t=Math.max(e.venom.t, V.t); }   // 91 版：翠颈蛇（宠物）的毒
   if(e.hp<=0) killEnemy(e);
 }
 const LOOT_P = {gold:0.15, star:0.03, goldV:10};   // 88 版：每只怪死亡时的掉落概率；一枚金币 = 10 金币
@@ -519,7 +524,7 @@ function killEnemy(e, silent){
 
 // ---------- 攻击出手（前摇结束那一帧）----------
 // 近战覆盖「前方 reach 格」：按怪物身体边缘判断，体型大的怪站得远也打得到
-function meleeHits(pet){ const R=pet.reach||pet.def.reach, lo=pet.col+0.3, pr=propAhead(pet.lane,pet.col+1,pet.col+R), hi=pr ? pr.col+0.2 : pet.col+1+R;   // 道具挡住：道具后面的怪打不到
+function meleeHits(pet){ const R=(pet.furyOn && pet.def.fury && pet.def.fury.reach) || pet.reach || pet.def.reach,   /* 97 版：棘背蜥 3 星发怒后前方 2 格 */ lo=pet.col+0.3, pr=propAhead(pet.lane,pet.col+1,pet.col+R), hi=pr ? pr.col+0.2 : pet.col+1+R;   // 道具挡住：道具后面的怪打不到
   const lanes = pet.def.sweep ? [pet.lane-1,pet.lane,pet.lane+1] : [pet.lane];   // 第2章角色 v1：迅火狐横扫本路和上下相邻两路
   return G.enemies.filter(e=>!e.dead&&lanes.includes(e.lane)&&!isFly(e)&&e.p>=lo&&e.p-e.def.r<=(e.lane===pet.lane?hi:pet.col+1+R)); }
 // ===== 第2章角色 v1（_dev，未合并）：通用小工具 =====
@@ -541,16 +546,20 @@ function ringShot(pet, k, idx){ const R=pet.def.evo.ring, a=-Math.PI/2 + k/R.n*M
   emit('ringShot',{pet, ang:a, k, idx}); }
 // ===== 91 版：怪物宠物的主动技能 =====
 const petInt = pet => pet.def.int*(pet.def.fury && pet.hp<=pet.maxHp*pet.def.fury.at ? pet.def.fury.k : 1);   // 棘背蜥半血后发怒
+// 97 版：加速叠加——倍率更高的覆盖（倍率和时间一起换）；倍率相同续时间；更弱的不改（不把强加成拖长）
+function addHaste(q, k, t){ if(!(q.haste>0) || k>(q.hasteK||1)){ q.hasteK=k; q.haste=t; } else if(k===(q.hasteK||1)) q.haste=Math.max(q.haste, t); }
 const petHasteK = pet => pet.haste>0 ? (pet.hasteK||1.25) : 1;                                               // 铃尾蛇的铃声
 const knockable = e => !e.def.boss && !e.def.disco && e.def.role!=='elite';
 // 莽角羊冲撞 / 蛮角牛冲锋：dash = {t, d 冲出去的格数, hit 是否已结算, kind}；0.22 秒冲出去、在最远处结算、0.3 秒回来
 function petDashTick(pet, dt){ const D=pet.dash; D.t+=dt;
   if(!D.hit && D.t>=0.22){ D.hit=true; const d=pet.def;
-    if(D.kind==='ram'){ const t=D.tg, pr=propAhead(pet.lane,pet.col+1,pet.col+1+d.ram.range); if(t && !t.dead && !(pr && t.p>pr.col+0.2)){ hitEnemy(t, d.ram.dmg*atkMul(pet), d.el, {src:pet}); if(!t.dead && knockable(t)) t.p=Math.min(COLS+0.4, t.p+d.ram.knock); emit('petRamHit',{pet, e:t}); } }
+    if(D.kind==='ram'){ const t=D.tg, pr=propAhead(pet.lane,pet.col+1,pet.col+1+d.ram.range); if(t && !t.dead && !(pr && t.p>pr.col+0.2)){ hitEnemy(t, d.ram.dmg*atkMul(pet), d.el, {src:pet}); if(!t.dead && knockable(t)) t.p=Math.min(COLS+0.4, t.p+d.ram.knock); const dz=d.ram.daze && !t.dead && !t.def.boss && !t.def.disco; if(dz){ t.daze=Math.max(t.daze||0, d.ram.daze); t.windup=0; } emit('petRamHit',{pet, e:t, daze:dz}); }   /* 97 版：莽角羊 3 星撞中停下 1.5 秒 */ }
     else { const pr=propAhead(pet.lane,pet.col+1,pet.col+d.rush.len), hi=pr ? pr.col+0.2 : 99, hs=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>=pet.col+0.3&&e.p<=hi&&e.p-e.def.r<=pet.col+1+d.rush.len);   // 道具后面的怪打不到
-      hs.forEach(e=>{ hitEnemy(e, d.rush.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && knockable(e)) e.p=Math.min(COLS+0.4, e.p+d.rush.knock); }); emit('petRushHit',{pet, hits:hs}); } }
+      hs.forEach(e=>{ hitEnemy(e, d.rush.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && knockable(e)) e.p=Math.min(COLS+0.4, e.p+d.rush.knock); }); emit('petRushHit',{pet, hits:hs});
+      if(d.rush.leech && hs.length && !pet.dead){ const a=Math.min(pet.maxHp-pet.hp, d.rush.leech*hs.length); if(a>0){ pet.hp+=a; emit('petLeech',{pet, amt:a}); } } } }   // 97 版：蛮角牛 3 星每撞一只回 60
   if(D.t>=0.52) pet.dash=null; }
 function petSkillTick(pet, dt){ const d=pet.def;
+  if(d.gift){ pet.giftT=(pet.giftT??d.gift.every*0.5)-dt; if(pet.giftT<=0){ pet.giftT=d.gift.every; G.orbs.push({lane:pet.lane, p:pet.col+0.5, value:d.gift.v, life:0, fall:0, pop:0.3, produced:true}); emit('petGift',{pet}); } }   // 97 版：灰原喵 3 星每 25 秒自己叼来 25 能量
   if(d.ram || d.rush){ const S=d.ram||d.rush; pet.skT=(pet.skT??S.every*0.5)-dt;
     if(pet.skT<=0){ if(d.ram){ const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>pet.col+0.3&&e.p<=pet.col+1+d.ram.range&&e.p<COLS).sort((a,b)=>a.p-b.p)[0];
         const prA=propAhead(pet.lane,pet.col+1,pet.col+1+d.ram.range); if(t && prA && t.p>prA.col+0.2) { pet.skT=0.3; return false; }
@@ -562,20 +571,24 @@ function petSkillTick(pet, dt){ const d=pet.def;
   pet.timer=S.every;
   if(d.magnet){ const o=G.orbs.filter(o=>!o.got&&!(o.fall>0)&&Math.abs(o.lane-pet.lane)<=d.magnet.dl&&Math.abs(o.p-(pet.col+0.5))<=d.magnet.dp)[0];
     if(o){ emit('petMagnet',{pet, o}); collectOrb(o); } else pet.timer=0.3; }
-  else if(d.chime){ const list=G.pets.filter(q=>!q.dead&&Math.abs(q.lane-pet.lane)<=1&&Math.abs(q.col-pet.col)<=1&&q.def.shape!=='mine');
-    list.forEach(q=>{ q.haste=d.chime.t; q.hasteK=d.chime.k; }); emit('petChime',{pet, list}); }
+  else if(d.chime){ const list=G.pets.filter(q=>!q.dead&&Math.abs(q.lane-pet.lane)<=1&&Math.abs(q.col-pet.col)<=(d.chime.dp||1)&&q.def.shape!=='mine');   // 97 版：铃尾蛇 3 星 5×3
+    list.forEach(q=>addHaste(q, d.chime.k, d.chime.t)); emit('petChime',{pet, list}); }
   else if(d.sporeP){ const list=G.enemies.filter(e=>!e.dead&&!e.def.boss&&!e.def.disco&&Math.abs(e.lane-pet.lane)<=d.sporeP.dl&&Math.abs(e.p-(pet.col+0.5))<=d.sporeP.dp);
-    if(list.length){ list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.sporeP.t); }); emit('petSpore',{pet, list}); } else pet.timer=0.5; }
-  else if(d.pluck){ const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS&&knockable(e)).sort((a,b)=>a.p-b.p)[0];
+    if(list.length){ const V=d.sporeP.venom; list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.sporeP.t); if(V && (!e.venom || e.venom.dps<=V.dps)){ const fresh=!e.venom; e.venom={dps:V.dps, t:V.t, n:1}; if(fresh) emit('venom',{e}); } }); emit('petSpore',{pet, list}); }   /* 97 版：伞顶蛇 3 星孢子带毒 */ else pet.timer=0.5; }
+  else if(d.pluck){ const t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS&&(knockable(e) || (d.pluck.elite && e.def.role==='elite' && !e.def.boss && !e.def.disco))).sort((a,b)=>a.p-b.p)[0];   // 97 版：巨喙鸟 3 星精英也叼得走
     if(t){ emit('petPluck',{pet, e:t}); killEnemy(t, true); } else pet.timer=0.5; }   // 叼走不算击杀掉落：不掉金币、碎片（否则每 20 秒稳定刷碎片）
   else if(d.lights){ const list=G.enemies.filter(e=>!e.dead&&e.p<COLS&&!e.def.boss&&!e.def.disco).sort((a,b)=>a.p-b.p).slice(0,d.lights.n);
-    if(list.length){ list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.lights.t); e.danceT=d.lights.t; }); emit('petLights',{pet, list}); } else pet.timer=0.5; }
+    if(list.length){ list.forEach(e=>{ e.daze=Math.max(e.daze||0, d.lights.t); e.danceT=d.lights.t; }); const P=d.lights.party;
+      if(P) G.pets.forEach(q=>{ if(!q.dead && q.def.shape!=='mine') addHaste(q, P.k, P.t); });   // 97 版：巴隆 3 星开灯时全场宠物攻速 +30%
+      emit('petLights',{pet, list, party:!!P}); } else pet.timer=0.5; }
   else if(d.inkP){ const D=d.inkP, any=G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<=pet.col+1+D.len);   // 93 版：喷墨章鱼（宠物）
-    if(any){ const z={lane:pet.lane, c0:pet.col+1, c1:Math.min(COLS,pet.col+1+D.len), until:G.t+D.t, k:D.k}; G.pink.push(z); emit('petInk',{pet, z}); } else pet.timer=0.5; }
+    if(any){ const ls=D.dl ? [pet.lane-1,pet.lane,pet.lane+1].filter(l=>l>=0&&l<LANES&&laneOn(l)) : [pet.lane];   // 97 版：喷墨章鱼 3 星墨盖本路和上下两路
+      ls.forEach(l=>{ const z={lane:l, c0:pet.col+1, c1:Math.min(COLS,pet.col+1+D.len), until:G.t+D.t, k:D.k}; G.pink.push(z); emit('petInk',{pet, z, silent:l!==pet.lane}); }); } else pet.timer=0.5; }
   else if(d.mudP){ const D=d.mudP, t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>pet.col+0.3&&e.p<=pet.col+1+D.dist).sort((a,b)=>a.p-b.p)[0];   // 93 版：泥跃鱼（宠物）
     if(t){ const at=t.p, list=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&Math.abs(e.p-at)<=0.5+e.def.r*0.5);
-      list.forEach(e=>{ e.held=Math.max(e.held||0, knockable(e)?D.t:D.big); e.windup=0; }); emit('petMud',{pet, at, list}); } else pet.timer=0.5; }
-  else if(d.tide){ const D=d.tide, list=G.enemies.filter(e=>!e.dead&&Math.abs(e.lane-pet.lane)<=1&&e.p<COLS+0.2);   // 93 版：奥库塔（宠物）
+      list.forEach(e=>{ e.held=Math.max(e.held||0, knockable(e)?D.t:D.big); e.windup=0; }); emit('petMud',{pet, at, list});
+      if(D.floor){ const c=Math.max(0, Math.min(COLS-1, Math.floor(at))); G.pink.push({lane:pet.lane, c0:c, c1:c+1, from:G.t+0.3, until:G.t+0.3+D.floor.t, k:D.floor.k, mud:true}); } } else pet.timer=0.5; }   // 97 版：泥跃鱼 3 星落点留泥地 4 秒，经过的敌人变慢 40%
+  else if(d.tide){ const D=d.tide, list=G.enemies.filter(e=>!e.dead&&(D.all||Math.abs(e.lane-pet.lane)<=1)&&e.p<COLS+0.2);   // 97 版：奥库塔 3 星全场   // 93 版：奥库塔（宠物）
     if(list.length){ emit('petTide',{pet, list}); list.forEach(e=>{ hitEnemy(e, D.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && knockable(e)) e.p=Math.min(COLS+0.4, e.p+D.push); }); } else pet.timer=0.5; }
   return false;
 }
@@ -583,18 +596,24 @@ function petRelease(pet){
   const d=pet.def;
   if(d.shape==='shooter' && d.snipe){   // 91 版：掠空鸟俯冲打本路最远的敌人（飞行的也打得到）
     const rc=inkAt(pet.lane,pet.col) ? pet.col+1+INK_REACH : 1e9, t=G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3&&e.p-e.def.r<=rc).sort((a,b)=>b.p-a.p)[0];   // 93 版：墨里只打 1.5 格内
-    emit('snipe',{pet, e:t||null}); if(t) hitEnemy(t, d.dmg*atkMul(pet), d.el, {src:pet});
+    const pass = t && d.pass ? G.enemies.filter(e=>!e.dead&&e!==t&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<t.p) : [];   // 97 版：掠空鸟 3 星俯冲路过的敌人各受 50%
+    emit('snipe',{pet, e:t||null, pass}); if(t) hitEnemy(t, d.dmg*atkMul(pet), d.el, {src:pet}); pass.forEach(e=>hitEnemy(e, d.dmg*d.pass*atkMul(pet), d.el, {src:pet}));
     return;
   }
   if(d.shape==='shooter' && (d.spit || d.lob)){   // 91 版：绿莱姆粘液弹（减速）、长信翁抛物线（越过道具）
-    const tg = d.lob ? G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3).sort((a,b)=>a.p-b.p)[0] : null;
-    G.projs.push({lane:pet.lane, p:pet.col+0.8, speed:d.projSpeed, dmg:d.dmg*atkMul(pet), el:d.el, src:pet, maxP: d.spit && inkAt(pet.lane,pet.col) ? pet.col+1+INK_REACH+0.1 : 0,   // 93 版：粘液弹也受墨限制；长信翁抛物线越过墨
-      slow: d.spit ? d.spit.t : d.soak ? d.soak.t : 0, slowK: d.spit ? d.spit.k : d.soak ? d.soak.k : 0, lob: d.lob ? {tg, p0:pet.col+0.8} : null}); emit('shoot',{pet});
+    const lanes = d.lob3 ? [pet.lane-1,pet.lane,pet.lane+1].filter(l=>l>=0&&l<LANES&&laneOn(l)) : [pet.lane];   // 97 版：长信翁 3 星同时朝本路和上下两路各抛一颗
+    for(const ln of lanes){ const tg = d.lob ? G.enemies.filter(e=>!e.dead&&e.lane===ln&&e.p>pet.col+0.3&&e.p<COLS+0.3).sort((a,b)=>a.p-b.p)[0] : null;
+      if(ln!==pet.lane && !tg) continue;   // 旁路没有敌人就不抛
+      G.projs.push({lane:ln, lane0:pet.lane, p:pet.col+0.8, speed:d.projSpeed, dmg:d.dmg*atkMul(pet), el:d.el, src:pet, maxP: d.spit && inkAt(pet.lane,pet.col) ? pet.col+1+INK_REACH+0.1 : 0,   // 93 版：粘液弹也受墨限制；长信翁抛物线越过墨
+        slow: d.spit ? d.spit.t : d.soak ? d.soak.t : 0, slowK: d.spit ? d.spit.k : d.soak ? d.soak.k : 0, lob: d.lob ? {tg, p0:pet.col+0.8} : null,
+        pierce: d.spit&&d.spit.pierce||0, pk: d.spit&&d.spit.pk||1}); }   // 97 版：绿莱姆 3 星粘液弹穿透 2 个
+    emit('shoot',{pet});
     return;
   }
   if(d.shape==='shooter' && d.toss){   // 第 3 章：炮台龟（宠物）投石打本路最靠后的地面敌人；船长鹦鹉（宠物）丢蟹打最近的
-    const t = d.toss.near ? G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>pet.col+0.3&&e.p<COLS+0.2).sort((x,y)=>x.p-y.p)[0] : lobTarget(pet);
-    if(t){ G.lobs.push({side:'p', lane:pet.lane, from:pet.col+0.6, e:t, to:t.p, t:0, dur:d.toss.fly, dmg:d.dmg*atkMul(pet), el:d.el, src:pet}); emit('lobStart',{pet}); }
+    const ts = d.toss.near ? G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&(d.toss.air||!isFly(e))&&e.p>pet.col+0.3&&e.p<COLS+0.2).sort((x,y)=>x.p-y.p).slice(0,1) : lobTargets(pet, d.toss.n||1);   // 97 版：船长鹦鹉 3 星能丢飞行的；炮台龟 3 星投最靠后的 2 只
+    ts.forEach((t,i)=>G.lobs.push({side:'p', lane:pet.lane, from:pet.col+0.6, e:t, to:t.p, t:-0.12*i, dur:d.toss.fly, dmg:d.dmg*atkMul(pet), el:d.el, src:pet}));
+    if(ts.length) emit('lobStart',{pet});
     return;
   }
   if(d.shape==='shooter'){
@@ -605,18 +624,28 @@ function petRelease(pet){
     pet.second=false;
   } else if(d.shape==='melee'){
     let hits=meleeHits(pet); const prop=meleeProp(pet); pet.swing=0.18;
-    if(d.clamp){ hits=hits.filter(e=>e.lane===pet.lane).sort((a,b)=>a.p-b.p).slice(0,1); hits.forEach(e=>{ e.held=Math.max(e.held||0, knockable(e)?d.clamp.t:d.clamp.big);   /* 96 版：Boss 也按 big 算（原来只看精英，Boss 被钳满 1.5 秒，和描述不符） */ e.windup=0; }); }   // 第3章角色 v1：岩钳蟹（宠物）只钳最近的一个
+    if(d.clamp){ hits=hits.filter(e=>e.lane===pet.lane).sort((a,b)=>a.p-b.p).slice(0,d.clamp.n||1);   /* 97 版：岩钳蟹 3 星钳 2 只 */ hits.forEach(e=>{ e.held=Math.max(e.held||0, knockable(e)?d.clamp.t:d.clamp.big);   /* 96 版：Boss 也按 big 算（原来只看精英，Boss 被钳满 1.5 秒，和描述不符） */ e.windup=0; }); }   // 第3章角色 v1：岩钳蟹（宠物）只钳最近的一个
     let burn = d.burn || null;
-    let pk = 1; if(d.pack){ const n=Math.min(d.pack.max, G.pets.filter(q=>q!==pet&&!q.dead&&q.key===pet.key&&q.lane===pet.lane).length); pk=1+d.pack.k*n; }   // 91 版：尖角虫同路加成
+    let pk = 1; if(d.pack){ const n=Math.min(d.pack.max, G.pets.filter(q=>q!==pet&&!q.dead&&q.key===pet.key&&(d.pack.adj?Math.abs(q.lane-pet.lane)<=1:q.lane===pet.lane)).length);   /* 97 版：尖角虫 3 星相邻路也算 */ pk=1+d.pack.k*n; }   // 91 版：尖角虫同路加成
     let heavy = false; if(d.heavy4 && hits.length){ pet.bites=(pet.bites||0)+1; if(pet.bites%4===0) heavy=true; }   // 73 版：火牙犬 2 星，每第 4 口变重咬（伤害 ×2，击退 0.5 格）
     if(pet.group && pet.group.el==='fire' && pet.group.size>=3) burn = {dps:Math.max(4,(burn||{}).dps||0), t:3};
     emit('melee',{pet,hits,prop,heavy});   // 出手时目标走开了也照样挥空（动画已经播了）
-    if(d.zap && hits.length){ const Z=d.zap, h0=hits[0], others=G.enemies.filter(e=>!e.dead&&!hits.includes(e)&&Math.abs(e.lane-h0.lane)<=1&&Math.abs(e.p-h0.p)<=Z.r).sort((a,b)=>Math.abs(a.p-h0.p)-Math.abs(b.p-h0.p)).slice(0,Z.n);   // 93 版：飘电水母（宠物）
-      if(others.length){ emit('petZap',{pet, from:h0, list:others}); others.forEach(e=>{ hitEnemy(e, Z.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && !e.def.boss && !e.def.disco) e.daze=Math.max(e.daze||0, Z.t); }); } }
+    let bigZ=false; if(d.bigZap && hits.length){ pet.zaps=(pet.zaps||0)+1; bigZ = pet.zaps%d.bigZap.every===0; }   // 97 版：飘电水母 3 星每第 3 次攻击放大电
+    if(d.zap && hits.length){ const B=d.bigZap, Z=bigZ ? {n:99, dmg:B.dmg, t:B.t, r:B.r} : d.zap, h0=hits[0], others=G.enemies.filter(e=>!e.dead&&!hits.includes(e)&&(bigZ ? Math.hypot(e.lane-h0.lane, e.p-h0.p)<=Z.r : Math.abs(e.lane-h0.lane)<=1&&Math.abs(e.p-h0.p)<=Z.r)).sort((a,b)=>Math.abs(a.p-h0.p)-Math.abs(b.p-h0.p)).slice(0,Z.n);   // 93 版：飘电水母（宠物）
+      if(bigZ) hits.forEach(e=>{ if(!e.def.boss && !e.def.disco) e.daze=Math.max(e.daze||0, Z.t); });
+      if(others.length || bigZ){ emit('petZap',{pet, from:h0, list:others, big:bigZ}); others.forEach(e=>{ hitEnemy(e, Z.dmg*atkMul(pet), d.el, {src:pet}); if(!e.dead && !e.def.boss && !e.def.disco) e.daze=Math.max(e.daze||0, Z.t); }); } }
     if(prop) damageProp(prop, d.dmg*atkMul(pet), true);
     if(d.fireFloor){ const F=d.fireFloor, R=pet.reach||d.reach, pr2=propAhead(pet.lane,pet.col+1,pet.col+R), c1=pr2 ? pr2.col : Math.min(COLS, pet.col+1+R);   // 96 版：喷火蜥 3 星地面留火（道具后面不留）
       const z=G.pfire.find(z=>z.src===pet); if(z){ Object.assign(z, {lane:pet.lane, c0:pet.col+1, c1, until:G.t+F.t, dps:d.dmg*F.k*atkMul(pet)}); } else G.pfire.push({src:pet, lane:pet.lane, c0:pet.col+1, c1, until:G.t+F.t, t0:G.t, dps:d.dmg*F.k*atkMul(pet), el:d.el}); }
-    hits.forEach(e=>{ hitEnemy(e,d.dmg*atkMul(pet)*(heavy?2:1)*pk,d.el,{burn,src:pet,venom:d.venom||null}); if(heavy && !e.dead && !e.def.boss) e.p=Math.min(COLS+0.4, e.p+0.5); if(d.knock && !e.dead && knockable(e)) e.p=Math.min(COLS+0.4, e.p+d.knock); if(pet.group&&pet.group.size>=5&&pet.group.el==='fire') e.burnFromGroup5=true; });
+    let leech=0; const dazed=[], bumped=[];
+    hits.forEach(e=>{ const hp0=e.hp; hitEnemy(e,d.dmg*atkMul(pet)*(heavy?2:1)*pk,d.el,{burn,src:pet,venom:d.venom||null}); if(d.leech) leech+=Math.max(0, hp0-Math.max(0,e.hp))*d.leech; if(heavy && !e.dead && !e.def.boss) e.p=Math.min(COLS+0.4, e.p+0.5);
+      if(d.knock && !e.dead && knockable(e)){ e.p=Math.min(COLS+0.4, e.p+d.knock);
+        if(d.bump){ const B=d.bump; G.enemies.forEach(o=>{ if(o!==e&&!o.dead&&o.lane===e.lane&&!isFly(o)&&!hits.includes(o)&&!bumped.includes(o)&&o.p>=e.p-0.2&&o.p<=e.p+B.r){ bumped.push(o); hitEnemy(o, B.dmg*atkMul(pet), d.el, {src:pet}); if(!o.dead && knockable(o)) o.p=Math.min(COLS+0.4, o.p+B.push); } }); } }   // 97 版：铁盔鱼 3 星顶回的敌人撞到身后 1 格内的敌人
+      if(d.slamDaze && !e.dead && !e.def.boss && !e.def.disco){ e.daze=Math.max(e.daze||0, d.slamDaze); e.windup=0; dazed.push(e); }   // 97 版：格鲁姆 3 星拍中停下 1 秒
+      if(pet.group&&pet.group.size>=5&&pet.group.el==='fire') e.burnFromGroup5=true; });
+    if(bumped.length) emit('petBump',{pet, list:bumped});
+    if(dazed.length) emit('petDaze',{pet, list:dazed});
+    if(leech>=1 && !pet.dead){ const a=Math.min(pet.maxHp-pet.hp, Math.round(leech)); if(a>0){ pet.hp+=a; emit('petLeech',{pet, amt:a}); } }   // 97 版：棘皮鲀 3 星吸血 30%
   }
 }
 
@@ -707,7 +736,8 @@ function pushPet(q, dmg, extra){
   if(ok){ q.move={fl:q.lane, fc:q.col, t:0}; q.col=to; q.stun=Math.max(q.stun||0, 0.4); recalcResonance(); }
   hurtPet(q, ok ? dmg : dmg+extra); return ok;
 }
-function lobTarget(pet){ return G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&!isFly(e)&&e.p>pet.col+0.3&&e.p<COLS+0.2).sort((a,b)=>b.p-a.p)[0] || null; }
+function lobTargets(pet, n){ const air=pet.def.toss&&pet.def.toss.air; return G.enemies.filter(e=>!e.dead&&e.lane===pet.lane&&(air||!isFly(e))&&e.p>pet.col+0.3&&e.p<COLS+0.2).sort((a,b)=>b.p-a.p).slice(0,n); }
+function lobTarget(pet){ return lobTargets(pet,1)[0] || null; }
 function spawnAt(key, lane, p, extra){ const def=DATA.enemies[key]; const m=Object.assign({key, def, lane, p, hp:def.hp, maxHp:def.hp, atkT:0, flash:0, burn:null, slow:0, summoned:true}, extra||{}); G.enemies.push(m); emit('spawn',{e:m}); return m; }
 function dropCrew(e, shot){ e.dropped=true; const p=Math.max(0.4, Math.min(COLS-0.2, e.p)); const c=spawnAt(e.def.ferry.key, e.lane, p, {fall:0.45}); emit('ferryDrop',{e, crab:c, shot:!!shot}); }
 // 返回 true = 这一帧不走、不咬
@@ -732,7 +762,7 @@ function ch3Tick(e, dt){
   if(D.lob && e.p<=D.lob.stopAt){   // 炮台龟：停下来，朝本路最后排的宠物投石
     const tg=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col+0.5<e.p).sort((a,b)=>a.col-b.col)[0];
     if(tg){ e.lbT=(e.lbT??1.0)-dt; e.blocked=true;
-      if(e.lbT<=0){ e.lbT=D.lob.every; G.lobs.push({side:'e', lane:e.lane, from:e.p-0.2, to:tg.col+0.5, pet:tg, t:0, dur:D.lob.fly, dmg:D.lob.dmg}); emit('lobStart',{e}); }
+      if(e.lbT<=0){ e.lbT=D.lob.every; G.lobs.push({side:'e', lane:e.lane, from:e.p-0.2, to:tg.col+0.5, pet:tg, t:0, dur:D.lob.fly, dmg:D.lob.dmg, src:e}); emit('lobStart',{e}); }
       return true; } }
   if(D.ferry){   // 船长鹦鹉：把蟹丢到最前排宠物身后，然后飞走
     if(e.leave){ e.p+=0.9*dt; if(e.p>COLS+0.8){ e.dead=true; e.escaped=true; } return true; }
@@ -854,7 +884,7 @@ function update(dt){
       pet.timer-=pdt*petHasteK(pet);
       if(pet.timer<=0){
         const reach = d.toss ? 1e9 : inkAt(pet.lane,pet.col) ? pet.col+1+INK_REACH : 1e9;   // 第 3 章：墨里的远程只打 1.5 格内；投石不看墨
-        const target = (d.toss ? !!lobTarget(pet) : G.enemies.some(e=>!e.dead&&e.lane===pet.lane&&e.p>pet.col+0.3&&e.p<COLS+0.3&&e.p-e.def.r<=reach)) || (!d.snipe && !d.lob && !d.toss && G.cells.some(c=>propAlive(c)&&c.marked&&c.lane===pet.lane&&c.col>pet.col&&c.col<reach));
+        const target = (d.toss ? !!lobTarget(pet) : G.enemies.some(e=>!e.dead&&(d.lob3 ? Math.abs(e.lane-pet.lane)<=1 : e.lane===pet.lane)&&e.p>pet.col+0.3&&e.p<COLS+0.3&&e.p-e.def.r<=reach)) || (!d.snipe && !d.lob && !d.toss && G.cells.some(c=>propAlive(c)&&c.marked&&c.lane===pet.lane&&c.col>pet.col&&c.col<reach));
         if(target){ pet.timer=petInt(pet); pet.windup=d.windup; emit('attackStart',{pet}); }
         else pet.timer=0.1;
       }
@@ -869,7 +899,9 @@ function update(dt){
     } else if(d.shape==='support' && d.heal){   // 第2章角色 v1：菇背羊（宠物）每 6 秒给周围 3×3 回血
       pet.timer-=dt;
       if(pet.timer<=0){ pet.timer=d.heal.every; const list=G.pets.filter(q=>!q.dead&&Math.abs(q.lane-pet.lane)<=1&&Math.abs(q.col-pet.col)<=1&&q.def.shape!=='mine');
-        list.forEach(q=>{ q.hp=Math.min(q.maxHp, q.hp+d.heal.amt); }); emit('petHeal',{pet, list}); }
+        const clean=[]; list.forEach(q=>{ q.hp=Math.min(q.maxHp, q.hp+d.heal.amt);
+          if(d.heal.clean && (q.poison || q.zap>0 || q.spored>0)){ q.poison=null; if(q.zap>0||q.spored>0){ q.stun=Math.max(0, q.stun-Math.max(q.zap||0, q.spored||0)); q.zap=0; q.spored=0; }   /* 只减掉麻痹 / 孢子那部分，换位罚停照留 */ clean.push(q); } });   // 97 版：菇背羊 3 星回复时解除中毒、麻痹、孢子停手
+        emit('petHeal',{pet, list, clean}); }
     } else if(d.shape==='mine'){
       if(pet.armT>0){ pet.armT-=dt; continue; }
       const trig=G.enemies.find(e=>!e.dead&&!isFly(e)&&e.lane===pet.lane&&e.p>=pet.col-0.1&&e.p<=pet.col+(e.def.range?1.9:1.1));   // 69 版：远程怪隔格停下，踩不到面前的波姆 → 触发距离按射程加长
@@ -878,7 +910,7 @@ function update(dt){
         G.enemies.forEach(e=>{ if(!e.dead&&Math.abs(e.lane-pet.lane)<=1&&e.p>=pet.col-B&&e.p<=pet.col+1+B) hitEnemy(e,d.dmg,d.el); });
         G.cells.forEach(c=>{ if(propAlive(c)&&Math.abs(c.lane-pet.lane)<=1&&c.col>=pet.col-B&&c.col<=pet.col+B) damageProp(c,d.dmg,true); });
         G.fx.push({kind:'boom',lane:pet.lane,p:pet.col+0.5,t:0,life:0.5}); emit('boom',{pet});
-        pet.dead=true;
+        pet.booms=(pet.booms||0)+1; if(d.uses && pet.booms<d.uses) pet.armT=d.rearm; else pet.dead=true;   // 97 版：鼓气鲀 3 星炸完 6 秒后重新鼓气，能炸 2 次
       }
     }
   }
@@ -893,8 +925,9 @@ function update(dt){
     // 木箱挡弹道
     const c = G.cells.find(c=>c.type==='crate'&&c.hpNow>0&&c.lane===pr.lane&&pr.p>=c.col+0.2&&pr.p<=c.col+0.9);
     if(c){ pr.dead=true; damageProp(c, pr.dmg, true); continue; }
-    const e = G.enemies.filter(e=>!e.dead&&e.lane===pr.lane&&Math.abs(e.p-pr.p)<e.def.r+0.1).sort((a,b)=>a.p-b.p)[0];
-    if(e){ emit('projhit',{pr,e}); if(e.def.shell) emit('deflect',{e}); hitEnemy(e,pr.dmg*(e.def.shell||1),pr.el,{slow:pr.slow,slowK:pr.slowK||0,src:pr.src}); pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color});
+    const e = G.enemies.filter(e=>!e.dead&&e.lane===pr.lane&&Math.abs(e.p-pr.p)<e.def.r+0.1&&!(pr.hit&&pr.hit.has(e))).sort((a,b)=>a.p-b.p)[0];
+    if(e){ emit('projhit',{pr,e}); if(e.def.shell) emit('deflect',{e}); hitEnemy(e,pr.dmg*(e.def.shell||1)*(pr.hitN?pr.pk:1),pr.el,{slow:pr.slow,slowK:pr.slowK||0,src:pr.src});
+      pr.hitN=(pr.hitN||0)+1; if(pr.pierce && pr.hitN<pr.pierce) (pr.hit||(pr.hit=new Set())).add(e); else pr.dead=true; G.fx.push({kind:'spark',lane:pr.lane,p:pr.p,t:0,life:0.2,color:EL[pr.el].color});   // 97 版：绿莱姆 3 星穿透（第 2 个 85%）
       if(pr.splash){ const S=pr.splash, at=e.p, list=G.enemies.filter(o=>o!==e&&!o.dead&&o.lane===pr.lane&&!isFly(o)&&Math.abs(o.p-at)<=S.r+o.def.r*0.5);   // 96 版：泡泡鱼 3 星溅射（不触发二次溅射）
         emit('splash',{pr, e, list}); list.forEach(o=>hitEnemy(o, pr.dmg*S.k, pr.el, {src:pr.src})); } }
     if(pr.p>COLS+0.6) pr.dead=true;
@@ -912,8 +945,8 @@ function update(dt){
   for(const b of G.lobs){ if(b.side==='p' && b.e && !b.e.dead){ b.to=b.e.p; b.lane=b.e.lane; }   // 93 版：目标横爬换路也跟过去
     b.t+=dt;
     if(b.t>=b.dur){ b.done=true;
-      if(b.side==='e'){ const q=petAt(b.lane, Math.floor(b.to)); if(q && !q.dead && q.def.shape!=='mine') hurtPet(q, b.dmg); emit('lobHit',{b, pet:q||null}); }
-      else { const D=b.src.def.toss, list=G.enemies.filter(e=>!e.dead&&e.lane===b.lane&&!isFly(e)&&Math.abs(e.p-b.to)<=D.splash+e.def.r*0.5).sort((x,y)=>Math.abs(x.p-b.to)-Math.abs(y.p-b.to));
+      if(b.side==='e'){ const q=petAt(b.lane, Math.floor(b.to)); if(q && !q.dead && q.def.shape!=='mine'){ hurtPet(q, b.dmg*(q.def.shellP||1)); if(q.def.shellBack && b.src && !b.src.dead){ hitEnemy(b.src, b.dmg*q.def.shellBack, 'none', {src:q}); emit('thorns',{e:b.src, pet:q, reflect:true}); } } emit('lobHit',{b, pet:q||null}); }   // 97 版：背壳蜥挡石头 50%（原来漏了，描述写的是远程都挡）；3 星反弹 50%
+      else { const D=b.src.def.toss, list=G.enemies.filter(e=>!e.dead&&e.lane===b.lane&&(!isFly(e)||e===b.e)&&Math.abs(e.p-b.to)<=D.splash+e.def.r*0.5).sort((x,y)=>Math.abs(x.p-b.to)-Math.abs(y.p-b.to));
         list.forEach((e,i)=>{ if(i===0||D.sdmg) hitEnemy(e, i===0?b.dmg:D.sdmg, b.el, {src:b.src}); if(i===0 && D.clamp && !e.dead){ e.held=Math.max(e.held||0, knockable(e)?D.clamp:D.big); e.windup=0; } }); emit('lobHit',{b, list}); } } }
   G.lobs=G.lobs.filter(b=>!b.done);
   if(G.wave) waveTick(dt);
@@ -923,7 +956,7 @@ function update(dt){
     for(const z of G.pfire) for(const e of G.enemies) if(!e.dead&&!isFly(e)&&e.lane===z.lane&&e.p>=z.c0+0.1&&e.p-e.def.r*0.5<=z.c1){ const dd=z.dps*dt*elemMult(z.el,e.def.el); e.hp-=dd; e.ffAcc=(e.ffAcc||0)+dd; e.ffT=(e.ffT||0)+dt;
       if(e.ffT>=0.5){ emit('burnTick',{e,dmg:e.ffAcc}); e.ffT=0; e.ffAcc=0; } if(e.hp<=0) killEnemy(e); } }
   if(G.pink.length){ G.pink=G.pink.filter(z=>z.until>G.t);   // 93 版：喷墨章鱼（宠物）的墨区里敌人变慢
-    for(const z of G.pink) for(const e of G.enemies) if(!e.dead&&!isFly(e)&&e.lane===z.lane&&e.p>=z.c0&&e.p<=z.c1+0.3){ e.slowK = e.slow>0 ? Math.min(e.slowK||0.85, z.k) : z.k; e.slow=Math.max(e.slow||0, 0.15); } }
+    for(const z of G.pink) if(!z.from || G.t>=z.from) for(const e of G.enemies) if(!e.dead&&!isFly(e)&&e.lane===z.lane&&e.p>=z.c0&&e.p<=z.c1+0.3){ e.slowK = e.slow>0 ? Math.min(e.slowK||0.85, z.k) : z.k; e.slow=Math.max(e.slow||0, 0.15); } }
   // 怪物
   for(const e of G.enemies){
     if(e.dead) continue;
@@ -978,12 +1011,14 @@ function update(dt){
           const hurt = q => { if(q.evoBusy) return; q.hp-=e.def.atk*(e.lv?1+e.def.grow.atk*e.lv:1)*(e.def.range && q.def.shellP ? q.def.shellP : 1); q.flash=0.12; if(q.hp<=0 && !q.dead){ q.dead=true; G.stats.lost=(G.stats.lost||0)+1; emit('petdeath',{pet:q}); G.fx.push({kind:'pop',lane:q.lane,p:q.col+0.5,t:0,life:0.4,color:'#ccc'}); } };   // 91 版：背壳蜥（宠物）挡远程
           if(t.type==='crate'){ e.bite=0.15; emit(e.def.range?'breath':'propBite',{e,c:t,pets:[]}); damageProp(t, e.def.atk, false); }
           else if(e.def.range){ const wall=pb?pb.col:-1, hits=G.pets.filter(p=>!p.dead&&p.lane===e.lane&&p.def.shape!=='mine'&&p.col>wall&&inReach(p.col));   // 喷火：范围内的宠物都烧到；道具后面的烧不到
-            e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt); }
+            e.bite=0.15; emit('breath',{e,pets:hits}); hits.forEach(hurt);
+            hits.forEach(q=>{ if(q.def.shellBack && !e.dead){ hitEnemy(e, e.def.atk*(e.lv?1+e.def.grow.atk*e.lv:1)*q.def.shellBack, 'none', {src:q}); emit('thorns',{e, pet:q, reflect:true}); } }); }   // 97 版：背壳蜥 3 星远程反弹 50%
           else { e.bite=0.15; emit('bite',{e,pet:t}); hurt(t);
-            if(t.def.thorns && !e.dead){ hitEnemy(e, t.def.thorns, 'none', {src:t}); emit('thorns',{e, pet:t}); }
+            if(t.def.thorns && !e.dead){ hitEnemy(e, t.def.thorns, 'none', {src:t, burn:t.def.thornsBurn||null}); emit('thorns',{e, pet:t}); }   // 97 版：赤甲虫 3 星反伤带灼烧
             if(t.def.reflect && !e.dead && !t.dead){ hitEnemy(e, e.def.atk*(e.lv?1+e.def.grow.atk*e.lv:1)*t.def.reflect, 'none', {src:t}); emit('thorns',{e, pet:t, reflect:true}); }   // 96 版：硬壳南瓜 3 星，被咬反弹 20%   // 91 版：赤甲虫（宠物）带刺反伤
             if(e.def.poison && !t.dead){ const fresh=!t.poison; t.poison={dps:e.def.poison.dps, t:e.def.poison.t}; emit('poison',{pet:t, fresh}); }
-            if(t.def.sticky){ e.sticky=t.def.sticky.t; e.stickyK=t.def.sticky.k; }   // 73 版：咬了厚壳蜗的怪变慢
+            if(t.def.sticky){ e.sticky=t.def.sticky.t; e.stickyK=t.def.sticky.k; }
+            if(t.def.glue && !e.dead){ e.glueN=(e.glueN||0)+1; if(e.glueN>=t.def.glue.n){ e.glueN=0; e.held=Math.max(e.held||0, knockable(e)?t.def.glue.t:t.def.glue.big); e.windup=0; emit('petGlue',{e, pet:t}); } }   // 97 版：厚壳蜗 3 星咬满 3 口粘住 1.5 秒   // 73 版：咬了厚壳蜗的怪变慢
             if(e.def.chain){ const C=e.def.chain, list=G.pets.filter(p=>p!==t&&!p.dead&&p.def.shape!=='mine'&&Math.abs(p.lane-t.lane)<=1&&Math.abs(p.col-t.col)<=1).slice(0,C.n);   // 第3章角色 v1：飘电水母放电
               list.forEach(p=>{ hurtPet(p, C.dmg); p.stun=Math.max(p.stun||0, C.stun); p.zap=C.stun; }); emit('zap',{e, pet:t, list}); }
             if(e.def.boss && e.def.boss.cleave){ const side=G.pets.filter(p=>!p.dead&&p.col===t.col&&Math.abs(p.lane-t.lane)===1&&p.def.shape!=='mine');   // 70 版：Boss 重击，同一列上下两路也受伤
