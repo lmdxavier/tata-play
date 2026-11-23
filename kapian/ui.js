@@ -22,7 +22,7 @@ const SND = { ctx: null, buf: {}, on: Q.get('mute') !== '1' };
 window.SND_COUNT = 0;
 try {
   SND.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  for (const n of SNDS) fetch('snd/' + n + '.mp3?v=v1-1123a').then(r => r.arrayBuffer()).then(b => SND.ctx.decodeAudioData(b)).then(d => { SND.buf[n] = d; }).catch(() => {});
+  for (const n of SNDS) fetch('snd/' + n + '.mp3?v=v2-1124a').then(r => r.arrayBuffer()).then(b => SND.ctx.decodeAudioData(b)).then(d => { SND.buf[n] = d; }).catch(() => {});
 } catch (e) {}
 function unlock() { if (SND.ctx && SND.ctx.state !== 'running') SND.ctx.resume().catch(() => {}); }
 for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock, true);
@@ -38,7 +38,7 @@ function sfx(n, vol) {
 // ---------- 图片 ----------
 const IMG = {};
 function img(n) {
-  if (!IMG[n]) { IMG[n] = new Image(); IMG[n].src = 'img/' + n + '.png?v=v1-1123a'; IMG[n].onload = () => { dirty = true; refreshSlots(); }; }
+  if (!IMG[n]) { IMG[n] = new Image(); IMG[n].src = 'img/' + n + '.png?v=v2-1124a'; IMG[n].onload = () => { dirty = true; refreshSlots(); }; }
   return IMG[n];
 }
 const ICON = { p: 'Bird_Snow', r: 'rock', a: 'meat' };

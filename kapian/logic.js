@@ -476,17 +476,39 @@ function strike(S, m) {
   }
   if (t.kind === 'bomb') { m.hp = 0; ev(S, { t: 'die', id: m.id, src: 'self', boom: true }); }
 }
+// 怪寻路：从「能打到主角的位置」反向算代价；同伴占的格子 +4（会挪开但不一定），
+// 所以前面被同伴堵住时，绕一两步就能到别的攻击位的怪会绕过去包抄，而不是排队干等。
+function attackCost(S, m) {
+  const W = CFG.W, H = CFG.H, def = MON[m.type], C = new Array(W * H).fill(999), p = S.p;
+  const pass = (x, y) => { if (wall(S, x, y)) return -1; const u = unitAt(S, x, y); if (!u || u === m) return 0; if (u.k === 'm') return 4; return -1; };
+  const q = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = pass(x, y); if (c < 0 || !canHit(S, m, x, y)) continue;
+    let v = c + (def.ranged && Math.abs(x - p.x) + Math.abs(y - p.y) <= 1 ? 3 : 0);
+    C[y * W + x] = v; q.push(y * W + x);
+  }
+  // 小棋盘，简单的反复松弛（Dijkstra 的朴素版）
+  while (q.length) {
+    let bi = 0; for (let i = 1; i < q.length; i++) if (C[q[i]] < C[q[bi]]) bi = i;
+    const k = q.splice(bi, 1)[0], x = k % W, y = (k / W) | 0;
+    for (const d of DIRS) {
+      const a = x + d[0], b = y + d[1], c = pass(a, b); if (c < 0) continue;
+      const nv = C[k] + 1 + c; if (nv < C[b * W + a]) { C[b * W + a] = nv; q.push(b * W + a); }
+    }
+  }
+  return C;
+}
 function aiMove(S, m) {
   const def = MON[m.type];
   if (def.slow && S.turn % 2) return;
-  const D = distMap(S), W = CFG.W, steps = def.spd || 1;
+  const W = CFG.W, steps = def.spd || 1;
   for (let s = 0; s < steps; s++) {
-    const score = (x, y) => (canHit(S, m, x, y) ? 0 : 1000) + D[y * W + x] + (def.ranged && D[y * W + x] <= 1 ? 3 : 0);
-    let best = null, bs = score(m.x, m.y);
+    const C = attackCost(S, m);
+    let best = null, bs = C[m.y * W + m.x];
     for (const d of DIRS) {
       const a = m.x + d[0], b = m.y + d[1];
       if (!free(S, a, b)) continue;
-      const sc = score(a, b);
+      const sc = C[b * W + a];
       if (sc < bs) { bs = sc; best = [a, b]; }
     }
     if (!best) break;
