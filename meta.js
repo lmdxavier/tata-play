@@ -446,7 +446,10 @@ function drawSceneBg(r, horizonY){
 //    远的层按视差走得少。每只宠物的前景构图一样。
 // 图层：tools/make_bg31.py 生成到 assets/bg/（Simple Sidescroll 分层图层 + 2D Minimal Environment 1 的树和灌木）。
 // 单位 u = 角色高 / 160；每层按“原图 1 像素 ≤ 屏幕 1 像素”画（天空和模糊的前景除外）。
-const bgi = n => img('bg/'+n+'.png');
+// 98 版：宠物页背景按玩家当前章节换（用户 2026-11-23，选「按当前章节」）：第 1 章 bg/、第 2 章 bg2/、第 3 章 bg3/（tools/make_bg98.py），
+//   画法不变，主题表 PBG_THEME 只换目录、图层摆放、暗角颜色、地面底色。营地仍只读 bg/。
+let BG_DIR='bg';
+const bgi = n => img(BG_DIR+'/'+n+'.png');
 const BGV = { S:1, ox:0, oy:0 };   // 当前离屏画布：设计坐标 → 离屏像素 的缩放和偏移
 const snapX = x => (Math.round(x*BGV.S+BGV.ox)-BGV.ox)/BGV.S;   // 对齐到整像素
 const snapW = w => Math.max(1, Math.round(w*BGV.S))/BGV.S;
@@ -461,7 +464,7 @@ const BGL = {
 };
 // 平铺长条：宽度和每一份的起点都对齐整像素，首尾正好相接
 function bgStrip(L, cx, fy, u, cam, r){
-  const im=bgi(L.n); if(!ok(im)) return;
+  if(!L) return; const im=bgi(L.n); if(!ok(im)) return;
   const h=L.h*u, w=snapW(im.naturalWidth*h/im.naturalHeight), y=fy+L.y*u-h;
   let x0=snapX(cx-cam*L.p*u+(L.off||0)*u); x0-=Math.ceil((x0-r.x)/w)*w;
   ctx.globalAlpha=L.a; for(let x=x0; x<r.x+r.w; x+=w) ctx.drawImage(im, x, y, w, h); ctx.globalAlpha=1;
@@ -473,6 +476,16 @@ const BG_PROPS = {
   mid:  {p:0.55, y:-4, sway:0.012, list:[['tree3',-170,150],['tree4',190,132],['tree1',430,120],['tree2',-480,140],['tree6',715,145],['tree5',-735,115],['tree4',-915,128],
          ['bush3',-118,34],['bush1',128,36],['bush2',305,28],['bush4',-335,30],['bush3',570,32],['bush1',-600,30],['bush2',860,30]]},
 };
+const PBG_THEME = {
+  1:{dir:'bg',  L:BGL, P:BG_PROPS, order:['ridge','haze1','farP','haze2'], vig:'74,36,22', vigA:0.42, side:'58,28,18', sideA:0.38, fill:'#6b3f1f', sky:'#f0b26a', ray:1},   // 黄昏森林（原样）
+  2:{dir:'bg2', L:BGL, P:BG_PROPS, order:['ridge','haze1','farP','haze2'], vig:'96,46,78', vigA:0.26, side:'84,38,68', sideA:0.28, fill:'#5f8f5c', sky:'#f4dbe8', ray:0.8},   // 樱粉花谷：同一套摆放，粉樱树、青绿草地
+  3:{dir:'bg3', L:Object.assign({}, BGL, {farP:{n:'far_pine', y:-50, h:46, p:0.1, a:1}, ridge:{n:'far_ridge', y:-8, h:48, p:0.08, a:1}, haze1:{n:'haze', y:-52, h:14, p:0.06, a:0.5},
+       haze2:null, haze3:{n:'haze', y:-6, h:12, p:0.3, a:0.25}, grass:{n:'grass', y:-3, h:15, p:0.8, a:0.95}}),   // 阳光海滩：远岛 → 海面（盖住岛底）→ 浪花线 → 沙地
+     P:{far:{p:0.22, y:-30, sway:0, list:[['ftree2',-230,20],['ftree1',140,9],['ftree3',420,11],['ftree1',-560,8,1],['ftree2',700,18,1]]},   // 海里的礁石（一块停着海鸥）
+        mid:{p:0.55, y:-4, sway:0.012, list:BG_PROPS.mid.list.concat([['hill1',-60,14],['hill1',380,12,1],['hill2',-410,26]])}},   // 棕榈 + 热带灌木 + 椰子、沙岩
+     order:['farP','ridge','haze1'], vig:'18,64,96', vigA:0.2, side:'14,52,74', sideA:0.26, fill:'#b98a62', sky:'#a8def6', ray:0.55},
+};
+const petTheme = () => PBG_THEME[(window.CHAPTER_MAP && CHAPTER_MAP.ch)||1] || PBG_THEME[1];
 function bgProp(name, sx, by, h, sway, ph, flip, t){
   const im=bgi(name); if(!ok(im)) return; const w=im.naturalWidth*h/im.naturalHeight;
   ctx.save(); ctx.translate(sx, by);
@@ -521,52 +534,52 @@ function camUpdate(r, u, t){
   return {q:MT.camQ, D, cam:MT.camQ*D + Math.sin(t/9)*6};
 }
 function drawDepthBg(r, cx, fy, charH, lay){
-  const u=charH/160, t=performance.now()/1000, {q, D, cam}=camUpdate(r, u, t);
+  const u=charH/160, t=performance.now()/1000, {q, D, cam}=camUpdate(r, u, t), T=petTheme();
   // 前景底边固定在面板中间停靠位（面板滑下去进详情时前景不动）
   const bottom = lay.land ? r.y+r.h : lay.snaps.mid+12;
   const s=bgBegin('bg', r);
-  try{
+  try{ BG_DIR=T.dir;   /* 98 版：在 try 里设，出错也会在 finally 恢复 */
     const sky=bgi('sky');
     if(ok(sky)){ const hz=fy-30*u, h=Math.max(hz-r.y+30*u, 120*u), w=snapW(sky.naturalWidth*h/sky.naturalHeight); let x0=snapX(cx-w*0.33-cam*0.03*u); x0-=Math.ceil((x0-r.x)/w)*w;
       for(let x=x0;x<r.x+r.w;x+=w) ctx.drawImage(sky, x, hz+30*u-h, w, h); }
-    else { ctx.fillStyle='#f0b26a'; ctx.fillRect(r.x,r.y,r.w,r.h); }
+    else { ctx.fillStyle=T.sky; ctx.fillRect(r.x,r.y,r.w,r.h); }
     // 云：慢慢往右飘
     for(const [n,x,y,h,sp] of [['cloud2',-260,-150,26,2.2],['cloud1',120,-178,30,1.6],['cloud4',420,-140,24,2.6],['cloud3',-560,-170,16,1.9],['cloud1',760,-160,22,2.0]]){
       const im=bgi(n); if(!ok(im)) continue; const hh=h*u, w=im.naturalWidth*hh/im.naturalHeight;
       const wx=((x+t*sp-cam*0.05)%PER+PER*1.5)%PER-PER/2, sx=cx+wx*u;
       if(sx+w<r.x || sx-w>r.x+r.w) continue; ctx.globalAlpha=0.75; ctx.drawImage(im, sx-w/2, fy+y*u-hh, w, hh); ctx.globalAlpha=1; }
-    for(const k of ['ridge','haze1','farP','haze2']) bgStrip(BGL[k], cx, fy, u, cam, r);
-    bgBand(BG_PROPS.far, cx, fy, u, cam, r, t);
-    bgStrip(BGL.haze3, cx, fy, u, cam, r);
-    bgBand(BG_PROPS.mid, cx, fy, u, cam, r, t);
+    for(const k of T.order) bgStrip(T.L[k], cx, fy, u, cam, r);
+    bgBand(T.P.far, cx, fy, u, cam, r, t);
+    bgStrip(T.L.haze3, cx, fy, u, cam, r);
+    bgBand(T.P.mid, cx, fy, u, cam, r, t);
     // 光束（天上的光，不随镜头走）+ 光点
     ctx.save(); ctx.globalCompositeOperation='screen';
     for(const [n,dx,sc,ph] of [['ray1',-118,1.0,0],['ray2',70,0.9,2.1],['ray1',175,0.75,4.2]]){ const im=bgi(n); if(!ok(im)) continue;
-      const h=(fy-r.y+10*u)*sc, w=im.naturalWidth*h/im.naturalHeight; ctx.globalAlpha=0.38+0.14*Math.sin(t*0.6+ph);
+      const h=(fy-r.y+10*u)*sc, w=im.naturalWidth*h/im.naturalHeight; ctx.globalAlpha=(0.38+0.14*Math.sin(t*0.6+ph))*T.ray;
       ctx.drawImage(im, cx+dx*u-w*0.3, fy+10*u-h, w, h); }
     const mo=bgi('motes'); if(ok(mo)){ const h=130*u, w=mo.naturalWidth*h/mo.naturalHeight;
       for(const [dx,sp,ph] of [[-150,7,0],[-20,5,1.7],[110,6,3.1],[240,8,4.4],[-280,6,2.2]]){
         const yy=((t*sp+ph*40)%(h/u))*u, x=cx+dx*u;
         for(const k of [0,1]){ const y=fy-yy+k*h; if(y-h>fy || y<r.y) continue; ctx.globalAlpha=0.35+0.3*Math.sin(t*1.3+ph+k); ctx.drawImage(mo, x-w/2, y-h, w, h); } } }
     ctx.restore();
-    bgStrip(BGL.grass, cx, fy, u, cam, r);
+    bgStrip(T.L.grass, cx, fy, u, cam, r);
     const gd=bgi('ground');
     if(ok(gd)){ const sc=u/3.2, w=snapW(gd.naturalWidth*sc), h=gd.naturalHeight*sc, top=fy-8*u-240*sc; let x0=snapX(cx-cam*u); x0-=Math.ceil((x0-r.x)/w)*w;
       for(let x=x0;x<r.x+r.w;x+=w) ctx.drawImage(gd, x, top, w, h);
-      if(top+h<r.y+r.h){ ctx.fillStyle='#6b3f1f'; ctx.fillRect(r.x, top+h-1, r.w, r.y+r.h-top-h+1); } }
+      if(top+h<r.y+r.h){ ctx.fillStyle=T.fill; ctx.fillRect(r.x, top+h-1, r.w, r.y+r.h-top-h+1); } }
     // 角色两侧的灌木（和地面同一深度，一步走一整屏）
     bgPaged(1, D, q, u, o=>{ bgProp('bush3', cx-112*u+o, fy+6*u, 40*u, 0.018, 0.4, 0, t); bgProp('bush1', cx+118*u+o, fy+8*u, 36*u, 0.018, 2.0, 0, t); });
     // 暖色暗角
-    const vg=ctx.createLinearGradient(0, r.y, 0, r.y+(fy-r.y)*0.55); vg.addColorStop(0,'rgba(74,36,22,.42)'); vg.addColorStop(1,'rgba(74,36,22,0)');
+    const vg=ctx.createLinearGradient(0, r.y, 0, r.y+(fy-r.y)*0.55); vg.addColorStop(0,`rgba(${T.vig},${T.vigA})`); vg.addColorStop(1,`rgba(${T.vig},0)`);
     ctx.fillStyle=vg; ctx.fillRect(r.x, r.y, r.w, fy-r.y);
     for(const sd of [0,1]){ const x0=sd?r.x+r.w:r.x, wv=Math.min(r.w*0.22, 90*u), g=ctx.createLinearGradient(x0,0,x0+(sd?-wv:wv),0);
-      g.addColorStop(0,'rgba(58,28,18,.38)'); g.addColorStop(1,'rgba(58,28,18,0)'); ctx.fillStyle=g; ctx.fillRect(sd?x0-wv:x0, r.y, wv, r.h); }
-  } finally { bgEnd(s); }
-  return {u, cam, q, D, bottom, t};
+      g.addColorStop(0,`rgba(${T.side},${T.sideA})`); g.addColorStop(1,`rgba(${T.side},0)`); ctx.fillStyle=g; ctx.fillRect(sd?x0-wv:x0, r.y, wv, r.h); }
+  } finally { bgEnd(s); BG_DIR='bg'; }
+  return {u, cam, q, D, bottom, t, dir:T.dir};
 }
 // 前景（画在角色之后）：模糊的深色大树、灌木、底部波浪
 function drawDepthFg(r, cx, fy, info){
-  const {u, cam, q, D, bottom, t}=info, s=bgBegin('fg', r);
+  const {u, cam, q, D, bottom, t}=info, s=bgBegin('fg', r); BG_DIR=info.dir||'bg';
   try{
     { const im=bgi('fg_grass'); if(ok(im)){ const h=40*u, w=snapW(im.naturalWidth*h/im.naturalHeight); let x0=snapX(cx-cam*1.2*u-w*0.6); x0-=Math.ceil((x0-r.x)/w)*w;
       for(let x=x0;x<r.x+r.w;x+=w) ctx.drawImage(im, x, bottom-h-14*u, w, h); } }
@@ -578,7 +591,7 @@ function drawDepthFg(r, cx, fy, info){
     const wv=bgi('fg_wave');
     if(ok(wv)){ const h=34*u, w=snapW(wv.naturalWidth*h/wv.naturalHeight); let x0=snapX(cx-cam*1.4*u-w*0.31); x0-=Math.ceil((x0-r.x)/w)*w;
       for(let x=x0;x<r.x+r.w;x+=w) ctx.drawImage(wv, x, bottom-h, w, h); }
-  } finally { bgEnd(s); }
+  } finally { bgEnd(s); BG_DIR='bg'; }
 }
 
 // ---------- 22～23 版：启程英雄厅堂那种面板顶边（用户 2026-11-12；21 版凭印象做错，22 版逐像素量截图重做） ----------

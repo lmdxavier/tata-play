@@ -499,7 +499,7 @@ const CHAPTER_MAP = (()=>{
   });
 
   const API = { draw, drawOverlay, chestState, markCleared, reset, preset, gotoChapter, onStart:(id)=>{ if(typeof startBattle==='function') startBattle(id); },
-    get progress(){ return JSON.parse(JSON.stringify(P)); }, S };
+    get progress(){ return JSON.parse(JSON.stringify(P)); }, get ch(){ return P.ch; }, S };   /* 98 版：宠物页背景按当前章节 */
   return API;
 })();
 window.CHAPTER_MAP = CHAPTER_MAP;

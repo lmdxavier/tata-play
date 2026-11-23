@@ -1280,6 +1280,15 @@ function rangeCells(def, lane, col){
   const line=(to)=>{ for(let c=col+1;c<=Math.min(COLS-1,to);c++){ if(propAlive(cellAt(lane,c))){ block=[lane,c]; break; } out.push([lane,c]); } };
   if(def.shape==='shooter') line(COLS-1);
   else if(def.shape==='melee'){ line(col+def.reach); if(def.sweep) for(const l of [lane-1,lane+1]) for(let c=col+1;c<=Math.min(COLS-1,col+def.reach);c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 96 版：横扫的上下两路也按 reach（迅火狐 3 星前方 2 格）   // 第2章角色 v1：迅火狐横扫上下两路
+  else if(def.shape==='support' && (def.inkP||def.mudP||def.tide||def.pluck||def.lights)){   // 98 版：控场辅助按技能实际作用的格子画（原来一律画周围 3×3）
+    const rows=ls=>ls.filter(l=>inGrid(l,0)&&laneOn(l)), adj=[lane-1,lane,lane+1], all=[0,1,2,3,4,5,6,7].filter(l=>l<LANES);
+    const front=(ls,len)=>{ for(const l of rows(ls)) for(let c=col+1;c<=Math.min(COLS-1,col+len);c++) out.push([l,c]); };
+    const whole=ls=>{ for(const l of rows(ls)) for(let c=0;c<COLS;c++) out.push([l,c]); };
+    if(def.inkP) front(def.inkP.dl?adj:[lane], def.inkP.len);          // 喷墨章鱼：前方 3 / 5 格，3 星 3 路
+    else if(def.mudP) front([lane], def.mudP.dist);                     // 泥跃鱼：前方 3 格内
+    else if(def.tide) whole(def.tide.all?all:adj);                      // 奥库塔：本路和上下两路整路，3 星全场
+    else if(def.pluck) front([lane], COLS);                             // 巨喙鸟：本路前方
+    else whole(all); }                                                  // 巴隆：全场离警钟最近的几只
   else if(def.shape==='support'){ const B=(def.magnet&&def.magnet.dp>2)||(def.chime&&def.chime.dp>1) ? 2 : 1;   /* 97 版：铃尾蛇 3 星 5×3 */ for(let l=lane-1;l<=lane+1;l++) for(let c=col-B;c<=col+B;c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 96 版：灰原喵 2 星 5×3   // 菇背羊（宠物）回血范围
   else if(def.shape==='mine'){ const B=def.blast||1; for(let l=lane-1;l<=lane+1;l++) for(let c=col-B;c<=col+B;c++) if(inGrid(l,c)) out.push([l,c]); }   // 96 版：波姆 3 星 5×3
   return {out, block};
