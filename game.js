@@ -968,7 +968,7 @@ function update(dt){
         G.fx.push({kind:'bell',lane:e.lane,t:0,life:1.2});
         G.fx.push({kind:'banner',text:`第 ${e.lane+1} 路的警钟响了`,t:0,life:1.6,color:'#ffd25a'});
         G.enemies.forEach(o=>{ if(o.dead||o.lane!==e.lane) return; if(o.def.boss){ o.p=Math.max(o.p,3); hitEnemy(o, 1000, 'none'); } else killEnemy(o,true); });   // 70 版：警钟消灭不了 Boss，只把它打回第 3 格、扣 1000
-      } else if(!G.over && !G.demo){ G.over={win:false}; G.overT=0; emit('lose'); }
+      } else if(!G.over && !G.demo){ const lf=Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration)); G.over={win:false, coins:Math.round((100+G.kills*5)*lf)}; G.overT=0; emit('lose'); }   // 95 版：失败按撑住的时间给 30%～80% 金币（结算一直这么写，原来实际不入账）
     }
   }
   // 清理

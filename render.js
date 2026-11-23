@@ -624,7 +624,7 @@ HOOKS.push((type, d)=>{
     case 'bell': shakeDir(0.05,0.35); sfx('bell'); { const s=L.toScreen(d.lane,-0.45); vfxXY('ring_shockwave_white', s.x, s.y, 1.6); } break;
     case 'resonance': break;   // 75 版：3 连的声音改由 bonus.js 在依次点亮时播「三连-传导」
     case 'win': bankShards(); bankCoins(); COMBO.play('胜利', {x:W/2, y:H*0.3, screen:true}); break;
-    case 'lose': bankShards(); COMBO.play('失败', null); break;
+    case 'lose': bankShards(); bankCoins(); COMBO.play('失败', null); break;
     case 'ui': sfx('ui'); break;
     case 'deny': sfx('deny'); { const c=CARDFX[d.key]=CARDFX[d.key]||{}; c.shake=0.3; if(d.why==='energy') DENY.energy=0.35; } break;
     case 'mute': SND.muted=!SND.muted; break;
@@ -1430,7 +1430,7 @@ function drawResult2(){
   } else { const f=Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration)); text(`撑到 ${Math.floor(G.t)} 秒，仍拿到 ${Math.round(f*100)}% 奖励`, cx, top+90, 15, '#fff'); }
   // 奖励：一排方格
   const f = o.win ? 1 : Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration));
-  const rewards=[['COIN', o.win && o.coins ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow', null, null, 'coin']];   // 94 版：去掉经验格   // 70 版：通关时金币按实际入账（含章节宝箱）
+  const rewards=[['COIN', o.coins!=null ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow', null, null, 'coin']];   // 94 版：去掉经验格   // 70 版：通关时金币按实际入账（含章节宝箱）
   if(o.win && o.starGain) rewards.push(['STAR', o.starGain, 'Purple', null, null, 'star']);
   if(o.win && o.chest) rewards.push(['CHEST', 1, 'Purple', null, null, 'chest']);   // 74 版：章节宝箱，回地图打开
   for(const [k,n] of Object.entries(G.shards)) rewards.push([null, n, null, null, k]);

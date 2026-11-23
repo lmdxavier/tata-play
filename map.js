@@ -366,7 +366,9 @@ const CHAPTER_MAP = (()=>{
         text('查看敌人', bx+lw+(bw-lw)/2+2*u, cy+1, 13*u, MT_UI.txt, 'center', 800, false);
         addHit({x:bx-4*u,y:by-6*u,w:bw+8*u,h:bh+12*u}, ()=>{ sfx('ui'); S.foes={id:l.id, list:foes}; }); } }
     // 第三行：奖励 + 开始按钮
-    const rw = done ? l.again : l.first;
+    // 95 版：「再次通关」的金币按实际算法估（100 + 本关怪数 × 5，取整到 10），原来 map_data 里的 20～50 是旧占位、和实际对不上
+    const lvN=((window.LEVELS||{})[l.id]||{}).spawns, estC=lvN ? Math.round((100+lvN.length*5)/10)*10 : null;
+    const rw = done ? (l.again||[]).map(r=>r[0]==='coin'&&estC ? ['coin',estC] : r) : l.first;
     if((rw||[]).length) text(done?'再次通关':'首次通关', x+18*u, y+(102-cut)*u, 12*u, MT_UI.sub, 'left', 800, false);
     (rw||[]).forEach((r,i)=>rewardIcon(r, x+(40+i*62)*u, y+(142-cut)*u, 42*u));
     const bw=132*u, bh=54*u, bx=x+w-bw-14*u, by=y+h-bh-16*u;
