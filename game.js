@@ -989,13 +989,13 @@ function collectOrb(o){ if(o.got) return; o.got=true; emit('collect',{o}); G.ene
 
 function finish(){
   const stars = 1 + (G.bellsUsed===0?1:0) + (!(G.stats.lost>0)?1:0);   // 65 版：第三颗星 = 没有宠物倒下（原来是「触发火系 3 连」，前几关没有火系宠物拿不到）
-  const exp=400, coins=100+G.kills*5;
+  const coins=100+G.kills*5;   // 94 版：去掉经验（没有用处，用户 2026-11-23）
   // 65 版：每关首次通关只给一样东西（关卡设计.md）：宠物碎片（数量固定）或一个新机制
   const rw = DATA.level.first ? DATA.level.reward : null; let unlock=null;
   if(rw && rw.shard) G.shards[rw.shard[0]]=(G.shards[rw.shard[0]]||0)+rw.shard[1];
   const chest=!!(rw && rw.chest);   // 74 版（用户 2026-11-14）：章节终关宝箱不再直接并进结算金币，回地图点「终关奖励」自己打开领取（map.js）
   if(rw && rw.unlock && !PROFILE.unlock[rw.unlock]){ PROFILE.unlock[rw.unlock]=1; profileSave(); unlock=rw.unlock; }
-  G.over={win:true, stars, exp, coins: coins+(G.loot.gold||0), starGain:(G.loot.star||0), chest, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
+  G.over={win:true, stars, coins: coins+(G.loot.gold||0), starGain:(G.loot.star||0), chest, unlock, summon: rw && rw.shard ? rw.shard[0] : null}; G.overT=0; emit('win',{stars});
 }
 
 // ---------- 教学（65 版；玩法与界面.md「第 1 章关卡与教学」）----------

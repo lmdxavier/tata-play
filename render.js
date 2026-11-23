@@ -238,10 +238,11 @@ function shardIcon(key, cx, cy, size){
 // 碎片格（结算用）：头像框 + 右上角本局获得数 + 下方「已收集/召唤所需」进度条
 function shardCard(key, gained, x, y, s){
   shardIcon(key, x+s/2, y+s/2, s*1.08);
-  text(String(gained), x+s/2, y+s*0.86, s*0.24, '#fff');   // 和金币、经验一样：数字在下沿
+  text(String(gained), x+s/2, y+s*0.86, s*0.24, '#fff');   // 和金币一样：数字在下沿
   const have=(G.shardsBefore&&G.shardsBefore[key]||0)+gained, need=rarOf(key).need, bh=12;
-  hpBar(x+s/2, y+s+5, s+6, Math.min(1,have/need), 'green', bh);
-  text(PROFILE.owned[key] ? (starOpen(key)&&have>=need?'可升星':`${have}/${need}`) : have>=need?'可召唤':`${have}/${need}`, x+s/2, y+s+5+bh/2, 10, have>=need&&(!PROFILE.owned[key]||starOpen(key))?'#ffe14d':'#fff');
+  const capped=PROFILE.owned[key] && !starOpen(key);   // 94 版：到开放上限显示「已达上限」
+  hpBar(x+s/2, y+s+5, s+6, capped?1:Math.min(1,have/need), 'green', bh);
+  text(PROFILE.owned[key] ? (capped?'已达上限':have>=need?'可升星':`${have}/${need}`) : have>=need?'可召唤':`${have}/${need}`, x+s/2, y+s+5+bh/2, 10, have>=need&&(!PROFILE.owned[key]||starOpen(key))?'#ffe14d':'#fff');
 }
 const MONPORT = {};   // 怪物头像：碎片奖励、碎片飞行、顶部碎片计数都用它
 function makeMonPortraits(){
@@ -1429,7 +1430,7 @@ function drawResult2(){
   } else { const f=Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration)); text(`撑到 ${Math.floor(G.t)} 秒，仍拿到 ${Math.round(f*100)}% 奖励`, cx, top+90, 15, '#fff'); }
   // 奖励：一排方格
   const f = o.win ? 1 : Math.max(0.3,Math.min(0.8,G.t/DATA.level.duration));
-  const rewards=[['COIN', o.win && o.coins ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow'], ['IconMisc/Icon_Star_On', Math.round(400*f), 'Blue']];   // 70 版：通关时金币按实际入账（含章节宝箱）
+  const rewards=[['COIN', o.win && o.coins ? o.coins : Math.round((100+G.kills*5)*f), 'Yellow', null, null, 'coin']];   // 94 版：去掉经验格   // 70 版：通关时金币按实际入账（含章节宝箱）
   if(o.win && o.starGain) rewards.push(['STAR', o.starGain, 'Purple', null, null, 'star']);
   if(o.win && o.chest) rewards.push(['CHEST', 1, 'Purple', null, null, 'chest']);   // 74 版：章节宝箱，回地图打开
   for(const [k,n] of Object.entries(G.shards)) rewards.push([null, n, null, null, k]);
@@ -1437,7 +1438,7 @@ function drawResult2(){
   text('奖励', cx, top+226, 14, '#cfe3ff', 'center', 800, false);
   const rs=Math.min(64,(W-40)/rewards.length-10), rx0=cx-(rewards.length*(rs+10)-10)/2;
   REWARD_RECTS.length=0;
-  rewards.forEach(([ic,n,col,nm,mk,kd],i)=>{ const x=rx0+i*(rs+10), y=top+246; REWARD_RECTS.push({x,y,w:rs,h:rs+20,kind:mk?'shard':kd||(i===0?'coin':'exp'),key:mk,n});
+  rewards.forEach(([ic,n,col,nm,mk,kd],i)=>{ const x=rx0+i*(rs+10), y=top+246; REWARD_RECTS.push({x,y,w:rs,h:rs+20,kind:mk?'shard':kd||'coin',key:mk,n});
     const k=clamp01((G.overT-1.3-i*0.1)/0.25); if(k<=0) return; ctx.save(); const sc=ease.outBack(k,2); ctx.translate(x+rs/2,y+rs/2); ctx.scale(sc,sc); ctx.translate(-(x+rs/2),-(y+rs/2));
     if(mk) shardCard(mk, n, x, y, rs);
     else { nine(gui('Frame/ItemFrame03_Single_'+col), x, y, rs, rs, 40, rs*0.24); drawImgC(ic==='COIN'?coinIcon():ic==='STAR'?icon('Star_Altar_05_Star'):ic==='CHEST'?img('map/chest.png'):gui(ic), x+rs/2, y+rs*0.44, rs*(ic==='CHEST'?0.7:0.56));
@@ -1460,9 +1461,8 @@ function drawRewardTip(){
   if(q.kind==='chest'){ title='章节宝箱'; rows=['回到地图，点「终关奖励」打开']; }
   else if(q.kind==='shard'){ const rr0=rarOf(q.key), have=(G.shardsBefore&&G.shardsBefore[q.key]||0)+q.n;
     title=shardName(q.key)+' 碎片'; rows=[`${rr0.cn} · 已收集 ${have}/${rr0.need}`, PROFILE.owned[q.key] ? (!starOpen(q.key)?`已收集 ${have} 片，升星暂未开放`:have>=rr0.need?'已经可以升星':`再收集 ${rr0.need-have} 片可升星`) : (have>=rr0.need?'已经可以召唤成宠物':`再收集 ${rr0.need-have} 片可召唤成宠物`)]; }
-  else if(q.kind==='coin'){ title='金币'; rows=['用来购买道具和进化宠物']; }
   else if(q.kind==='star'){ title='星星'; rows=['本章全部通关的奖励']; }
-  else { title='经验'; rows=['分给本局出战的宠物，用来升级']; }
+  else { title='金币'; rows=['用来购买道具和进化宠物']; }
   const w=Math.min(220,W-20), h=24+16+rows.length*18; let x=q.x+q.w/2-w/2, y=q.y-h-10; if(x<8) x=8; if(x+w>W-8) x=W-8-w;
   const bg=tinted('gui/Frame/BasicFrame_Round24.png','#121729'); if(bg){ ctx.globalAlpha=0.92; nine(bg, x, y, w, h, 20, 14); ctx.globalAlpha=1; }
   text(title, x+12, y+18, 14, '#ffe14d', 'left'); rows.forEach((s,i)=>text(s, x+12, y+40+i*18, 12, '#dfe7ff', 'left', 800, false));

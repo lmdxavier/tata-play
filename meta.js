@@ -927,13 +927,13 @@ function cardCorner(x, y, w, h, u){
 function drawCardBar(e, x, y, w, h, u){
   const bx=x+CARD_BAR.side*u, bw=w-CARD_BAR.side*2*u, bh=CARD_BAR.h*u, by=y+h-CARD_BAR.bottom*u-bh, k=bh/32;
   const have=shardHave(e.key), need=RAR[e.rar].need, maxed=e.owned && (e.stars||1)>=5;
-  const up=e.owned && canStarUp(e.key);
-  const p=maxed?1:Math.max(0, Math.min(1, have/need)), full=maxed || up || (!e.owned && have>=need);
+  const up=e.owned && canStarUp(e.key), capped=e.owned && !maxed && !starOpen(e.key);   // 94 版：到开放上限不再显示 x/10
+  const p=(maxed||capped)?1:Math.max(0, Math.min(1, have/need)), full=maxed || up || (!e.owned && have>=need);
   mtNine4(heroT('Slider_Border_Rectangle_01_Bg', '#2a2d44'), bx, by, bw, bh, [12,12,12,12], k);
   if(p>0){ const ins=3*k, fw=Math.max(9*k, (bw-ins*2)*p);
-    mtNine4(full ? hero('Slider_Border_Rectangle_01_Fill_Yellow') : heroT('Slider_Border_Rectangle_01_Fill_White', '#6ff3ff'), bx+ins, by+ins, fw, bh-ins*2, [4,10,4,10], k); }
+    mtNine4(full ? hero('Slider_Border_Rectangle_01_Fill_Yellow') : heroT('Slider_Border_Rectangle_01_Fill_White', capped ? '#7c84a6' : '#6ff3ff'), bx+ins, by+ins, fw, bh-ins*2, [4,10,4,10], k); }
   mtNine4(heroT('Slider_Border_Rectangle_01_Border', '#141522'), bx, by, bw, bh, [12,12,12,12], k);
-  const t = maxed ? '满星' : up ? '可升星' : (!e.owned && have>=need) ? '可召唤' : `${have}/${need}`;
+  const t = maxed ? '满星' : capped ? '已达上限' : up ? '可升星' : (!e.owned && have>=need) ? '可召唤' : `${have}/${need}`;
   text(t, bx+bw/2, by+bh/2+1*u, 24*u, '#fff', 'center', 800, '#141522');
 }
 function drawCardSelGlow(x, y, w, h){
