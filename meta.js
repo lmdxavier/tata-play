@@ -59,13 +59,22 @@ const POS_CN = {flower:'生产 · 能量', goldfish:'远程 · 单体直射', pu
 // 升星后攻击方式的变化：照抄 docs/vfx-design.md 9.1（提案），那边改了这里跟着改
 const STAR_ROUTE = {
   // 31 版（用户 2026-11-12：不要“偶尔、少量”这种描述，概率、数值直接写出来）：数值是提案，平衡时再调
-  goldfish:['每次连发 2 颗水弹（同一路）','命中溅射周围 0.5 格，溅射伤害 40%'],
+  goldfish:['每次连发 2 颗水弹（同一路）','溅射同一路前后 0.5 格，伤害 40%'],
   pug:['每第 4 口变重咬：伤害 ×2，击退 0.5 格','攻击范围 前方 1 格 → 1×2'],
   lizard:['喷火范围 前方 2 格 → 3 格','地面留火 2 秒，每秒 30% 伤害'],
   bomb:['装填时间 3 秒 → 2.1 秒','爆炸范围 3×3 → 5×3'],
   flower:['产能 +25%：每次 25 → 31 能量','每次产出 20% 概率双倍'],
   pumpkin:['生命 +40%：2000 → 2800','被咬时反弹 20% 伤害'],
-  fox:['横扫附带灼烧：每秒 6 点，持续 3 秒'],   // 90 版：用户 2026-11-15 定；3 星没定
+  fox:['横扫附带灼烧：每秒 6 点，持续 3 秒','横扫范围 前方 1 格 → 2 格（3 路）'],   // 90 版：2 星用户 2026-11-15 定；96 版 3 星 Claude 定
+  // 96 版：其余 28 只的 2 星（Claude 定，用户 2026-11-23「2 星也一起做」）；数值在 game.js STAR_FX，两处一起改
+  snail:['咬它的敌人变慢 30% → 50%'], mushgoat:['每次回复 80 → 120 生命'], bear:['拍击 本路 → 本路和上下两路'],
+  crab:['钳住 1.5 → 2.5 秒（精英、Boss 0.8 秒）'], turtle:['溅射范围 前后 0.5 格 → 1 格'], puffer:['炸开伤害 300 → 450'],
+  helmfish:['顶回 1 格 → 1.5 格'], jelly:['放电 最多 3 只 → 5 只'], inkocto:['喷墨 前方 3 格 → 5 格'],
+  mudfish:['陷住 1.5 → 2.5 秒（精英、Boss 0.8 秒）'], parrot:['钳住 1 → 2 秒（精英、Boss 0.5 秒）'], beast:['每损失 150 → 100 生命，攻击 +50%'],
+  kraken:['潮浪 每 18 秒 → 每 13 秒'], slime:['减速 20% → 35%'], beetle:['反伤 每口 15 → 30'], snake:['中毒 每秒 5 → 9 伤害'],
+  hornliz:['生命低于 50% → 70% 就发怒'], hornbug:['同路每只 +15% → +25%（最多 +100%）'], gull:['水弹命中减速 20%，持续 2 秒'],
+  goat:['冲撞 每 12 秒 → 每 8 秒'], cat:['收能量范围 3×3 → 5×3'], bellsnake:['攻速加成 +25% → +40%'], redbird:['俯冲伤害 40 → 56'],
+  mushsnake:['定身 1.5 秒 → 2.5 秒'], shellliz:['生命 1400 → 2000'], wildox:['冲锋 2 格 → 3 格'], toucan:['叼走 每 20 秒 → 每 14 秒'], disco:['定身 4 只 → 6 只'],
 };
 const RAR_RANK = {legend:3, epic:2, rare:1, common:0};
 // 稀有度配色：角色区 top / glow / bot 取自 Fantasy Hero 的 Collection_Detail_1~4 预制体；
@@ -141,7 +150,7 @@ const shardHave = k => (typeof OWNED!=='undefined' && OWNED[k]) || 0;
 const petVis = k => PET_SPINE[k] ? newSpine(PET_SPINE[k]) : newMon(PET_MON[k]||ENEMY_MON[k],'Idle');   // 65 版：没召唤的宠物也用它自己的样子（原来未获得的一律当怪物）
 const canSummon = k => !!DATA.pets[k] && !PROFILE.owned[k] && shardHave(k) >= RAR[DATA.pets[k].rarity||'common'].need;
 // 69 版：升星。只开放战斗里已经做出变化的星级（其余的先不让升，免得花了碎片没效果）；所需碎片数先用召唤数
-const STAR_OPEN = {goldfish:2, pug:2, flower:2, pumpkin:2, bomb:2, lizard:2, fox:2};   // 90 版：花 / 南瓜 / 波姆 / 喷火蜥 / 迅火狐开放 2 星
+const STAR_OPEN = Object.assign(Object.fromEntries(Object.keys(STAR_ROUTE).map(k=>[k, 1+STAR_ROUTE[k].length])), {});   // 96 版：开放上限 = STAR_ROUTE 写了几行（老 7 只到 3 星，其余 28 只到 2 星）；90 版是手写表
 const starNeed = k => RAR[DATA.pets[k].rarity||'common'].need;
 const starOpen = k => !!PROFILE.owned[k] && starOf(k) < (STAR_OPEN[k]||1);
 const canStarUp = k => !!DATA.pets[k] && starOpen(k) && shardHave(k) >= starNeed(k);

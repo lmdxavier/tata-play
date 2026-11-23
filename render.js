@@ -509,7 +509,8 @@ const FX = {
   // 61 版（用户 2026-11-14「Boss 死亡不需要震屏」）：精英死亡仍用 T4 的全屏顿帧，但不震屏
   death(e){ const elite=e.def.role==='elite'; COMBO.play('怪死亡', atE(e), elite?{tier:'T4', scale:1.5, noShake:true}:{freeze:[VIS.get(e)]}); },
   // 炸弹 T4：铺满 3 格 + 全屏顿帧 + 震屏
-  boom(pet){ const s=L.toScreen(pet.lane,pet.col+0.5), gy=s.y+L.cs*FEET; COMBO.play('炸弹-爆炸-T4', {x:s.x, y:gy-L.cs*0.2, gx:s.x, gy, dir:fwd()}); },
+  boom(pet){ const s=L.toScreen(pet.lane,pet.col+0.5), gy=s.y+L.cs*FEET, B=pet.def.blast||1; COMBO.play('炸弹-爆炸-T4', {x:s.x, y:gy-L.cs*0.2, gx:s.x, gy, dir:fwd()}, B>1?{scale:1.55}:undefined);   // 96 版：3 星 5×3，爆炸放大，并在前后 2 格各补一团
+    if(B>1) for(const dc of [-1.6,1.6]){ const q=feet(pet.lane, pet.col+0.5+dc); COMBO.later(0.06, ()=>COMBO.play('炸弹-爆炸-T4', {x:q.x, y:q.y-L.cs*0.2, gx:q.x, gy:q.y, dir:fwd()}, {scale:0.7, silent:true, noShake:true, tier:'T1'})); } },   // 补的两团用同一个组合缩小、不出声（vfx 里的 explosion 序列帧是深色碎块，画风不搭）
 };
 
 HOOKS.push((type, d)=>{
@@ -536,9 +537,9 @@ HOOKS.push((type, d)=>{
     case 'ringEnd': petPlay(d.pet,'Idle'); break;
     case 'melee': {
       const p=d.pet; const v=visOf(p,true); v.lunge=0.15;   // 动画已在起手时开始，这里是出手那一帧
-      if(p.key==='lizard') FX.fire(p, d.hits, p.reach>p.def.reach ? p.reach/p.def.reach : 1);   // 90 版：2 星喷 3 格，火焰按格数放大
-      else if(p.def.sweep){ const f=feet(p.lane,p.col+1.45); COMBO.play('狐爪-横扫', {x:f.x, y:f.y-L.cs*0.35, dir:fwd()}, {freeze:[v, ...d.hits.map(e=>VIS.get(e))], rot:Math.atan2(L.forward.y,L.forward.x)}); for(const e of d.hits) hitFx(e,true); }   // 第2章角色 v1：迅火狐横扫 3 路
-      else if(p.key==='bear'){ const f=feet(p.lane,p.col+1.4); COMBO.play('Boss-重击', {x:f.x, y:f.y-L.cs*0.2, gx:f.x, gy:f.y, dir:fwd()}); vfxXY('ring_shockwave_white', f.x, f.y-L.cs*0.15, 1.1); for(const e of d.hits){ FX.bite(p, e); } if(d.hits.length) shakeDir(0.03,0.2,fwd()); }   // 格鲁姆（宠物）拍击 + 击退
+      if(p.key==='lizard') FX.fire(p, d.hits, p.reach/DATA.pets.lizard.reach);   // 90 版：2 星喷 3 格，火焰按格数放大（96 版起 reach 在升星补丁里）
+      else if(p.key==='bear'){ const f=feet(p.lane,p.col+1.4), sw=p.def.sweep; COMBO.play('Boss-重击', {x:f.x, y:f.y-L.cs*0.2, gx:f.x, gy:f.y, dir:fwd()}, sw?{scale:1.3}:undefined); vfxXY('ring_shockwave_white', f.x, f.y-L.cs*0.15, sw?2.6:1.1); for(const e of d.hits){ FX.bite(p, e); } if(d.hits.length) shakeDir(0.03,0.2,fwd()); }   // 格鲁姆（宠物）拍击 + 击退；96 版 2 星拍 3 路，冲击环放大到盖住上下两路
+      else if(p.def.sweep){ const R=p.reach||1, f=feet(p.lane,p.col+1+R*0.45); COMBO.play('狐爪-横扫', {x:f.x, y:f.y-L.cs*0.35, dir:fwd()}, {scale:R>1?1.45:1, freeze:[v, ...d.hits.map(e=>VIS.get(e))], rot:Math.atan2(L.forward.y,L.forward.x)}); for(const e of d.hits) hitFx(e,true); }   // 第2章角色 v1：迅火狐横扫 3 路；96 版 3 星前方 2 格，爪痕放大
       else for(const e of d.hits){ FX.bite(p, e); if(d.heavy){ COMBO.play('咬-命中-T2', atE(e), {scale:1.5}); shakeDir(0.035,0.2,fwd()); floatText(e.lane, e.p, '重咬', '#ffb14a', 12); } }   // 咬空了不出声、不出特效；73 版：2 星重咬加大一号的咬特效 + 震屏
       break; }
     case 'projhit': FX.water(d.e); break;
@@ -546,7 +547,8 @@ HOOKS.push((type, d)=>{
     case 'snipe': if(d.e){ COMBO.play('咬-命中-T2', atE(d.e)); hitFx(d.e,true); } break;
     case 'venom': floatText(d.e.lane, d.e.p, '中毒', '#8fe36a', 12); break;
     case 'venomTick': DMG.push({lane:d.e.lane, p:d.e.p, n:Math.round(d.dmg), burn:true, venom:true, t:0, dx:(Math.random()-0.5)*0.4}); break;
-    case 'thorns': COMBO.play('壳挡', atE(d.e), {vol:0.6}); break;
+    case 'thorns': COMBO.play('壳挡', atE(d.e), {vol:0.6}); if(d.reflect){ const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('壳挡', {x:f.x, y:f.y-L.cs*0.45, dir:fwd()}, {vol:0.5, scale:1.2}); visOf(d.pet,true).squash=0.08; } break;   // 96 版：南瓜 3 星反弹：南瓜身上也亮一下
+    case 'splash': { const a=atE(d.e); COMBO.play('落地-水花', {x:a.gx, y:a.gy, gx:a.gx, gy:a.gy, dir:fwd()}, {scale:1.2, vol:0.55}); for(const o of d.list){ COMBO.play('水弹-命中-T1', atE(o), {scale:0.75, vol:0.4}); hitFx(o,false); } break; }   // 96 版：泡泡鱼 3 星溅射
     case 'petFury': { const g=atPet(d.pet,0.4); COMBO.play('发怒', g); floatText(d.pet.lane, d.pet.col+0.5, '发怒', '#ff6a4a', 12); break; }
     case 'petRam': case 'petRush': { petPlay(d.pet,'Attack','Idle'); COMBO.play('冲撞-起跑', atPet(d.pet,0.2)); break; }
     case 'petRamHit': { COMBO.play('冲撞-命中', atE(d.e), {freeze:[visOf(d.pet,true), VIS.get(d.e)]}); hitFx(d.e,true); shakeDir(0.025,0.16,fwd()); break; }
@@ -618,7 +620,8 @@ HOOKS.push((type, d)=>{
       LOOT.items.push({kind:d.kind, v:d.v, x0:p.x, y0:p.y, gx:f.x+(Math.random()-0.5)*cs*0.6, gy:f.y-cs*0.08, t:0, side:Math.random()<0.5?-1:1});
       LOOT.shown[d.kind]=1; if(d.kind==='star') COMBO.play('掉落-星星', {x:p.x, y:p.y}, {noFx:true}); break; }
     case 'shard': { const p=hitPoint(d.e); COMBO.play('碎片-获得', {x:p.x, y:p.y}); flyers.push({from:p, t:-0.25, life:0.7, to:'shard', key:d.e.key}); LASTSHARD=d.e.key; break; }
-    case 'produce': { petPlay(d.pet,'Busking','Idle'); const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('能量-产出', {x:f.x, y:f.y-L.cs*0.45}); break; }
+    case 'produce': { petPlay(d.pet,'Busking','Idle'); const f=feet(d.pet.lane,d.pet.col+0.5); COMBO.play('能量-产出', {x:f.x, y:f.y-L.cs*0.45}, d.lucky?{scale:1.4}:undefined);
+      if(d.lucky){ vfxXY('star_burst_gold', f.x, f.y-L.cs*0.55, 1.3); COMBO.play('掉落-星星', {x:f.x, y:f.y-L.cs*0.55}, {noFx:true, vol:0.7}); floatText(d.pet.lane, d.pet.col+0.5, '双倍', '#ffd84a', 13); } break; }   // 96 版：聚能花 3 星双倍：金色星爆 + 亮音
     case 'sky': SKYLAND.push(...G.orbs.filter(o=>o.fall>0)); break;
     case 'spawn': if(d.e.def.role==='elite'){ sfx('elite'); shakeDir(0.03,0.3); } if(d.e.def.charge) COMBO.later(0.1, ()=>{ if(!d.e.dead) COMBO.play('冲撞-起跑', atE(d.e), {noFx:true}); }); break;   // 第2章角色 v1：莽角羊进场起跑
     case 'bell': shakeDir(0.05,0.35); sfx('bell'); { const s=L.toScreen(d.lane,-0.45); vfxXY('ring_shockwave_white', s.x, s.y, 1.6); } break;
@@ -926,6 +929,11 @@ function drawCh3Floor(){
       COMBO.drawLoop('墨区', r.x+cs/2, r.y+cs*0.55, G.t+c.col*0.37+c.lane*0.61, {alpha:a}); } }
   if(G.mud && G.mud.length){ const t=tinted(fr,'#6e4b2a'); if(t) for(const c of G.mud){ if(G.t<c.from) continue; const r=L.cellRect(c.lane,c.col), left=c.until-G.t, a=Math.min(1,(G.t-c.from)/0.2)*Math.min(1,left/0.5);
       ctx.globalAlpha=0.7*a; nine(t, r.x+5, r.y+5, cs-10, cs-10, 20, cs*0.3); ctx.globalAlpha=1; } }   // 93 版：没有「泥潭」循环组合，只画着色框
+  if(G.pfire && G.pfire.length){ const t=tinted(fr,'#ff4f12'); if(t) for(const z of G.pfire){ const left=z.until-G.t, a=Math.min(1,(G.t-z.t0)/0.2)*Math.min(1,left/0.4);   // 96 版：喷火蜥 3 星地面留火：橙色地面光带轻微闪动（不画小火苗，vfx-design 第 0 节）
+      const t2=tinted(fr,'#ffd23a');   // 底层不透明度要高（0.7）才是橙色，淡了叠草地发褐（vfx-design 错误记录 10 版）；叠加发光会变成范围预览那种黄，也不行
+      for(let c=Math.floor(z.c0); c<Math.ceil(z.c1); c++){ if(!inGrid(z.lane,c)) continue; const r=L.cellRect(z.lane,c), fl=Math.sin(G.t*11+c*1.7);
+        ctx.globalAlpha=(0.66+0.08*fl)*a; nine(t, r.x+7, r.y+7, cs-14, cs-14, 20, cs*0.32);
+        if(t2){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(0.22+0.1*fl)*a; nine(t2, r.x+cs*0.24, r.y+cs*0.24, cs*0.52, cs*0.52, 20, cs*0.2); ctx.restore(); } } ctx.globalAlpha=1; } }
   if(G.pink && G.pink.length){ const t=tinted(fr,'#241b38'); if(t) for(const z of G.pink){ const left=z.until-G.t, a=Math.min(1,left/0.5);   // 93 版：喷墨章鱼（宠物）的墨区
       for(let c=Math.floor(z.c0); c<Math.ceil(z.c1); c++){ const r=L.cellRect(z.lane,c); ctx.globalAlpha=0.38*a; nine(t, r.x+4, r.y+4, cs-8, cs-8, 20, cs*0.26); ctx.globalAlpha=1;
         if((c+z.lane)%2===0) COMBO.drawLoop('墨区', r.x+cs/2, r.y+cs*0.6, G.t+c*0.37+z.lane*0.61, {alpha:0.45*a}); } } }   // 我方的墨比敌方淡：只隔格冒烟，不盖住怪
@@ -1255,7 +1263,7 @@ function drawPlacement(){
     if(inGrid(lane,col)){ const r=L.cellRect(lane,col); const good = sel ? canPlaceAt(lane,col) : (G.swaps>=1 && laneOn(lane) && !(tutCur() && !(tutCur().L===lane && tutCur().C===col)));
       const t=tinted('gui/Frame/ItemFrame00~03_FocusLine.png', good?'#ffffff':'#ff4d4d'); if(t) nine(t, r.x+2, r.y+2, cs-4, cs-4, 20, cs*0.22);
       const key = sel || (dragPet && G.drag.pet.key);
-      if(good && key && (sel || Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8)) drawRange(DATA.pets[key], lane, col); }
+      if(good && key && (sel || Math.hypot(G.drag.x-G.drag.sx,G.drag.y-G.drag.sy)>8)) drawRange(starDef(key), lane, col); }   // 96 版：范围按升星后的 def
   }
 }
 // 攻击范围：直射 = 本路前方到底（被道具挡住就停在道具）；近战 = 前方 reach 格；地雷 = 3×3。生产、坦克不显示
@@ -1263,9 +1271,9 @@ function rangeCells(def, lane, col){
   const out=[]; let block=null;
   const line=(to)=>{ for(let c=col+1;c<=Math.min(COLS-1,to);c++){ if(propAlive(cellAt(lane,c))){ block=[lane,c]; break; } out.push([lane,c]); } };
   if(def.shape==='shooter') line(COLS-1);
-  else if(def.shape==='melee'){ line(col+def.reach+(def===DATA.pets.lizard && starOf('lizard')>=2 ? STAR2.lizardReach : 0)); if(def.sweep) for(const l of [lane-1,lane+1]) if(inGrid(l,col+1) && laneOn(l)) out.push([l,col+1]); }   // 第2章角色 v1：迅火狐横扫上下两路
-  else if(def.shape==='support'){ for(let l=lane-1;l<=lane+1;l++) for(let c=col-1;c<=col+1;c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 菇背羊（宠物）回血范围
-  else if(def.shape==='mine'){ for(let l=lane-1;l<=lane+1;l++) for(let c=col-1;c<=col+1;c++) if(inGrid(l,c)) out.push([l,c]); }
+  else if(def.shape==='melee'){ line(col+def.reach); if(def.sweep) for(const l of [lane-1,lane+1]) for(let c=col+1;c<=Math.min(COLS-1,col+def.reach);c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 96 版：横扫的上下两路也按 reach（迅火狐 3 星前方 2 格）   // 第2章角色 v1：迅火狐横扫上下两路
+  else if(def.shape==='support'){ const B=def.magnet&&def.magnet.dp>2 ? 2 : 1; for(let l=lane-1;l<=lane+1;l++) for(let c=col-B;c<=col+B;c++) if(inGrid(l,c) && laneOn(l)) out.push([l,c]); }   // 96 版：灰原喵 2 星 5×3   // 菇背羊（宠物）回血范围
+  else if(def.shape==='mine'){ const B=def.blast||1; for(let l=lane-1;l<=lane+1;l++) for(let c=col-B;c<=col+B;c++) if(inGrid(l,c)) out.push([l,c]); }   // 96 版：波姆 3 星 5×3
   return {out, block};
 }
 function drawRange(def, lane, col){
