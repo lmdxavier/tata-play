@@ -236,3 +236,161 @@
     spawns:[ ...spread('slime',10,260,16,[2,1,3,0,4]), ...spread('crab',30,200,6,[1,3,0,4]), ...spread('inkocto',50,220,4,[1,3]), ...spread('jelly',70,240,4,[0,4]), ...spread('helmfish',90,250,3,[2,1,3]), ...spread('beast',110,250,3,[0,4,2]), [140,'kraken',2] ],
     events:[ {t:134, kind:'banner', text:'奥库塔从中路过来', until:140} ], reward:{chest:{coin:1000, star:20}} };
 })();
+
+// =====================================================================
+// 99 版：第 2、3 章出怪改成「分波」（用户 2026-11-24 实测：怪重复、太短、一大波没体现；规则见 docs/关卡设计.md「99 版」）
+// 上面两段里 spawns / marks / 一大波横幅 / duration 被这里整个覆盖；cells、氛围、奖励、预告文字照旧。
+//   每一波 = 几秒内出完的一团，波之间留喘息；进度条的点 = 每一波开始；最后一大波最大，打完就赢。
+//   wave 写法：[开始秒, [[怪, 只数, 指定路?], ...], 选项]；选项 big=一大波（横幅 2 秒后涌进来）、x=额外单只 [秒,怪,路]、pk=尖角虫群 [秒,路]
+// =====================================================================
+(function(){
+  const L = window.LEVELS, ORD=[2,1,3,0,4];
+  let rot=0, K=1;   // K = 本章时间拉伸（波的开始时间 × K，同一波里的间隔不变）
+  function burst(t, groups, gap){
+    const out=[], qs=groups.map(([ty,n,ln])=>({ty,n,ln,k:0})); let i=0, left=qs.reduce((a,q)=>a+q.n,0);
+    while(left>0) for(const q of qs) if(q.k<q.n){ const lane = q.ln ? q.ln[q.k%q.ln.length] : ORD[(rot+i)%5]; out.push([+(t+i*gap).toFixed(2), q.ty, lane]); q.k++; i++; left--; }
+    rot+=2; return out; }
+  const pack = (t, lane) => Array.from({length:5}, (_,i)=>[+(t+i*0.35).toFixed(2), 'hornbug', lane]);
+  function build(id, plan, opt={}){
+    const lv=L[id], spawns=[], marks=[], ev=(lv.events||[]).filter(e=>e.kind!=='banner'); rot=0;
+    for(const [t0, g, o={}] of plan){ const t=Math.round(t0*K), dt=t-t0;
+      if(o.big){ ev.push({t, kind:'banner', text:'一大波敌人正在接近', until:t+2}); marks.push(t+2); spawns.push(...burst(t+2.2, g, 0.5)); }
+      else { marks.push(t); if(g.length) spawns.push(...burst(t, g, o.gap||1.8)); }
+      for(const s of (o.x||[])) spawns.push([s[0]+dt, s[1], s[2]]);
+      for(const [pt,pl] of (o.pk||[])) spawns.push(...pack(pt+dt,pl));
+    }
+    if(opt.boss){ const bt=Math.round(opt.boss[0]*K), bty=opt.boss[1], btext=opt.boss[2]; ev.push({t:bt, kind:'banner', text:btext, until:bt+2}); spawns.push([bt+2.5, bty, 2]); }
+    for(const p of (opt.pv||[])) { const e=ev.find(x=>x.kind==='preview' && x.text===p[2]); if(e){ e.t=Math.round(p[0]*K); e.until=e.t+12; e.lanes=p[1]; } }
+    spawns.sort((a,b)=>a[0]-b[0]); lv.spawns=spawns; lv.marks=marks; lv.events=ev.sort((a,b)=>a.t-b.t);
+    lv.duration=Math.ceil(spawns[spawns.length-1][0]+18);
+  }
+  const B={big:true};
+
+  // ---------------- 第 2 章（约 5 分钟）----------------
+  K=1.2;
+  build('2-1', [ [12,[['slime',2]],{gap:4}], [32,[['snake',2],['slime',2]]], [55,[['goat',2],['beetle',1]]], [82,[['goat',2],['beetle',2],['slime',2]]],
+    [110,[['snake',3],['beetle',2],['goat',2]]], [140,[['goat',3],['hornliz',2],['slime',2]]], [172,[['goat',3],['beetle',3],['snake',3]]],
+    [205,[['goat',5],['beetle',4],['snake',4],['slime',4],['hornliz',2]],B] ]);
+  build('2-2', [ [12,[['slime',2]],{gap:4}], [32,[['cat',1],['slime',2],['hornliz',1]]], [58,[['cat',2],['goat',2],['gull',1]]], [85,[['hornliz',2],['gull',2],['slime',2]]],
+    [112,[['cat',2],['goat',3],['hornliz',2]]], [142,[['gull',3],['cat',2],['slime',2],['goat',2]]], [175,[['goat',4],['hornliz',3],['cat',2],['gull',2]]],
+    [210,[['goat',5],['cat',3],['hornliz',4],['gull',3],['slime',4]],B] ]);
+  build('2-3', [ [12,[['slime',2]],{gap:4}], [32,[['bellsnake',1],['snake',2]]], [58,[['bellsnake',2],['slime',3]]], [85,[['snake',3],['beetle',2]],{pk:[[92,1]]}],
+    [115,[['bellsnake',2],['goat',3],['snake',2]]], [145,[['bellsnake',2],['beetle',3],['slime',2]],{pk:[[150,3]]}], [178,[['bellsnake',3],['goat',3],['snake',3],['beetle',2]]],
+    [212,[['bellsnake',3],['snake',4],['beetle',4],['goat',3],['slime',4]],{big:true, pk:[[216,2]]}] ]);
+  build('2-4', [ [12,[['slime',2]],{gap:4}], [35,[['mushgoat',1],['hornliz',2]]], [60,[['mushgoat',1],['beetle',3],['slime',2]]], [88,[['cat',2],['hornliz',2],['mushgoat',1],['goat',2]]],
+    [118,[['mushgoat',2],['beetle',3],['snake',3]]], [150,[['hornliz',3],['cat',2],['mushgoat',2],['slime',2]]], [182,[['mushgoat',2],['goat',3],['beetle',3],['hornliz',3]]],
+    [218,[['mushgoat',3],['beetle',5],['hornliz',4],['goat',3],['slime',4]],B] ]);
+  build('2-5', [ [12,[['slime',2]],{gap:4}], [32,[['redbird',2,[1,3]],['slime',1]]], [58,[['redbird',2,[1,3]],['beetle',2]]], [85,[['goat',3],['gull',2],['slime',2]]],
+    [115,[['redbird',3],['slime',4],['goat',3],['beetle',3]],B], [150,[['mushgoat',2],['redbird',2],['fox',3]]], [180,[['gull',3],['redbird',3],['beetle',3],['goat',2]]],
+    [215,[['redbird',4],['goat',4],['fox',3],['beetle',4],['mushgoat',2],['slime',3]],B] ], {pv:[[20,[1,3],'预告：掠空鸟走第 2、第 4 路']]});
+  build('2-6', [ [12,[['slime',2]],{gap:4}], [32,[['shellliz',1],['slime',2]]], [58,[['shellliz',2],['goat',2],['snake',1]]], [85,[['snail',2],['redbird',2],['bellsnake',1]]],
+    [118,[['shellliz',3],['beetle',4],['goat',3],['slime',3]],B], [152,[['snail',2],['shellliz',2],['bellsnake',2],['redbird',2]]], [182,[['shellliz',3],['snake',3],['goat',3],['redbird',2]]],
+    [218,[['shellliz',4],['snail',2],['bellsnake',3],['beetle',4],['goat',3],['slime',3]],B] ]);
+  build('2-7', [ [12,[['slime',2]],{gap:4}], [32,[['cat',2],['hornliz',2]]], [58,[['mushgoat',1],['goat',2],['beetle',2]]], [85,[['snake',3],['cat',1],['slime',2]],{pk:[[90,0]]}],
+    [118,[['mushgoat',2],['goat',2]],{x:[[119,'wildox',2]]}], [150,[['goat',4],['beetle',4],['hornliz',3],['slime',3]],B], [185,[['mushgoat',2],['cat',2],['snake',3]],{pk:[[190,4]]}],
+    [220,[['goat',4],['beetle',4],['hornliz',3],['mushgoat',2],['slime',3]],{big:true, x:[[224,'wildox',1],[228,'wildox',3]]}] ], {pv:[[106,[2],'预告：蛮角牛走中路']]});
+  build('2-8', [ [12,[['slime',2]],{gap:4}], [35,[['toucan',1,[1]],['goat',2]]], [60,[['toucan',1],['fox',3],['slime',1]]], [88,[['redbird',2],['shellliz',2],['snake',2]]],
+    [120,[['toucan',2],['fox',3],['goat',3],['slime',3],['snake',2]],B], [155,[['shellliz',2],['toucan',2],['beetle',3]]], [185,[['redbird',3],['fox',3],['goat',3]]],
+    [220,[['toucan',3],['shellliz',3],['fox',4],['goat',3],['snake',3],['slime',3]],B] ], {pv:[[23,[1],'预告：巨喙鸟走第 2 路']]});
+  build('2-9', [ [12,[['slime',2]],{gap:4}], [35,[['mushsnake',2],['snake',1]]], [60,[['mushsnake',2],['bellsnake',2],['slime',2]]], [88,[['gull',3],['hornliz',2],['toucan',1]]],
+    [120,[['mushsnake',3],['bellsnake',2],['hornliz',3],['slime',3],['goat',3]],{big:true, x:[[124,'wildox',2]]}], [158,[['toucan',2],['gull',2],['mushgoat',2]]], [188,[['mushsnake',3],['hornliz',3],['snake',3]]],
+    [222,[['mushsnake',4],['bellsnake',3],['hornliz',4],['goat',3],['mushgoat',2],['slime',3]],{big:true, x:[[226,'wildox',0],[229,'wildox',4]]}] ]);
+  build('2-10', [ [12,[['slime',2]],{gap:4}], [35,[['cat',1],['bellsnake',1],['slime',1]]], [62,[['redbird',1],['shellliz',1],['slime',2]]], [92,[['goat',2],['mushgoat',1],['hornliz',2]]],
+    [150,[['redbird',2],['slime',3]]], [180,[['shellliz',2],['goat',3]]], [215,[['goat',4],['bellsnake',3],['redbird',3],['shellliz',2],['slime',3]],B] ], {boss:[125,'disco','巴隆从中路过来']});
+
+  // ---------------- 第 3 章（约 5～5.5 分钟）----------------
+  K=1.25;
+  build('3-1', [ [12,[['slime',2]],{gap:4}], [32,[['crab',2],['slime',1]]], [58,[['crab',2],['goat',2],['snake',1]]], [85,[['crab',3],['beetle',2],['slime',2]]],
+    [115,[['goat',3],['crab',3],['snake',2]]], [145,[['crab',3],['hornliz',2],['beetle',3]]], [178,[['crab',4],['goat',3],['snake',3]]],
+    [212,[['crab',5],['beetle',4],['goat',3],['hornliz',3],['slime',4]],B] ]);
+  build('3-2', [ [12,[['slime',2]],{gap:4}], [32,[['puffer',1],['beetle',2]]], [58,[['puffer',2],['crab',2],['slime',2]]], [85,[['cat',2],['shellliz',2],['puffer',1]]],
+    [115,[['puffer',2],['crab',3],['goat',3]]], [148,[['shellliz',2],['cat',2],['puffer',2],['slime',2]]], [180,[['puffer',3],['crab',3],['beetle',3]]],
+    [215,[['puffer',3],['crab',4],['goat',3],['shellliz',3],['slime',4]],B] ]);
+  build('3-3', [ [12,[['slime',2]],{gap:4}], [42,[['inkocto',1,[2]],['snake',2]]], [68,[['inkocto',1],['redbird',2],['slime',2]]], [95,[['puffer',2],['crab',3],['inkocto',1]]],
+    [125,[['inkocto',2],['crab',4],['goat',3],['slime',3]]], [160,[['redbird',3],['puffer',2],['shellliz',2]]], [190,[['inkocto',2],['crab',3],['beetle',3]]],
+    [225,[['inkocto',3],['puffer',3],['crab',4],['redbird',3],['goat',3],['slime',3]],B] ], {pv:[[30,[2],'预告：喷墨章鱼走中路']]});
+  build('3-4', [ [12,[['slime',2]],{gap:4}], [32,[['jelly',2],['beetle',1]]], [58,[['jelly',2],['inkocto',1],['slime',2]]], [85,[['bellsnake',2],['crab',3]],{pk:[[90,2]]}],
+    [115,[['jelly',3],['goat',3],['slime',2]]], [148,[['inkocto',2],['jelly',2],['crab',3]]], [180,[['jelly',3],['bellsnake',2],['snake',3]]],
+    [215,[['jelly',4],['crab',4],['inkocto',2],['goat',3],['slime',4]],{big:true, pk:[[219,1]]}] ]);
+  build('3-5', [ [12,[['slime',2]],{gap:4}], [32,[['helmfish',2],['snake',1]]], [58,[['helmfish',2],['puffer',2],['slime',1]]], [85,[['redbird',2],['jelly',2],['crab',2]]],
+    [115,[['helmfish',3],['crab',3],['goat',3],['slime',3]],B], [152,[['puffer',2],['jelly',2],['helmfish',2],['redbird',2]]], [184,[['helmfish',3],['crab',3],['beetle',3]]],
+    [220,[['helmfish',4],['jelly',3],['puffer',3],['crab',3],['redbird',2],['slime',3]],B] ]);
+  build('3-6', [ [12,[['slime',2]],{gap:4}], [40,[['turtle',1,[1]],['crab',2]]], [66,[['helmfish',2],['mushgoat',1],['slime',2]]], [92,[['turtle',2],['crab',3],['beetle',2]]],
+    [122,[['helmfish',3],['crab',3],['goat',3],['slime',3]],B], [158,[['turtle',2],['mushgoat',2],['jelly',2]]], [190,[['helmfish',3],['crab',3],['puffer',2]]],
+    [225,[['turtle',2],['helmfish',3],['crab',4],['mushgoat',2],['goat',3],['slime',3]],B] ], {pv:[[28,[1],'预告：炮台龟走第 2 路']]});
+  build('3-7', [ [12,[['slime',2]],{gap:4}], [36,[['parrot',1,[1]],['crab',2]]], [62,[['parrot',2],['jelly',2],['slime',1]]], [90,[['inkocto',2],['turtle',1],['goat',2]]],
+    [120,[['parrot',3],['crab',3],['goat',3],['slime',3]],B], [156,[['turtle',2],['jelly',2],['parrot',2]]], [188,[['inkocto',2],['parrot',3],['helmfish',3]]],
+    [222,[['parrot',4],['jelly',3],['turtle',2],['crab',4],['goat',3],['slime',3]],B] ], {pv:[[24,[1],'预告：船长鹦鹉走第 2 路']]});
+  build('3-8', [ [12,[['slime',2]],{gap:4}], [34,[['mudfish',2],['snake',1]]], [60,[['mudfish',2],['helmfish',2],['slime',1]]], [88,[['puffer',2],['parrot',2],['mudfish',1]]],
+    [120,[['mudfish',3],['crab',3],['helmfish',3],['slime',3]],B], [152,[['mudfish',2],['puffer',2]],{x:[[153,'wildox',2]]}], [185,[['parrot',3],['helmfish',3],['crab',3]]],
+    [220,[['mudfish',4],['helmfish',3],['puffer',3],['crab',4],['slime',3]],{big:true, x:[[224,'wildox',1]]}] ], {pv:[[140,[2],'预告：蛮角牛走中路']]});
+  build('3-9', [ [12,[['slime',2]],{gap:4}], [34,[['beast',2],['jelly',1]]], [60,[['beast',2],['mudfish',2],['slime',1]]], [88,[['turtle',2],['jelly',2],['puffer',2]]],
+    [120,[['beast',3],['crab',3],['jelly',3],['slime',3]],{big:true, x:[[124,'wildox',2]]}], [158,[['mudfish',2],['turtle',2],['beast',2]]], [190,[['beast',3],['helmfish',3],['crab',3]]],
+    [225,[['beast',4],['jelly',3],['turtle',2],['mudfish',2],['crab',4],['slime',3]],{big:true, x:[[229,'wildox',3]]}] ]);
+  build('3-10', [ [12,[['slime',2]],{gap:4}], [35,[['inkocto',2],['jelly',2]]], [62,[['helmfish',2],['crab',3],['slime',2]]], [92,[['beast',2],['puffer',2],['mudfish',2]]],
+    [150,[['crab',3],['slime',2]]], [180,[['helmfish',2],['jelly',2]]], [215,[['crab',4],['beast',2],['jelly',3],['helmfish',2],['slime',3]],B] ], {boss:[125,'kraken','奥库塔从中路过来']});
+})();
+
+// =====================================================================
+// 100 版：每只怪整个游戏只出现在 5 关（用户 2026-11-25；规则见 docs/关卡设计.md「100 版」）
+//   1-1～1-3 不算；连续最多 2 关，之后要空 1～2 关；最多只能空 2 关（前期的怪不会拖到后期）。绿莱姆也算。Boss 只在自己那关。
+//   出场表 APPEAR 由 tools/test/roster_plan.py 排出（每关约 5 种怪），tools/test/roster_check.js 检查，发布前必须过。
+//   连带：格鲁姆吼叫叫绿莱姆 → 1-10 有绿莱姆；巴隆叫莽角羊 → 2-10 有莽角羊；奥库塔叫船长鹦鹉、船长鹦鹉带岩钳蟹 → 3-10、鹦鹉的关都有岩钳蟹。
+//   做法：上面各关原有的出怪时间、路不动；不在本关出场表里的怪，按生命值等量换成本关该出的老怪（先补本关缺的那几种）；
+//   尖角虫换进来时 5 只一群；蛮角牛（精英）不当替补，缺时在最后一波加 1 只；预告里提到已不出场的怪，预告删掉。
+// =====================================================================
+(function(){
+  const L = window.LEVELS;
+  const APPEAR = {
+    slime:['1-4','1-5','1-7','1-10','2-3'],   beetle:['1-4','1-6','1-7','1-9','2-2'],   hornliz:['1-4','1-5','1-7','1-9','2-1'],
+    hornbug:['1-5','1-6','1-8','2-1','2-3'],  lizard:['1-6','1-8','1-10','2-2','2-5'],  fox:['1-7','1-9','2-1','2-4','2-6'],
+    snake:['1-8','1-10','2-2','2-5','2-8'],   snail:['1-8','2-1','2-3','2-4','2-7'],     gull:['1-9','1-10','2-2','2-4','2-6'],
+    goat:['2-1','2-3','2-5','2-8','2-10'],    cat:['2-2','2-5','2-7','2-8','3-1'],       bellsnake:['2-3','2-4','2-6','2-7','2-10'],
+    mushgoat:['2-4','2-6','2-9','3-2','3-5'], redbird:['2-5','2-7','2-10','3-2','3-3'],  shellliz:['2-6','2-8','2-9','3-1','3-3'],
+    wildox:['2-7','2-9','3-1','3-2','3-4'],   toucan:['2-8','2-9','3-1','3-4','3-5'],    mushsnake:['2-9','2-10','3-2','3-3','3-6'],
+    crab:['3-1','3-4','3-7','3-8','3-10'],    puffer:['3-2','3-3','3-5','3-6','3-8'],    inkocto:['3-3','3-4','3-6','3-7','3-9'],
+    jelly:['3-4','3-5','3-7','3-8','3-10'],   helmfish:['3-5','3-6','3-8','3-9'],        turtle:['3-6','3-7','3-9','3-10'],
+    parrot:['3-7','3-8','3-10'],              mudfish:['3-8','3-9'],                     beast:['3-9','3-10'],
+    bear:['1-10'], disco:['2-10'], kraken:['3-10'],
+  };
+  window.MON_APPEAR = APPEAR;
+  const FREE = ['1-1','1-2','1-3'], E = (typeof DATA!=='undefined' && DATA.enemies) || {};
+  const hp0 = k => (E[k] && E[k].hp) || 300, unit = k => k==='hornbug' ? 5 : 1, isBig = k => E[k] && E[k].role==='elite';
+  // 101 版：有特殊本事的怪不按生命值 1:1 换（掠空鸟直接飞向警钟、铃尾蛇给周围加速…），按「威胁」折算，且一关里同种有上限
+  //   （100 版 2-7 换进 28 只掠空鸟 + 25 只铃尾蛇、3-2 换进 27 只掠空鸟，fastbot 在 99 能过的关输掉）
+  const W = {hornliz:1.2, redbird:2.5, bellsnake:1.8, mushgoat:1.5, toucan:1.5, cat:1.3, puffer:1.4, fox:1.2, gull:1.2, parrot:2, turtle:1.3, inkocto:1.2, mudfish:1.2};
+  const CAP = {redbird:8, bellsnake:8, mushgoat:8, toucan:6, cat:8, puffer:10, parrot:4, turtle:6, fox:14};
+  const hp = k => hp0(k)*(W[k]||1);
+  const ids = Object.keys(L).filter(id=>/^\d+-\d+$/.test(id) && !FREE.includes(id));
+  for(const id of ids){
+    const lv=L[id]; if(!lv.spawns) continue;
+    const ros=Object.keys(APPEAR).filter(k=>APPEAR[k].includes(id));
+    const keep=lv.spawns.filter(s=>ros.includes(s[1])), gone=lv.spawns.filter(s=>!ros.includes(s[1])).sort((a,b)=>a[0]-b[0]);
+    const have=new Set(keep.map(s=>s[1]));
+    const intro=Object.keys(APPEAR).find(k=>APPEAR[k][0]===id);
+    const minors=ros.filter(k=>!isBig(k));
+    let pool=[...minors.filter(k=>!have.has(k)), ...minors.filter(k=>have.has(k) && k!==intro)];
+    if(!pool.length) pool=minors.slice();
+    const add=[], got={}; let bud=0;   // 每次挑「已换进来的生命值最少」的那种，几种老怪分到的生命值差不多
+    const cnt={}; for(const s of keep) cnt[s[1]]=(cnt[s[1]]||0)+1;
+    const open=k=>!(CAP[k] && (cnt[k]||0)+unit(k) > CAP[k]);
+    let early=false;   // 开头 40 秒（前段小波）只换成没有特殊本事、不快的怪：100 版 1-9 开头换进迅火狐，fastbot 92 秒就输
+    const next=()=>{ let c=pool.filter(open); if(early){ const pl=c.filter(k=>!W[k]); if(pl.length) c=pl; } const q=c.length?c:[pool.reduce((a,b)=>(W[b]||1)<(W[a]||1)?b:a)];
+      return q.reduce((a,b)=>(got[b]||0)<(got[a]||0)?b:a); };
+    for(const s of gone){ bud+=hp0(s[1]); let off=0; early = s[0] < 40;   // 一只换成几只时依次错开 0.7 秒，不叠在同一点（被换掉的怪按原生命值算预算）
+      for(let ty=pool.length?next():null; ty && bud >= 0.6*hp(ty)*unit(ty); ty=next()){
+        cnt[ty]=(cnt[ty]||0)+unit(ty);
+        for(let i=0;i<unit(ty);i++) add.push([+(s[0]+off+i*0.35).toFixed(2), ty, s[2]]);
+        off+=0.7+(unit(ty)-1)*0.35;
+        bud-=hp(ty)*unit(ty); got[ty]=(got[ty]||0)+hp(ty)*unit(ty); have.add(ty); } }
+    // 出场表里有、但换完还没出现的：最后一波补上（精英 1 只，其余 3 只，尖角虫一群）
+    const lastT=(lv.marks&&lv.marks.length) ? lv.marks[lv.marks.length-1] : lv.spawns[lv.spawns.length-1][0];
+    const lanes=lv.lanes||[2]; let li=0, ft=lastT+1;   // 几种依次错开，路轮流
+    for(const ty of ros) if(!have.has(ty) && E[ty] && !(E[ty].boss)){ const n=isBig(ty)?1:(ty==='hornbug'?5:3), one=ty==='hornbug'||isBig(ty), ln=lanes[(li++)%lanes.length];
+      for(let i=0;i<n;i++) add.push([+(ft+i*(ty==='hornbug'?0.35:1.2)).toFixed(2), ty, one ? ln : lanes[(li++)%lanes.length]]); ft+=n*(ty==='hornbug'?0.35:1.2)+1.5; have.add(ty); }
+    lv.spawns=[...keep, ...add].sort((a,b)=>a[0]-b[0]);
+    const last=lv.spawns[lv.spawns.length-1][0]; if(lv.duration<last+6) lv.duration=Math.ceil(last+6);
+    if(lv.events){ const gn=new Set(Object.keys(APPEAR).filter(m=>!ros.includes(m)).map(m=>E[m]&&E[m].cn).filter(Boolean));
+      lv.events=lv.events.filter(e=>e.kind!=='preview' || ![...gn].some(n=>(e.text||'').includes(n))); }
+  }
+})();
