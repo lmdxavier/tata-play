@@ -26,7 +26,7 @@
   html.ios-sa canvas{position:absolute}
 </style>
 <script>/* 61 版起：版本自检——网页被手机缓存住时自动换成最新的（build.txt 不走缓存）；双击打开不检查 */
-window.__BUILD='101';
+window.__BUILD='102';
 if(location.protocol!=='file:') fetch('build.txt?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{ t=t.trim(); if(!t||t===window.__BUILD) return;
   const q=new URLSearchParams(location.search); if(q.get('b')===t) return; q.set('b',t); location.replace(location.pathname+'?'+q.toString()); }).catch(()=>{});
 </script>
@@ -61,13 +61,13 @@ window.HAPTIC=(()=>{ let lab=null, last=0;
 <script src="assets/vendor/filepack.js"></script>   <!-- 57 版：双击打开（file://）时图片走数据包，WebGL 才能用 -->
 <!-- 57 版：PixiJS 8（WebGL）绘制整个游戏；pixi-ctx.js 把原来的 Canvas 2D 绘制调用转成 Pixi 显示对象。网址加 ?gl=0 回到 Canvas 2D 对比，?perf=1 性能面板 -->
 <script src="assets/vendor/pixi.min.js"></script>
-<script src="assets/vendor/pixi-ctx.js?v=101"></script>
+<script src="assets/vendor/pixi-ctx.js?v=102"></script>
 <script src="assets/vendor/perf-hud.js"></script>
 <script src="assets/vendor/spine-canvas.min.js"></script>
 <script src="assets/vendor/spine-seamfix.js"></script>
 <script src="assets/pets/pets.js"></script>
 <script src="assets/pets_hd/pets_hd.js"></script>
-<script src="assets/pets_hd/pets_evo.js?v=101"></script>   <!-- 87 版：进化形态（泡泡鱼 × 聚能花，_dev\进化 v4.2 的配方生成） -->
+<script src="assets/pets_hd/pets_evo.js?v=102"></script>   <!-- 87 版：进化形态（泡泡鱼 × 聚能花，_dev\进化 v4.2 的配方生成） -->
 <script src="assets/monsters/monsters.js"></script>
 <script src="assets/monsters/enemy-monsters.js"></script>
 <script src="assets/vfx/vfx.js"></script>
@@ -82,31 +82,31 @@ window.HAPTIC=(()=>{ let lab=null, last=0;
 <script>window.SFX2V2 = window.SFX2;   // rhythm 项目的扩展音效类型注册在 SFX2V2 上</script>
 <script src="assets/sfx/sfx2_ext.js"></script>
 <!-- 效果组合（tools/build_combos.py 从 素材库\效果组合 打包）-->
-<script src="assets/combos/combos.js?v=101"></script>
-<script src="assets/combos/crops.js?v=101"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
-<script src="assets/combos/combos_ch2.js?v=101"></script>   <!-- 89 版：第 2 章的效果组合 -->
-<script src="assets/combos/combos_ch3.js?v=101"></script>   <!-- 93 版：第 3 章的效果组合 -->
+<script src="assets/combos/combos.js?v=102"></script>
+<script src="assets/combos/crops.js?v=102"></script>   <!-- 61 版：序列帧特效图裁掉四周空白后的偏移 -->
+<script src="assets/combos/combos_ch2.js?v=102"></script>   <!-- 89 版：第 2 章的效果组合 -->
+<script src="assets/combos/combos_ch3.js?v=102"></script>   <!-- 93 版：第 3 章的效果组合 -->
 <!-- 55 版：音效数据 assets/combos/audio.js、音乐 assets/bgm/bgm.js 改为进游戏后后台加载（render.js loadLater），不再挡住开场 -->
 <!-- 逻辑层（同灰盒 1）+ 画面层 -->
-<script src="game.js?v=101"></script>
-<script src="levels.js?v=101"></script>
+<script src="game.js?v=102"></script>
+<script src="levels.js?v=102"></script>
 <script src="assets/env1/env1.js"></script>
-<script src="assets/scene2/town/town.js?v=101"></script>   <!-- 89 版：第 2 章场景摆件元数据 -->
-<script src="assets/scene3/scene3.js?v=101"></script>   <!-- 93 版：第 3 章海岸素材的尺寸表（scene.js 合进 ENV1） -->
-<script src="scene.js?v=101"></script>
-<script src="combo.js?v=101"></script>
-<script src="render.js?v=101"></script>
-<script src="bonus.js?v=101"></script>   <!-- 75 版：相邻加成弹射 / 3 连依次点亮 / 稀有度触手链接 -->
-<script src="evo.js?v=101"></script>   <!-- 87 版：局内进化演出 + 全屏环射 -->
+<script src="assets/scene2/town/town.js?v=102"></script>   <!-- 89 版：第 2 章场景摆件元数据 -->
+<script src="assets/scene3/scene3.js?v=102"></script>   <!-- 93 版：第 3 章海岸素材的尺寸表（scene.js 合进 ENV1） -->
+<script src="scene.js?v=102"></script>
+<script src="combo.js?v=102"></script>
+<script src="render.js?v=102"></script>
+<script src="bonus.js?v=102"></script>   <!-- 75 版：相邻加成弹射 / 3 连依次点亮 / 稀有度触手链接 -->
+<script src="evo.js?v=102"></script>   <!-- 87 版：局内进化演出 + 全屏环射 -->
 <!-- 局外界面：底部切换 战斗 / 宠物 / 营地（11 版） -->
-<script src="map_data.js?v=101"></script>
-<script src="map.js?v=101"></script>
-<script src="card_bbox.js?v=101"></script>
-<script src="meta.js?v=101"></script>
+<script src="map_data.js?v=102"></script>
+<script src="map.js?v=102"></script>
+<script src="card_bbox.js?v=102"></script>
+<script src="meta.js?v=102"></script>
 <!-- 32 版：营地（宠物自由活动 + 投喂） -->
-<script src="camp.js?v=101"></script>
+<script src="camp.js?v=102"></script>
 <!-- 29 版：背景音乐（局外 main / 战斗 battle）-->
-<script src="music.js?v=101"></script>
-<script src="ch2test.js?v=101"></script>   <!-- 第 2 章测试入口：只在网址带 ?ch2= / ?ch2demo= 时生效，存档只在内存 -->
+<script src="music.js?v=102"></script>
+<script src="ch2test.js?v=102"></script>   <!-- 第 2 章测试入口：只在网址带 ?ch2= / ?ch2demo= 时生效，存档只在内存 -->
 </body>
 </html>

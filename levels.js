@@ -364,6 +364,7 @@
   const ids = Object.keys(L).filter(id=>/^\d+-\d+$/.test(id) && !FREE.includes(id));
   for(const id of ids){
     const lv=L[id]; if(!lv.spawns) continue;
+    lv._orig=lv.spawns.slice();   // 102 版：留一份原设计，一大波 / 每波只数的检查和补足用（tools/test/wave_check.js）
     const ros=Object.keys(APPEAR).filter(k=>APPEAR[k].includes(id));
     const keep=lv.spawns.filter(s=>ros.includes(s[1])), gone=lv.spawns.filter(s=>!ros.includes(s[1])).sort((a,b)=>a[0]-b[0]);
     const have=new Set(keep.map(s=>s[1]));
@@ -389,8 +390,86 @@
     for(const ty of ros) if(!have.has(ty) && E[ty] && !(E[ty].boss)){ const n=isBig(ty)?1:(ty==='hornbug'?5:3), one=ty==='hornbug'||isBig(ty), ln=lanes[(li++)%lanes.length];
       for(let i=0;i<n;i++) add.push([+(ft+i*(ty==='hornbug'?0.35:1.2)).toFixed(2), ty, one ? ln : lanes[(li++)%lanes.length]]); ft+=n*(ty==='hornbug'?0.35:1.2)+1.5; have.add(ty); }
     lv.spawns=[...keep, ...add].sort((a,b)=>a[0]-b[0]);
+    // 102 版（用户 02:06「一大波那里增加怪了吗」）：按威胁换完后只数会变少（第 2、3 章第一波变 0 只、2-7 一大波只剩 8 只）。
+    //   第一波不能是 0 只（至少 1 只）；最后一大波按原设计只数补，但总威胁不超过原设计 / 101 版的 3%；再补到「全关最大、≥ 普通波平均 2 倍」。
+    //   补的怪 = 本关最弱的普通怪（威胁最低、没到上限；开头 40 秒只用没有特殊本事的），放在被换掉那几只的时间和路上。中间各波照 101 版。tools/test/wave_check.js 检查。
+    if(lv.marks && lv.marks.length){
+      const mk=lv.marks.slice().sort((a,b)=>a-b), wi=t=>{ let i=0; for(let k=0;k<mk.length;k++) if(t>=mk[k]-0.01) i=k; return i; };
+      const nb=lv.spawns.filter(s=>!(E[s[1]]&&E[s[1]].boss)), now=mk.map(()=>0), org=mk.map(()=>0);
+      for(const s of nb) now[wi(s[0])]++; for(const s of lv._orig) if(!(E[s[1]]&&E[s[1]].boss)) org[wi(s[0])]++;
+      const fill=t=>{ let c=minors.filter(k=>k!=='hornbug' && open(k)); if(t<40){ const pl=c.filter(k=>!W[k]); if(pl.length) c=pl; }
+        if(!c.length) c=minors.filter(k=>k!=='hornbug'); if(!c.length) return null; return c.reduce((a,b)=>hp(b)<hp(a)?b:a); };
+      const more=[], TH=sp=>sp.reduce((a,s)=>a+(E[s[1]]&&E[s[1]].boss?0:hp(s[1])),0), cap=Math.max(TH(lv._orig), TH(lv.spawns))*1.03; let thNow=TH(lv.spawns);   // 总威胁不超过原设计 / 101 版的 3%（全补的话 2-7 威胁翻倍）
+      mk.forEach((m,i)=>{ if(i!==0 && i!==mk.length-1) return; const d=(i===0 ? Math.min(1,org[i]) : org[i])-now[i]; if(d<=0) return;   // 第一波只保证不是 0 只（补到原设计只数的话，fastbot 2-10、3-7 开局多 1 只就输）   // 只补第一波（不能是 0 只）和最后一大波；中间各波按威胁换完照旧（全补的话 2-7 威胁翻倍，fastbot 输一片）
+        const src=gone.filter(s=>wi(s[0])===i), tail=mk[i+1]!==undefined?mk[i+1]:m+20;
+        for(let j=0;j<d;j++){ const g0=src[src.length-1-(j%Math.max(1,src.length))], t=g0 ? g0[0]+0.7*(1+Math.floor(j/Math.max(1,src.length))) : m+1+j*1.2, ty=fill(t); if(!ty) break;   // 从这一波最后被换掉的那只往前补，不和换进来的叠在同一时刻
+          if(i>0 && thNow+hp(ty)>cap) break;
+          more.push([+Math.min(t, tail-0.5).toFixed(2), ty, g0 ? g0[2] : lanes[j%lanes.length]]); cnt[ty]=(cnt[ty]||0)+1; now[i]++; thNow+=hp(ty); } });
+      const big=(lv.events||[]).some(e=>e.kind==='banner' && /一大波/.test(e.text||''));
+      if(big){ const L1=mk.length-1, rest=now.slice(0,-1), need=Math.max(Math.max(0,...rest), Math.ceil(2*rest.reduce((a,b)=>a+b,0)/Math.max(1,rest.length)));
+        const ord=[2,0,4,1,3].filter(l=>lanes.includes(l)); let j=0;
+        while(now[L1]<need){ const ty=fill(999); if(!ty) break; more.push([+(mk[L1]+0.4+j*0.45).toFixed(2), ty, ord[j%ord.length]]); cnt[ty]=(cnt[ty]||0)+1; now[L1]++; j++; } }
+      if(more.length) lv.spawns=[...lv.spawns, ...more].sort((a,b)=>a[0]-b[0]);
+    }
     const last=lv.spawns[lv.spawns.length-1][0]; if(lv.duration<last+6) lv.duration=Math.ceil(last+6);
     if(lv.events){ const gn=new Set(Object.keys(APPEAR).filter(m=>!ros.includes(m)).map(m=>E[m]&&E[m].cn).filter(Boolean));
       lv.events=lv.events.filter(e=>e.kind!=='preview' || ![...gn].some(n=>(e.text||'').includes(n))); }
+  }
+})();
+
+// =====================================================================
+// 102 版：地形（用户 2026-11-26 02:25 认可，docs/关卡设计.md「地形方案」）
+//   格子里只有两种：① 贴地平面（hole 空格：泥坑 / 沙坑 / 蘑菇圈；bed 花圃；stream 花溪；浅水 / 潮水），画在所有角色下面，怪踩过去；
+//   ② ≤1 格高的矮物件（rock：石墩 / 礁石），按脚底排序，怪走到跟前横移到相邻一路绕开，不穿过去。高物件只在场外。
+//   写法：t = [[路, 格, 种类, 样子?], ...]；water = 常驻浅水格；tide = {cols, at:[[开始秒, 持续秒], ...]}；lanes = 关闭某一路（关掉的路的怪轮流分到开放的路）。
+//   1-1～1-5 教学不动。第 2 章原来通用的两朵花丛去掉（花圃代替）；第 1、3 章原有花丛、木桶照旧，和地形重叠的去掉。
+//   检查：tools/test/terrain_check.js（石墩旁边至少有一路能绕、地形不压木桶、关闭的路没有怪）。
+// =====================================================================
+(function(){
+  const L = window.LEVELS, ALL=[0,1,2,3,4];
+  const H=(l,c,k)=>[l,c,'hole',k], R=(l,c,k)=>[l,c,'rock',k||'stone'], B=(l,c)=>[l,c,'bed'], S=(c,ls)=>(ls||ALL).map(l=>[l,c,'stream']);
+  const T = {
+    '1-6': {t:[H(0,3,'mud'),H(2,4,'mud'),H(4,3,'mud')]},
+    '1-7': {t:[H(0,1,'mud'),H(0,4,'mud'),H(3,5,'mud'),H(4,3,'mud')]},
+    '1-8': {lanes:[0,1,2,3], t:[R(1,5),R(2,5)]},
+    '1-9': {t:[R(2,5)]},   // 两块石墩 + 泥坑时 fastbot 102 秒就输（石墩把两路怪挤到旁边），留中间一块
+    '1-10':{t:[H(0,5,'mud'),H(4,5,'mud')]},
+    '2-1': {t:[B(1,3),B(3,3)], noFlower:1},
+    '2-2': {lanes:[1,2,3,4], t:[B(1,5),B(3,5),B(2,6)], noFlower:1},
+    '2-3': {t:[B(2,2),B(2,3),B(2,4),H(1,3,'mud'),H(3,3,'mud')], noFlower:1},
+    '2-4': {t:[H(0,5,'ring'),H(1,5,'ring'),H(3,5,'ring'),H(4,5,'ring'),B(2,2)], noFlower:1},
+    '2-5': {lanes:[1,2,3], t:[B(1,6),B(3,6)], noFlower:1, pv:{'预告：掠空鸟走第 2、第 4 路':'预告：掠空鸟走左右两路'}},
+    '2-6': {t:[...S(4)], noFlower:1},
+    '2-7': {t:[...S(4),B(1,6),B(3,6)], noFlower:1},
+    '2-8': {t:[...S(4),...S(5),R(1,7)], noFlower:1},
+    '2-9': {lanes:[0,1,2,3], t:[...S(4,[0,1]),B(2,5),H(3,3,'mud')], noFlower:1},
+    '2-10':{t:[B(1,3),B(3,3),B(1,5),B(3,5)], noFlower:1},
+    '3-1': {t:[H(0,4,'sand'),H(2,5,'sand'),H(4,4,'sand')]},
+    '3-2': {t:[R(1,4,'reef'),R(3,4,'reef'),R(2,6,'reef')]},
+    '3-3': {t:[R(0,5,'reef'),R(2,5,'reef'),R(4,5,'reef'),R(1,7,'reef'),R(3,7,'reef')], crate:[2,3]},
+    '3-4': {lanes:[0,1,2,3], t:[R(2,6,'reef'),H(0,3,'sand'),H(1,5,'sand'),H(3,4,'sand')]},
+    '3-5': {tide:{cols:[7,8], at:[[70,28],[175,28]]}},
+    '3-6': {water:[3]},
+    '3-7': {tide:{cols:[7,8], at:[[60,25],[140,25],[220,25]]}, t:[R(1,5,'reef'),R(3,5,'reef')]},
+    '3-8': {tide:{cols:[6,7,8], at:[[40,24],[86,24],[132,24],[178,24],[224,24],[270,24]]}},
+    '3-9': {water:[1,3], t:[R(2,6,'reef')]},
+    '3-10':{waterCols:[6,7,8]},
+  };
+  window.TERRAIN_DEF = T;
+  for(const [id,d] of Object.entries(T)){ const lv=L[id]; if(!lv) continue;
+    const ter=(d.t||[]).map(([lane,col,type,kind])=>kind?{lane,col,type,kind}:{lane,col,type}), key=c=>c.lane+','+c.col, used=new Set(ter.map(key));
+    let old=(lv.cells||[]).filter(c=>!used.has(key(c)));
+    if(d.noFlower) old=old.filter(c=>c.type!=='flower');
+    if(d.crate) old.push({lane:d.crate[0], col:d.crate[1], type:'crate', kind:'barrel'});
+    if(d.lanes){ lv.lanes=d.lanes.slice(); old=old.filter(c=>d.lanes.includes(c.lane)); }
+    lv.cells=[...old, ...ter];
+    const wat=[]; for(const l of (d.water||[])) for(let c=0;c<9;c++) wat.push([l,c]); for(const c of (d.waterCols||[])) for(const l of ALL) wat.push([l,c]);
+    if(wat.length) lv.water=wat.filter(([l])=>lv.lanes.includes(l));
+    if(d.tide) lv.tide={cols:d.tide.cols.slice(), at:d.tide.at.map(a=>a.slice())};
+    if(d.lanes){ const open=lv.lanes; let k=0;   // 关闭的路上的怪：轮流分到开放的路（不都挤到隔壁一路）
+      const near=l=>open.slice().sort((a,b)=>Math.abs(a-l)-Math.abs(b-l));
+      lv.spawns=lv.spawns.map(s=>open.includes(s[2]) ? s : [s[0], s[1], near(s[2])[(k++)%Math.min(2,open.length)]]);
+      for(const e of (lv.events||[])) if(e.lanes){ const m=[...new Set(e.lanes.map(l=>open.includes(l)?l:near(l)[0]))]; e.lanes=m; } }
+    if(d.pv) for(const e of (lv.events||[])) if(e.kind==='preview' && d.pv[e.text]) e.text=d.pv[e.text];   // 路数变了，预告里的「第几路」改成看得懂的说法
   }
 })();

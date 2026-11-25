@@ -595,6 +595,12 @@ HOOKS.push((type, d)=>{
       v.m.play('Attack',{restart:true}); CARRY.push({ev:v, pv, x:f.x, y:f.y, t:0, dir:(L.forward.x>0.5?1:-1)}); floatText(p.lane, p.col+0.5, '被叼走', '#ff8a6a', 13); break; }
     case 'grabMiss': { const e=d.e, v=visOf(e,false); v.state='Hit'; v.m.play('Hit',{restart:true, onEnd:()=>{ v.state=null; }}); COMBO.play('晕眩', atE(e), {noFx:true}); floatText(e.lane, e.p, '扑空', '#ffe14d', 13); break; }
     case 'spore': { const e=d.e, g=atE(e); COMBO.play('孢子爆', {x:g.x, y:g.y}); if(d.pets.length) COMBO.play('晕眩', g, {noFx:true}); for(const p of d.pets) floatText(p.lane, p.col+0.5, '停手', '#d59bff', 12); break; }
+    case 'rockHit': { const c=d.c, s=c ? L.toScreen(c.lane,c.col+0.35) : L.toScreen(d.pr.lane,d.pr.p), y=s.y+L.cs*FEET-L.cs*0.28;   // 102 版：直线弹打在石墩上
+      sparks(s.x,y,3,{x:0,y:1},2.5,3,'#c9d2d8',0.22); if(G.t-RK_SND>0.3){ RK_SND=G.t; COMBO.play('壳挡', {x:s.x, y}, {scale:0.55, vol:0.3}); } break; }
+    case 'wade': { if(d.small && G.t-WADE_SND<0.35) break; WADE_SND=G.t; const g=atE(d.e); COMBO.play('落地-水花', {x:g.gx, y:g.gy, gx:g.gx, gy:g.gy}, {scale:d.small?0.5:0.75, vol:0.22, silent:!!d.small}); break; }   // 怪走进水里脚下水花
+    case 'tideIn': G.fx.push({kind:'banner', text:`涨潮：上方 ${d.cols.length} 排变成浅水`, t:0, life:1.8, color:'#8fd8ff'}); COMBO.play('潮浪', null, {vol:0.45}); break;
+    case 'tideOut': G.fx.push({kind:'banner', text:'退潮了', t:0, life:1.2, color:'#8fd8ff'}); break;
+    case 'washUp': { const s=L.toScreen(d.c.lane,d.c.col+0.5); COMBO.play('落地-水花', {x:s.x, y:s.y+L.cs*FEET, gx:s.x, gy:s.y+L.cs*FEET}, {scale:1, vol:0.4}); break; }
     case 'deflect': { const e=d.e, g=atE(e); COMBO.play('壳挡', {x:g.x+L.forward.x*L.cs*0.15, y:g.y+L.forward.y*L.cs*0.15}); break; }
     case 'discoWarn': COMBO.play('Disco-灯光', null); break;
     case 'discoOn': sfx('alert'); break;
@@ -791,6 +797,42 @@ function seeded(seed){ let a=seed>>>0; return ()=>{ a=(a+0x6D2B79F5)|0; let t=Ma
 const FEET = 0.28;
 function feet(lane,p){ const s=L.toScreen(lane,p); return {x:s.x, y:s.y + FEET*L.cs}; }
 // 战场地面和道具在 scene.js（场景试验-1f 的画法）
+// ---------- 102 版：地形格（关卡设计.md「地形方案」设计原则 0：贴地平面画在所有角色下面；石墩按脚底排序，在 draw() 的排序表里） ----------
+// 平面贴图 terrain/*.png = LayerLab 2D Minimal - Environment 2 的 Snow_Hole 形状换成泥 / 沙 / 土 / 水的颜色、加同色深描边（tools/mkterrain.py）
+const TER_IMG = {mud:'terrain/mud.png', sand:'terrain/sand.png', ring:'terrain/ring.png', bed:'terrain/soil.png'};
+const ROCK_IMG = {stone:['env1/Stone_Gray1_01.png',0.58], reef:['env1/Stone_Dark_03.png',0.5]};
+const BED_FL = ['env1/Forest_Flower_01.png','env1/Forest_Flower_02.png','env1/Autumn_Flower_01.png','env1/Forest_Flower_01.png'];
+const WATER = {base:'#62bbe6', edge:'#3584c2', deep:'#4fa6d8'};
+let RK_SND = 0, WADE_SND = 0;
+function drawTerrain(){
+  if(!G) return; const cs=L.cs, T=DATA.level.tide, cells=G.cells;
+  // 水：常驻浅水、花溪、潮水（潮水按 tideK 淡入淡出）。整块水面一起画：底色 → 朝外的边描深色 → 每格一块浅色水纹（同一套 Snow_Hole 形状）
+  const W2=new Map(); const put=(l,c,a,k)=>{ if(!laneOn(l)||c<0||c>=COLS) return; const q=l*16+c, o=W2.get(q); if(!o||o.a<a) W2.set(q,{l,c,a,k}); };
+  for(const q of G.wset) put(Math.floor(q/16), q%16, 1, 'w');
+  for(const c of cells) if(c.type==='stream') put(c.lane, c.col, 1, 's');
+  if(T && G.tideK>0) for(const l of DATA.level.lanes) for(const c of T.cols) put(l, c, G.tideK, 't');
+  if(W2.size){ const has=(l,c)=>W2.has(l*16+c), hi=img('terrain/water2.png'), pet=img('scene2/leaf_pink.png');
+    for(const w of W2.values()){ const r=L.cellRect(w.l,w.c); ctx.globalAlpha=0.92*w.a; ctx.fillStyle=WATER.base; ctx.fillRect(r.x-0.5, r.y-0.5, cs+1, cs+1);
+      if(!has(w.l,w.c-1)){ ctx.fillStyle=WATER.deep; ctx.fillRect(r.x, r.y+cs*0.8, cs, cs*0.2); } }   // 靠家那条边深一点（水的厚度），上沿留一条浅色浪边
+    ctx.fillStyle=WATER.edge; const e=Math.max(2, cs*0.05);
+    for(const w of W2.values()){ const r=L.cellRect(w.l,w.c); ctx.globalAlpha=w.a;
+      if(!has(w.l,w.c+1)) ctx.fillRect(r.x, r.y, cs, e); if(!has(w.l,w.c-1)) ctx.fillRect(r.x, r.y+cs-e, cs, e);
+      if(!has(w.l-1,w.c)) ctx.fillRect(r.x, r.y, e, cs); if(!has(w.l+1,w.c)) ctx.fillRect(r.x+cs-e, r.y, e, cs); }
+    ctx.fillStyle='#b8e8fb'; for(const w of W2.values()){ if(has(w.l,w.c+1)) continue; const r=L.cellRect(w.l,w.c); ctx.globalAlpha=0.9*w.a; ctx.fillRect(r.x, r.y+e, cs, e*0.8); }   // 浪边（彩色，不用白线）
+    for(const w of W2.values()){ const r=L.cellRect(w.l,w.c), ph=w.l*1.7+w.c*2.3, dx=Math.sin(G.t*0.8+ph)*cs*0.06;
+      if(ok(hi)){ const iw=cs*0.62, ih=iw*hi.naturalHeight/hi.naturalWidth; ctx.globalAlpha=0.6*w.a; drawImg(hi, r.x+cs*0.5-iw/2+dx, r.y+cs*((w.l+w.c)%2?0.35:0.62)-ih/2, iw, ih, (w.l+w.c)%2===1); }
+      if(w.k==='s' && ok(pet)){ const k=((G.t*0.12+ph*0.37)%1+1)%1, pw=cs*0.16; ctx.globalAlpha=Math.min(1,k*5,(1-k)*5); drawImg(pet, r.x+k*cs-pw/2, r.y+cs*(0.3+0.4*((w.l*7+w.c)%3)/2)-pw/2, pw, pw*pet.naturalHeight/pet.naturalWidth); } }
+    ctx.globalAlpha=1; }
+  // 空格（泥坑 / 沙坑 / 蘑菇圈）和花圃
+  for(const c of cells){ const k = c.type==='hole' ? c.kind : c.type==='bed' ? 'bed' : null; if(!k) continue; const im=img(TER_IMG[k]); if(!ok(im)) continue;
+    const r=L.cellRect(c.lane,c.col), iw=cs*0.98, ih=Math.min(cs*0.78, iw*im.naturalHeight/im.naturalWidth*1.5), cx=r.x+cs/2, cy=r.y+cs*0.52;   // 竖着拉 1.5 倍：俯视的坑更圆、一眼看出占了这一格（原比例只是一条细泥印，截图看不清）
+    drawImg(im, cx-iw/2, cy-ih/2, iw, ih, (c.lane+c.col)%2===1);
+    if(k==='bed'){ BED_FL.forEach((n,i)=>{ const f=img(n); if(!ok(f)) return; const fw=cs*0.3, fh=fw*f.naturalHeight/f.naturalWidth, a=i*1.57+0.6; drawImg(f, cx+Math.cos(a)*iw*0.24-fw/2, cy+Math.sin(a)*ih*0.24-fh*0.75, fw, fh, i%2===1); }); }
+    if(k==='ring'){ const m=img('env1/Mushroom_Pink_01.png'); if(ok(m)) for(let i=0;i<4;i++){ const a=i*1.57+0.4, mw=cs*0.15, mh=mw*m.naturalHeight/m.naturalWidth; drawImg(m, cx+Math.cos(a)*iw*0.36-mw/2, cy+Math.sin(a)*ih*0.36-mh, mw, mh, i%2===1); } }
+  }
+}
+function drawRock(c){ const cs=L.cs, f=feet(c.lane,c.col+0.5), [n,h]=ROCK_IMG[c.kind]||ROCK_IMG.stone;
+  groundShadow(f.x, f.y, cs*0.66); drawImgH(img(n), f.x, f.y+cs*0.05, cs*h); }
 function drawCrate(c){
   const cs=L.cs, f=feet(c.lane,c.col+0.5); c.flash=Math.max(0,(c.flash||0)-1/60);
   groundShadow(f.x, f.y, cs*0.62);
@@ -1588,7 +1630,7 @@ cv.addEventListener('pointerdown', e=>{ const x=PX(e), y=PY(e); const it=L.items
   // 点地面效果（花丛格、木桶、警钟）也弹说明；格子上有宠物时不弹（场上角色不出浮窗），手里选着卡时不弹（那是在放置）
   TIP.cell = null;
   if(!it && !G.selected && G.started && !G.over){ const {lane,col}=L.toCell(x,y);
-    if(inGrid(lane,col) && !petAt(lane,col)){ const c=cellAt(lane,col); if(c && (c.type!=='crate'||c.hpNow>0)) TIP.cell={info:CELL_INFO[c.type==='crate'?c.kind:c.type], r:L.cellRect(lane,col), t:0}; }
+    if(inGrid(lane,col) && !petAt(lane,col)){ const c=cellAt(lane,col); if(c && (c.type!=='crate'||c.hpNow>0)) TIP.cell={info:CELL_INFO[c.type==='crate'||c.type==='hole'||c.type==='rock'?c.kind:c.type], r:L.cellRect(lane,col), t:0}; }
     const bs=L.toScreen(0,-0.45); if(Math.abs(y-bs.y)<L.cs*0.35 && x>L.ox && x<L.ox+LANES*L.cs) TIP.cell={info:CELL_INFO.bell, r:{x:x-L.cs/2, y:bs.y-L.cs/2, w:L.cs, h:L.cs}, t:0}; }
 });
 window.addEventListener('pointerup', ()=>{ TIP.down=false; if(TIP.type!=='mouse') TIP.show=false; });
@@ -1601,7 +1643,7 @@ function tipTarget(x,y){
   if(best) return best;
   const {lane,col}=L.toCell(x,y);
   if(inGrid(lane,col)){ const p=petAt(lane,col); if(p) return {kind:'pet', def:p.def, pet:p};
-    const c=cellAt(lane,col); if(c && (c.type!=='crate'||c.hpNow>0)) return {kind:'cell', info:CELL_INFO[c.type==='crate'?c.kind:c.type], cell:c}; }
+    const c=cellAt(lane,col); if(c && (c.type!=='crate'||c.hpNow>0)) return {kind:'cell', info:CELL_INFO[c.type==='crate'||c.type==='hole'||c.type==='rock'?c.kind:c.type], cell:c}; }
   const bs=L.toScreen(0,-0.45); if(Math.abs(y-bs.y)<cs*0.35 && x>L.ox && x<L.ox+LANES*cs) return {kind:'cell', info:CELL_INFO.bell};
   return null;
 }
@@ -1664,13 +1706,14 @@ function draw(){
     let sx, sy; if(shake.dx||shake.dy){ sx=shake.dx*a*w+(Math.random()-0.5)*a*0.4; sy=shake.dy*a*w+(Math.random()-0.5)*a*0.4; } else { sx=(Math.random()-0.5)*a*2; sy=(Math.random()-0.5)*a*2; }
     if(!/[?&]shake=0\b/.test(location.search)){ const q=ctx.getTransform().a||1; sx=Math.round(sx*q)/q; sy=Math.round(sy*q)/q; }   // game-test 试改：震屏偏移对齐到整数个屏幕像素（?shake=0 回到原样）
     ctx.translate(sx, sy); }
-  SCENE.drawGround(ctx); COMBO.draw(adt,'ground'); drawPreviewLanes(); drawCh2Floor(); drawCh3Floor(); drawPlacement(); drawAuras();   // 放置提示框在地面层，不盖在角色身上
+  SCENE.drawGround(ctx); drawTerrain(); COMBO.draw(adt,'ground'); drawPreviewLanes(); drawCh2Floor(); drawCh3Floor(); drawPlacement(); drawAuras();   // 放置提示框在地面层，不盖在角色身上
   // 道具、角色、木箱按脚底 y 排序：前面的挡住后面的
   const list=[];
   for(const p of SCENE.props()) if(!p.flat) list.push([p.y, ()=>SCENE.drawProp(ctx,p,ENV_T)]);
   for(const p of G.pets) list.push([feet(p.lane,p.col+0.5).y+0.01, ()=>drawPet(p,adt)]);
   for(const e of G.enemies) list.push([feet(e.lane,e.p).y+0.02, ()=>drawEnemy(e,adt)]);
   for(const c of G.cells) if(c.type==='crate' && c.hpNow>0) list.push([feet(c.lane,c.col+0.5).y, ()=>drawCrate(c)]);
+  for(const c of G.cells) if(c.type==='rock') list.push([feet(c.lane,c.col+0.5).y, ()=>drawRock(c)]);   // 102 版：石墩 / 礁石和木桶一样按脚底排序
   for(const pr of G.projs) list.push([feet(pr.lane,pr.p).y+0.03, ()=>drawProj(pr)]);
   list.push([L.toScreen(0,-0.45).y+L.cs*0.25, drawBells]);
   list.sort((a,b)=>a[0]-b[0]);
