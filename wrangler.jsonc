@@ -1,7 +1,12 @@
 // Cloudflare Workers 自动部署用（Workers Builds 连这个仓库后，每次推送自动执行 npx wrangler deploy）。
-// name 必须和 Cloudflare 后台的 Worker 名字一样（tata）。只有静态文件，没有脚本。
+// name 必须和 Cloudflare 后台的 Worker 名字一样（tata）。
+// 静态文件（所有游戏）照旧由 assets 直接给，不经过脚本；只有找不到文件的请求才进 _api/worker.ts（它只处理 /api/，其余 404）。
+// 2026-11-26 加脚本：货架整理（huojia）每日一图真榜，存储用 Durable Object（SQLite，免费层可用）。源码在 游戏开发\项目\huojia\server\。
 {
   "name": "tata",
+  "main": "_api/worker.ts",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./" }
+  "assets": { "directory": "./" },
+  "durable_objects": { "bindings": [{ "name": "HJ_DAILY", "class_name": "HjDaily" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HjDaily"] }]
 }
