@@ -7,7 +7,7 @@
 export const SLOTS = 3;
 export const KEY = 100;          // 钥匙商品的种类号（画成钥匙）
 export type Layer = number[];
-export interface Cell { layers: Layer[]; cap?: number; lock?: number; hid?: boolean[]; ice?: number[][]; gift?: boolean[][]; glass?: boolean; shut?: number; temp?: boolean; }
+export interface Cell { layers: Layer[]; cap?: number; lock?: number; hid?: boolean[]; ice?: number[][]; gift?: boolean[][]; glass?: boolean; shut?: number; temp?: boolean; side?: number; }   // side：合作模式这格属于谁（0 房主 / 1 好友）
 export type Mv = [number, number, number, number];   // [从格, 从位, 到格, 到位]
 export type LvKind = 'easy' | 'normal' | 'hard';
 export type Tier = 'loose' | 'some' | 'tight' | 'very';
@@ -41,10 +41,10 @@ function shuffle<T>(a: T[], r: () => number) { for (let i = a.length - 1; i > 0;
 export const isTriple = (l: Layer) => l[0] >= 0 && l[0] === l[1] && l[1] === l[2];
 const isEmpty = (l: Layer) => l[0] < 0 && l[1] < 0 && l[2] < 0;
 const z3 = () => [0, 0, 0]; const f3 = () => [false, false, false];
-const copyCell = (c: Cell): Cell => ({
+export const copyCell = (c: Cell): Cell => ({
   layers: c.layers.map(l => l.slice()), cap: c.cap || 3, lock: c.lock || 0, hid: c.hid ? c.hid.slice() : c.layers.map(() => false),
   ice: c.ice ? c.ice.map(l => l.slice()) : c.layers.map(z3), gift: c.gift ? c.gift.map(l => l.slice()) : c.layers.map(f3),
-  glass: !!c.glass, shut: c.shut || 0, temp: !!c.temp,
+  glass: !!c.glass, shut: c.shut || 0, temp: !!c.temp, ...(c.side !== undefined ? { side: c.side } : {}),
 });
 /** 相邻：同一排左右相邻，或上下两排水平距离 < 1（异形货架错半格也算） */
 export function adjacency(pos: number[][] | undefined, n: number): number[][] {
@@ -59,9 +59,9 @@ export function adjacency(pos: number[][] | undefined, n: number): number[][] {
 }
 
 export class Board {
-  cells: Cell[]; pos?: number[][]; adj: number[][]; closed: boolean[];
+  cells: Cell[]; pos?: number[][]; adj: number[][]; closed: boolean[]; team = false;   // team：合作推演用（锁链按两人一共消的组数算）
   constructor(cells: Cell[], pos?: number[][]) { this.cells = cells.map(copyCell); this.pos = pos; this.adj = adjacency(pos, cells.length); this.closed = cells.map(() => false); }
-  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); return b; }
+  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); b.team = this.team; return b; }
   front(c: number) { return this.cells[c].layers[0]; }
   cap(c: number) { return this.cells[c].cap || 3; }
   /** 不能拿也不能放：锁链没解 / 玻璃没碎 / 卷帘门关着 */
@@ -121,17 +121,51 @@ export class Board {
           }
         }
       }
-      this.lockTick(ev, fresh.length);
+      if (!this.team && this.cells.some(x => x.side !== undefined)) { for (const sd of [0, 1]) this.lockTick(ev, fresh.filter(e => this.cells[e.c].side === sd).length, sd); }   // 合作对局：每人的手机只算自己这块的消除，对方的消除由 act.clr 补上（CoopSync）
+      else this.lockTick(ev, fresh.length);
       if (fresh.some(e => e.kind === KEY)) this.cells.forEach((cell, c) => { if (cell.glass) { cell.glass = false; ev.push({ t: 'glass', c }); touched.add(c); } });
       for (const t of touched) this.settle(t, ev);
     }
   }
   /** 每消一组，所有锁链格计数 -n；到 0 解锁 */
-  lockTick(ev: Ev[], n: number) {
+  lockTick(ev: Ev[], n: number, side = -1) {
     if (!n) return;
-    this.cells.forEach((cell, c) => { if ((cell.lock || 0) > 0) { cell.lock = Math.max(0, cell.lock! - n); if (cell.lock === 0) ev.push({ t: 'unlock', c }); } });
+    this.cells.forEach((cell, c) => { if ((cell.lock || 0) > 0 && (side < 0 || cell.side === side)) { cell.lock = Math.max(0, cell.lock! - n); if (cell.lock === 0) ev.push({ t: 'unlock', c }); } });
   }
   unlock(c: number) { this.cells[c].lock = 0; }
+  // ---------------- 合作模式（v7）：送货 / 收货 ----------------
+  /** 合作：把我的 (fc,fs) 送到对方 tc 格的 ts 空位（只能放空位，不能调换）。我这边：拿走后顶上来 / 连带照算；对方那格不在这里消（由对方的手机收货时算） */
+  give(fc: number, fs: number, tc: number, ts: number): Ev[] | null {
+    const A = this.cells[fc], B = this.cells[tc];
+    if (A.side === undefined || B.side === undefined || A.side === B.side || this.locked(fc) || this.locked(tc)) return null;
+    const kind = this.front(fc)[fs]; if (kind < 0 || this.blocked(fc, 0, fs)) return null;
+    if (this.slotsOf(tc).indexOf(ts) < 0 || this.front(tc)[ts] >= 0) return null;
+    this.front(fc)[fs] = -1; this.front(tc)[ts] = kind;
+    const ev: Ev[] = [{ t: 'move', fc, fs, tc, ts, kind, swap: -1 }];
+    this.settle(fc, ev); this.cascade(ev, 1);
+    return ev;
+  }
+  /** 合作：收到对方送来的 kind，想放 (c,s)。那个位置被占了（两边同时操作）就放这格别的空位 → 我这边别的空位 → 都满了就塞到这格最后面一层（东西不会丢） */
+  receive(c: number, s: number, kind: number): { ev: Ev[]; c: number; s: number; back: boolean } {
+    const side = this.cells[c].side;
+    const ok = (ci: number, si: number) => !this.locked(ci) && this.slotsOf(ci).indexOf(si) >= 0 && this.front(ci)[si] < 0;
+    let tc = -1, ts = -1;
+    if (ok(c, s)) { tc = c; ts = s; }
+    else { const e = this.slotsOf(c).find(q => ok(c, q)); if (e !== undefined) { tc = c; ts = e; } }
+    if (tc < 0) {
+      let best = -1e9;
+      this.cells.forEach((x, ci) => { if (x.side !== side || x.temp) return; for (const q of this.slotsOf(ci)) if (ok(ci, q)) { const sc = this.front(ci).filter(k => k === kind).length * 10 - Math.abs(ci - c); if (sc > best) { best = sc; tc = ci; ts = q; } } });
+    }
+    if (tc < 0) {   // 全满：塞到最后一层
+      const x = this.cells[c]; x.layers.push([-1, kind, -1]); x.hid!.push(false); x.ice!.push([0, 0, 0]); x.gift!.push([false, false, false]);
+      return { ev: [], c, s: -1, back: true };
+    }
+    this.front(tc)[ts] = kind;
+    const ev: Ev[] = [{ t: 'move', fc: -1, fs: -1, tc, ts, kind, swap: -1 }];
+    this.settle(tc, ev); this.cascade(ev, 1);
+    if (this.done()) ev.push({ t: 'win' });
+    return { ev, c: tc, s: ts, back: false };
+  }
   counts(frontOnly = false) {
     const m = new Map<number, number>();
     this.cells.forEach((c, ci) => { if (this.locked(ci)) return; for (let i = 0; i < c.layers.length; i++) { if (frontOnly && i > 0) break; for (const k of c.layers[i]) if (k >= 0) m.set(k, (m.get(k) || 0) + 1); } });
@@ -194,13 +228,13 @@ export class Board {
     return { what: 'item', kind: k, picks, ev: all };
   }
   /** 洗牌：没锁的格里、没冻住 / 不是礼盒的商品打乱重发，每层个数不变；不让任何一层天生三个一样 */
-  shuffle(r: () => number) {
+  shuffle(r: () => number, side = -1) {   // side ≥ 0：合作模式只洗自己那块
     const items: number[] = [], spots: [number, number, number][] = [];
-    this.cells.forEach((c, ci) => { if (this.locked(ci)) return; c.layers.forEach((l, li) => l.forEach((k, s) => { if (k >= 0 && !this.blocked(ci, li, s)) { items.push(k); spots.push([ci, li, s]); } })); });
+    this.cells.forEach((c, ci) => { if (this.locked(ci) || (side >= 0 && c.side !== side)) return; c.layers.forEach((l, li) => l.forEach((k, s) => { if (k >= 0 && !this.blocked(ci, li, s)) { items.push(k); spots.push([ci, li, s]); } })); });
     for (let tries = 0; tries < 50; tries++) {
       shuffle(items, r);
       spots.forEach(([c, li, s], i) => { this.cells[c].layers[li][s] = items[i]; });
-      let ok = true; this.cells.forEach(c => c.layers.forEach(l => { if (isTriple(l)) ok = false; }));
+      let ok = true; this.cells.forEach(c => { if (side >= 0 && c.side !== side) return; c.layers.forEach(l => { if (isTriple(l)) ok = false; }); });   // 合作只查自己那块（对方那块可能画着我刚送过去、还没消的三个）
       if (ok) return;
     }
   }
@@ -500,4 +534,114 @@ export function makeDaily(day: number, goodsN: number): Level {
   const lv = makeLevel(n, goodsN, { salt: 500009 + (((day * 40503) >>> 0) % 900000), daily: true });
   lv.daily = day; lv.teach = ''; lv.hard = false;
   return lv;
+}
+
+// ---------------- 合作模式（v7，docs\多人与排行.md「合作 v7」） ----------------
+/** 合作关：两块货架拼在一个 Board 里（前 nA 格 = 房主 side 0，后面 = 好友 side 1；好友那块的 pos.y 整体 +100，不和房主的格子相邻）。
+ *  diff：0 简单 / 1 中等 / 2 困难（「我要」提示：图标 / 颜色 / 只说需要帮助；盘面也一档比一档大、机制多） */
+export interface CoopLevel extends Level { nA: number; diff: number; seed: number; split: number[] }
+export const COOP_DY = 100;
+export const COOP_SPT = [2.3, 2.0, 2.7];   // 每参考步给几秒（两人边说边找，比单人慢）；机器人局模拟调过
+/** 合作推演：两块货架当一个盘面走，但跨边只能放空位（不能调换）—— 和真人能做的一样 */
+export function coopMoves(b: Board, noise = 0, r: () => number = Math.random) {
+  return scoredMoves(b, noise, r).filter(m => b.cells[m.fc].side === b.cells[m.tc].side || b.front(m.tc)[m.ts] < 0);
+}
+export function coopRollout(b0: Board, r: () => number, noise: number): Mv[] | null {
+  const b = b0.clone(); b.team = true; const max = b.remaining() * 3 + 10; const out: Mv[] = [];
+  for (let step = 0; step < max; step++) {
+    if (b.done()) return out;
+    const ms = coopMoves(b, noise, r); if (!ms.length) return null;
+    const m = ms[0]; if (!b.move(m.fc, m.fs, m.tc, m.ts)) return null; out.push([m.fc, m.fs, m.tc, m.ts]);
+  }
+  return b.done() ? out : null;
+}
+/** 一边自己能不能消完（不能 = 合作才有意义）：每种商品在这边的个数都是 3 的倍数才可能 */
+export function sideAlone(cells: Cell[], side: number) {
+  const n = new Map<number, number>(); for (const c of cells) if (c.side === side) for (const l of c.layers) for (const k of l) if (k >= 0) n.set(k, (n.get(k) || 0) + 1);
+  for (const v of n.values()) if (v % 3) return false;
+  return true;
+}
+export function makeCoop(seed: number, diff: number, goodsN: number): CoopLevel {
+  diff = Math.max(0, Math.min(2, diff | 0));
+  const P = [
+    { cells: [8, 9], depth: 2, back: [0.45, 0.6], split: 3, mech: 0, pool: ['lock', 'ice'] },
+    { cells: [9, 10], depth: 2, back: [0.6, 0.8], split: 4, mech: 1, pool: ['lock', 'ice', 'gift', 'column'] },
+    { cells: [9, 10], depth: 3, back: [0.35, 0.5], split: 5, mech: 2, pool: ['lock', 'ice', 'gift', 'column', 'mystery'] },
+  ][diff];
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const r = rng(seed * 9973 + attempt * 104729 + diff * 31337 + 5);
+    const feats = shuffle(P.pool.slice(), r).slice(0, P.mech + (diff === 0 && r() < 0.5 ? 1 : 0));
+    const has = (f: string) => feats.indexOf(f) >= 0;
+    // 两边各自的格子 / 层数
+    const side: { N: number; sizes: number[][]; isCol: boolean[]; shape: { pos: number[][]; rows: number[] } }[] = [];
+    for (let sd = 0; sd < 2; sd++) {
+      const N = ri(r, P.cells[0], P.cells[1]);
+      const shape = makeShape(N, r, false, false);
+      const isCol = Array(N).fill(false); if (has('column')) isCol[ri(r, 0, N - 1)] = true;
+      const sizes: number[][] = [];
+      for (let c = 0; c < N; c++) sizes.push(isCol[c] ? Array(ri(r, 3, 4)).fill(1) : [SLOTS]);
+      const normal = sizes.map((_, i) => i).filter(i => !isCol[i]);
+      for (let k = 0, g = 0; k < 4 && g < 999; g++) { const c = normal[ri(r, 0, normal.length - 1)]; if (sizes[c][0] > 1) { sizes[c][0]--; k++; } }   // 每边 4 个空位：收货要地方放
+      const backN = Math.round(normal.length * (P.depth - 1) * (P.back[0] + r() * (P.back[1] - P.back[0])));
+      for (let k = 0, g = 0; k < backN && g < 999; g++) { const c = normal[ri(r, 0, normal.length - 1)]; if (sizes[c].length >= P.depth) continue; sizes[c].push(r() < 0.6 ? 3 : 2); k++; }
+      side.push({ N, sizes, isCol, shape });
+    }
+    const tot = side.map(x => x.sizes.reduce((a, l) => a + l.reduce((p, q) => p + q, 0), 0));
+    // 凑总数为 3 的倍数：从后层减
+    for (let g = 0; (tot[0] + tot[1]) % 3 && g < 99; g++) { const sd = g % 2; const x = side[sd]; const c = ri(r, 0, x.N - 1); const L = x.sizes[c]; if (!x.isCol[c] && L.length > 1 && L[L.length - 1] > 1) { L[L.length - 1]--; tot[sd]--; } }
+    if ((tot[0] + tot[1]) % 3) continue;
+    const K = (tot[0] + tot[1]) / 3;
+    // 拆开的组：一边 2 个一边 1 个；其余整组放一边
+    const S = P.split; const a: number[] = []; for (let i = 0; i < S; i++) a.push(r() < 0.5 ? 1 : 2);
+    const fix = (from: number, to: number, cnt: number) => { const idx = a.map((v, i) => v === from ? i : -1).filter(i => i >= 0); if (idx.length < cnt) return false; for (let q = 0; q < cnt; q++) a[idx[q]] = to; return true; };
+    const need = (((tot[0] - a.reduce((p, q) => p + q, 0)) % 3) + 3) % 3;   // 让房主这边总数 - 拆组个数 = 3 的倍数（1→2 加 1，2→1 减 1）
+    if (need === 1 && !fix(1, 2, 1)) fix(2, 1, 2);
+    if (need === 2 && !fix(2, 1, 1)) fix(1, 2, 2);
+    const sumA = a.reduce((p, q) => p + q, 0);
+    if ((tot[0] - sumA) % 3 !== 0) continue;
+    const wholeA = (tot[0] - sumA) / 3, wholeB = (tot[1] - (S * 3 - sumA)) / 3;
+    if (wholeA < 2 || wholeB < 2 || wholeA + wholeB + S !== K) continue;
+    const pool = goodsPool(goodsN, goodsN, r);
+    const kinds: number[] = []; for (let i = 0; i < K; i++) kinds.push(pool[i % pool.length]);   // 种类不够就重复（同 makeLevel）
+    const itemsA: number[] = [], itemsB: number[] = [];
+    for (let i = 0; i < S; i++) { const k = kinds[i]; for (let q = 0; q < a[i]; q++) itemsA.push(k); for (let q = a[i]; q < 3; q++) itemsB.push(k); }
+    for (let i = 0; i < wholeA; i++) { const k = kinds[S + i]; itemsA.push(k, k, k); }
+    for (let i = 0; i < wholeB; i++) { const k = kinds[S + wholeA + i]; itemsB.push(k, k, k); }
+    shuffle(itemsA, r); shuffle(itemsB, r);
+    const cells: Cell[] = []; const pos: number[][] = []; let bad = false;
+    for (let sd = 0; sd < 2; sd++) {
+      const x = side[sd], items = sd === 0 ? itemsA : itemsB; let ip = 0;
+      const lockC = has('lock') ? ri(r, 0, x.N - 1) : -1;
+      for (let c = 0; c < x.N; c++) {
+        const layers = x.sizes[c].map(cnt => { const l = [-1, -1, -1]; const ps = x.isCol[c] ? [1] : shuffle([0, 1, 2], r).slice(0, cnt); for (const s of ps) l[s] = items[ip++]; return l; });
+        if (layers.some(l => isTriple(l))) bad = true;
+        const hidOn = has('mystery') && !x.isCol[c] && layers.length >= 2 && r() < 0.4;
+        cells.push({ layers, cap: x.isCol[c] ? 1 : 3, lock: c === lockC && !x.isCol[c] ? 3 + ri(r, 0, 1) : 0, hid: layers.map((_, li) => hidOn && li >= 1),
+          ice: layers.map(z3), gift: layers.map(f3), glass: false, shut: 0, side: sd });
+        pos.push([x.shape.pos[c][0], x.shape.pos[c][1] + sd * COOP_DY]);
+      }
+      if (ip !== items.length) bad = true;
+    }
+    if (bad) continue;
+    // 冰冻 / 礼盒：每边 2 个，放前排（不放锁链格、台座）
+    for (const f of ['ice', 'gift']) if (has(f)) for (let sd = 0; sd < 2; sd++) {
+      const spots: [number, number][] = []; cells.forEach((c, ci) => { if (c.side !== sd || c.lock || c.cap === 1) return; for (let s = 0; s < 3; s++) if (c.layers[0][s] >= 0 && !c.ice![0][s] && !c.gift![0][s]) spots.push([ci, s]); });
+      shuffle(spots, r); const used = new Set<number>();
+      for (const [ci, s] of spots) { if (used.size >= 2) break; if (used.has(ci)) continue; used.add(ci); if (f === 'ice') cells[ci].ice![0][s] = 1; else cells[ci].gift![0][s] = true; }
+    }
+    if (sideAlone(cells, 0) || sideAlone(cells, 1)) continue;
+    const b = new Board(cells, pos);
+    const rr = rng(seed * 31 + attempt + diff);
+    let sol: Mv[] | null = coopRollout(b, rr, 0);
+    for (let k = 0; k < 8 && !sol; k++) sol = coopRollout(b, rr, 30);
+    if (!sol) continue;
+    for (let k = 0; k < 4; k++) { const s2 = coopRollout(b, rr, 10); if (s2 && s2.length < sol.length) sol = s2; }
+    const nA = side[0].N;
+    const steps = Math.min(sol.length, Math.ceil(b.remaining() * 0.8));   // 参考步数：推演解（跨边送得多、偏长）和「每个商品 0.8 步」取小
+    const time = Math.max(90, Math.ceil(steps * COOP_SPT[diff] / 5) * 5);
+    const split = kinds.slice(0, S);
+    return { n: 0, cells, pos, cols: 3, time, hard: diff === 2, type: (['easy', 'normal', 'hard'] as LvKind[])[diff], tier: 'loose', kinds: K, tutorial: false,
+      sol, steps, greedy: true, teach: '', slide: [], orders: [], moveLimit: 0, temp: -1, big: true, feats, nA, diff, seed, split };
+  }
+  throw new Error('coop gen failed ' + seed + '/' + diff);
 }
