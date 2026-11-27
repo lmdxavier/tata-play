@@ -32,7 +32,7 @@ export function verifyRun(day: RunData, moves: unknown, secs: unknown, cap: numb
     const m = moves[i] as Step;
     if (!Array.isArray(m) || m.length !== 5 || !m.every(x => Number.isInteger(x))) return 'step' + i;
     const [fc, fs, tc, ts, ms] = m;
-    if (fc < 0 || fc >= n || tc < 0 || tc >= n || fs < 0 || fs > 2 || ts < 0 || ts > 2) return 'range' + i;
+    if (fc < 0 || fc >= n || tc < 0 || tc >= n || fs < 0 || fs > 3 || ts < 0 || ts > 3) return 'range' + i;
     if (ms < lastT || ms > 3600e3) return 'time' + i;
     if (i > 0 && ms - lastT < MIN_GAP_MS) return 'gap' + i;
     lastT = ms;

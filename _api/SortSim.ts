@@ -1,17 +1,31 @@
 // 货架整理：纯逻辑（格子、层、移动 / 调换、消除、道具、各种特殊货架、关卡生成 + 推演验证）。不依赖 cc，Node 可跑（tools/test_sim.mjs）。
 // 格子 = layers[0] 是前排（3 个位，-1 = 空），layers[1..] 是后层；前排都空了，下一层整排顶上来。
 // v3：满格 = 调换；cap=1 单个台座（只用中间位）；lock=N 锁链格（再消 N 组解锁）；hid[li] 问号层（顶到前排才显示）。
-// v4：ice[li][s] 冰冻层数（>0 不能拿、不能被调换、不算三连；同格 / 相邻格每消一组裂一层）；gift[li][s] 礼盒（同上不能动；相邻消除或顶到前排时拆开）；
-//     glass 玻璃柜（钥匙那组消掉才碎，碎之前当锁着）；shut 卷帘门（游戏按时间设 closed[c]，关着当锁着）；temp 暂存格（底栏独立一格）；
+// v4：glass 玻璃柜（钥匙那组消掉才碎，碎之前当锁着）；shut 卷帘门（游戏按时间设 closed[c]，关着当锁着）；temp 暂存格（底栏独立一格）；
 //     Level.pos 每格在货架上的位置（异形货架）；slide 左右平移的一排；orders 顾客订单；moveLimit 步数限制关；tier 松紧档。
+// v11（docs\设计.md「v10 方案」，2026-11-27 用户拍板）：
+//   ice[li][s] 冰冻（1 = 冻住）：不能拿、不能被调换；只能本格消——另外两个一样的放进这格凑齐 3 个（冻住的也算）就连冰一起消；相邻消除没作用。
+//   gift[li][s] 礼盒倒计时（>0）：不能动、不算三连；相邻格每消一组 -1，到 0 拆开变成里面的商品。
+//   cap=4 四格宽货架：4 个位，必须 4 个一样才消；quad = 只能在宽格 4 个一组消的种类（带 ×4 标，普通格放 3 个不消）。
+//   bomb[li][s] = 种类 × 100 + 剩余步数：1 锁格炸弹（到 0 锁住所在格 BOMB_LOCK 组）/ 2 扣时炸弹（到 0 扣 BOMB_SEC 秒）/ 3 爆盘炸弹（到 0 这关失败）；
+//     炸弹跟着商品走；含炸弹的一组消掉 = 拆除。每走一步（成功放下 / 调换）前排的炸弹 -1，锁着的格不减。
+//   cat 分类格：只收这一类商品；mix = 混搭（同类不同款 3 个也消），否则同款（3 个一模一样才消）。
+//   alt 翻面货架的另一面（flipK 步翻一次，flipAt = 还剩几步翻）；altB = 另一面的炸弹。
 export const SLOTS = 3;
 export const KEY = 100;          // 钥匙商品的种类号（画成钥匙）
+export const BOMB_LOCK = 3;      // 锁格炸弹爆了：所在格上锁链，再消 3 组解开
+export const BOMB_SEC = 15;      // 扣时炸弹爆了：扣 15 秒
+export const BOMB_MORE = 5;      // 爆盘炸弹失败后续命：炸弹回到 5 步
 export type Layer = number[];
-export interface Cell { layers: Layer[]; cap?: number; lock?: number; hid?: boolean[]; ice?: number[][]; gift?: boolean[][]; glass?: boolean; shut?: number; temp?: boolean; side?: number; }   // side：合作模式这格属于谁（0 房主 / 1 好友）
+export interface Cell {
+  layers: Layer[]; cap?: number; lock?: number; hid?: boolean[]; ice?: number[][]; gift?: number[][]; glass?: boolean; shut?: number; temp?: boolean; side?: number;   // side：合作模式这格属于谁（0 房主 / 1 好友）
+  bomb?: number[][]; cat?: number; mix?: boolean; alt?: Layer[]; altB?: number[][]; flipK?: number; flipAt?: number; quad?: number[];
+}
 export type Mv = [number, number, number, number];   // [从格, 从位, 到格, 到位]
 export type LvKind = 'easy' | 'normal' | 'hard';
 export type Tier = 'loose' | 'some' | 'tight' | 'very';
-export type Teach = '' | 'lock' | 'shape' | 'column' | 'ice' | 'gift' | 'shutter' | 'temp' | 'mystery' | 'slide' | 'glass' | 'steps' | 'orders';
+export type Teach = '' | 'lock' | 'shape' | 'column' | 'ice' | 'gift' | 'shutter' | 'temp' | 'mystery' | 'slide' | 'glass' | 'steps' | 'orders'
+  | 'wide' | 'bombLock' | 'catSame' | 'bombTime' | 'flip' | 'catMix' | 'bombBoom';
 export interface Level {
   n: number; cells: Cell[]; pos: number[][]; cols: number; time: number; hard: boolean; type: LvKind; tier: Tier; kinds: number; tutorial: boolean;
   sol: Mv[]; steps: number; greedy: boolean; teach: Teach; slide: number[]; orders: number[]; moveLimit: number; temp: number; big: boolean; feats: string[];
@@ -23,13 +37,17 @@ export interface GenOpt { salt?: number; daily?: boolean }
 export const DAILY_MAX_INTRO = 12;
 export type Ev =
   | { t: 'move'; fc: number; fs: number; tc: number; ts: number; kind: number; swap: number }
-  | { t: 'clear'; c: number; kind: number }
+  | { t: 'clear'; c: number; kind: number; mixed?: boolean; n?: number }   // mixed：混搭分类格消的不同款；n = 4：宽格
   | { t: 'shift'; c: number }
   | { t: 'unlock'; c: number }
-  | { t: 'ice'; c: number; s: number; left: number }
-  | { t: 'gift'; c: number; s: number; kind: number }
+  | { t: 'ice'; c: number; s: number; left: number }                          // left 0 = 冰碎（本格凑齐消掉 / 锤子）
+  | { t: 'gift'; c: number; s: number; kind: number; left?: number; from?: number }   // left > 0：倒计时 -1（from = 哪格消的，飞光起点）；0 / 没有 = 拆开
   | { t: 'glass'; c: number }
   | { t: 'unshut'; c: number }
+  | { t: 'defuse'; c: number; s: number; type: number }                       // 炸弹拆除（c = -1：道具拿走的）
+  | { t: 'bomb'; c: number; s: number; type: number }                         // 炸弹爆了
+  | { t: 'boom' }                                                              // 爆盘：这关失败
+  | { t: 'flip'; c: number }
   | { t: 'win' };
 
 export function rng(seed: number) {
@@ -39,12 +57,21 @@ export function rng(seed: number) {
 const ri = (r: () => number, a: number, b: number) => a + Math.floor(r() * (b - a + 1));
 function shuffle<T>(a: T[], r: () => number) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 export const isTriple = (l: Layer) => l[0] >= 0 && l[0] === l[1] && l[1] === l[2];
-const isEmpty = (l: Layer) => l[0] < 0 && l[1] < 0 && l[2] < 0;
-const z3 = () => [0, 0, 0]; const f3 = () => [false, false, false];
+const isEmpty = (l: Layer) => l.every(k => k < 0);
+const z3 = () => [0, 0, 0]; const f3 = () => [0, 0, 0];
+const zs = (L: Layer[]) => L.map(l => l.map(() => 0));
+// ---------------- 商品分类（分类货架用；只收形状一眼能认出的，每类至少 3 种）----------------
+export const CAT_NAMES = ['', 'food', 'potion', 'music', 'treasure', 'toy'];
+const CAT_OF: Record<number, number> = { 0: 1, 1: 1, 2: 1, 6: 1, 9: 1, 12: 1, 15: 1, 18: 1, 28: 1, 4: 2, 30: 2, 31: 2, 32: 2, 33: 2,
+  13: 3, 20: 3, 26: 3, 29: 3, 16: 4, 36: 4, 37: 4, 38: 4, 39: 4, 14: 5, 17: 5, 25: 5, 27: 5 };
+export const catOf = (k: number) => CAT_OF[k] || 0;
+export const catKinds = (cat: number) => Object.keys(CAT_OF).map(Number).filter(k => CAT_OF[k] === cat);
 export const copyCell = (c: Cell): Cell => ({
   layers: c.layers.map(l => l.slice()), cap: c.cap || 3, lock: c.lock || 0, hid: c.hid ? c.hid.slice() : c.layers.map(() => false),
-  ice: c.ice ? c.ice.map(l => l.slice()) : c.layers.map(z3), gift: c.gift ? c.gift.map(l => l.slice()) : c.layers.map(f3),
+  ice: c.ice ? c.ice.map(l => l.slice()) : zs(c.layers), gift: c.gift ? c.gift.map(l => l.map(v => +v)) : zs(c.layers), bomb: c.bomb ? c.bomb.map(l => l.slice()) : zs(c.layers),
   glass: !!c.glass, shut: c.shut || 0, temp: !!c.temp, ...(c.side !== undefined ? { side: c.side } : {}),
+  ...(c.cat ? { cat: c.cat, mix: !!c.mix } : {}), ...(c.quad ? { quad: c.quad.slice() } : {}),
+  ...(c.alt ? { alt: c.alt.map(l => l.slice()), altB: c.altB ? c.altB.map(l => l.slice()) : zs(c.alt), flipK: c.flipK || 4, flipAt: c.flipAt || c.flipK || 4 } : {}),
 });
 /** 相邻：同一排左右相邻，或上下两排水平距离 < 1（异形货架错半格也算） */
 export function adjacency(pos: number[][] | undefined, n: number): number[][] {
@@ -60,50 +87,74 @@ export function adjacency(pos: number[][] | undefined, n: number): number[][] {
 
 export class Board {
   cells: Cell[]; pos?: number[][]; adj: number[][]; closed: boolean[]; team = false;   // team：合作推演用（锁链按两人一共消的组数算）
-  constructor(cells: Cell[], pos?: number[][]) { this.cells = cells.map(copyCell); this.pos = pos; this.adj = adjacency(pos, cells.length); this.closed = cells.map(() => false); }
-  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); b.team = this.team; return b; }
+  quad = new Set<number>(); moves = 0; boomed = false;
+  constructor(cells: Cell[], pos?: number[][]) {
+    this.cells = cells.map(copyCell); this.pos = pos; this.adj = adjacency(pos, cells.length); this.closed = cells.map(() => false);
+    for (const c of this.cells) if (c.quad) for (const k of c.quad) this.quad.add(k);
+  }
+  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); b.team = this.team; b.moves = this.moves; b.boomed = this.boomed; return b; }
   front(c: number) { return this.cells[c].layers[0]; }
   cap(c: number) { return this.cells[c].cap || 3; }
   /** 不能拿也不能放：锁链没解 / 玻璃没碎 / 卷帘门关着 */
   locked(c: number) { const x = this.cells[c]; return (x.lock || 0) > 0 || !!x.glass || this.closed[c]; }
-  /** 冰冻或礼盒：这个商品不能拿、不能被调换、不算三连 */
+  /** 冰冻或礼盒：这个商品不能拿、不能被调换（冰冻的照样算进本格的三个） */
   blocked(c: number, li: number, s: number) { const x = this.cells[c]; return !!((x.ice && x.ice[li] && x.ice[li][s] > 0) || (x.gift && x.gift[li] && x.gift[li][s])); }
-  slotsOf(c: number) { return this.cap(c) === 1 ? [1] : [0, 1, 2]; }
-  remaining() { let n = 0; for (const c of this.cells) for (const l of c.layers) for (const k of l) if (k >= 0) n++; return n; }
+  slotsOf(c: number) { const k = this.cap(c); return k === 1 ? [1] : k === 4 ? [0, 1, 2, 3] : [0, 1, 2]; }
+  /** 这种商品几个一组（宽格专用的 4 个，其他 3 个） */
+  groupOf(kind: number) { return this.quad.has(kind) ? 4 : 3; }
+  /** 分类格只收本类 */
+  accepts(c: number, kind: number) { const x = this.cells[c]; return !x.cat || catOf(kind) === x.cat; }
+  remaining() { let n = 0; for (const c of this.cells) { for (const l of c.layers) for (const k of l) if (k >= 0) n++; if (c.alt) for (const l of c.alt) for (const k of l) if (k >= 0) n++; } return n; }
   done() { return this.remaining() === 0; }
   canPlace(c: number) { if (this.locked(c)) return false; const f = this.front(c); return this.slotsOf(c).some(s => f[s] < 0); }
-  tripleAt(c: number) { const L = this.cells[c].layers[0]; return isTriple(L) && !this.blocked(c, 0, 0) && !this.blocked(c, 0, 1) && !this.blocked(c, 0, 2); }
+  /** 这一排（这格的规则下）会不会消：宽格 4 个一样；混搭格 3 个同类；普通 3 个一样且不是宽格专用的种类；礼盒挡着不消，冰冻的照算 */
+  layerClears(c: number, l: Layer, g?: number[]) {
+    const x = this.cells[c], cap = this.cap(c);
+    if (cap === 1) return false;
+    for (let s = 0; s < l.length; s++) if (l[s] < 0 || (g && g[s])) return false;
+    if (cap === 4) { for (let s = 1; s < l.length; s++) if (l[s] !== l[0]) return false; return true; }
+    if (x.mix) return l.every(k => catOf(k) === x.cat);
+    return l[0] === l[1] && l[1] === l[2] && !this.quad.has(l[0]);
+  }
+  tripleAt(c: number) { const x = this.cells[c]; return this.layerClears(c, x.layers[0], x.gift![0]); }
   /** 把 (fc,fs) 的商品放到 tc 格的 ts 位（-1 = 第一个空位）；ts 上有东西 = 调换。返回事件；不能放返回 null */
   move(fc: number, fs: number, tc: number, ts = -1): Ev[] | null {
-    if (fc === tc || this.locked(fc) || this.locked(tc)) return null;
-    const kind = this.front(fc)[fs]; if (kind < 0 || this.blocked(fc, 0, fs)) return null;
+    if (fc === tc || this.boomed || this.locked(fc) || this.locked(tc)) return null;
+    const kind = this.front(fc)[fs]; if (kind < 0 || this.blocked(fc, 0, fs) || !this.accepts(tc, kind)) return null;
     const tf = this.front(tc); const ok = this.slotsOf(tc);
     if (ts < 0) { const e = ok.find(s => tf[s] < 0); ts = e === undefined ? -1 : e; }
     if (ts < 0 || ok.indexOf(ts) < 0) return null;
     const other = tf[ts]; if (other === kind) return null;
-    if (other >= 0 && this.blocked(tc, 0, ts)) return null;
+    if (other >= 0 && (this.blocked(tc, 0, ts) || !this.accepts(fc, other) || this.slotsOf(fc).indexOf(fs) < 0)) return null;
+    const Bf = this.cells[fc].bomb![0], Bt = this.cells[tc].bomb![0]; const bk = Bf[fs]; Bf[fs] = Bt[ts] || 0; Bt[ts] = bk || 0;   // 炸弹跟着商品走
     this.front(fc)[fs] = other; tf[ts] = kind;
     const ev: Ev[] = [{ t: 'move', fc, fs, tc, ts, kind, swap: other }];
     const i0 = ev.length;
     this.settle(tc, ev); this.settle(fc, ev);
     this.cascade(ev, i0);
+    this.tick(ev);
     if (this.done()) ev.push({ t: 'win' });
     return ev;
   }
-  /** 消三、空了顶上来（顶上来的刚好三个一样也消；顶到前排的礼盒拆开） */
+  /** 消掉、空了顶上来（顶上来的刚好凑齐也消）；消的那组里有冰 = 冰碎，有炸弹 = 拆除 */
   settle(c: number, ev: Ev[]) {
-    const cell = this.cells[c], L = cell.layers, H = cell.hid!, I = cell.ice!, G = cell.gift!;
+    const cell = this.cells[c], L = cell.layers, H = cell.hid!, I = cell.ice!, G = cell.gift!, B = cell.bomb!;
     for (let guard = 0; guard < 20; guard++) {
-      if (this.tripleAt(c)) { const kind = L[0][0]; L[0] = [-1, -1, -1]; ev.push({ t: 'clear', c, kind }); continue; }
-      if (isEmpty(L[0]) && L.length > 1) {
-        L.shift(); H.shift(); I.shift(); G.shift(); H[0] = false; ev.push({ t: 'shift', c });
-        for (let s = 0; s < SLOTS; s++) if (G[0][s]) { G[0][s] = false; ev.push({ t: 'gift', c, s, kind: L[0][s] }); }
+      if (this.tripleAt(c)) {
+        const kind = L[0][0], w = L[0].length; const mixed = !!cell.mix && L[0].some(k => k !== kind);
+        for (let s = 0; s < w; s++) {
+          if (I[0][s] > 0) { I[0][s] = 0; ev.push({ t: 'ice', c, s, left: 0 }); }
+          if (B[0][s]) { ev.push({ t: 'defuse', c, s, type: Math.floor(B[0][s] / 100) }); B[0][s] = 0; }
+        }
+        L[0] = L[0].map(() => -1);
+        const e: Ev = { t: 'clear', c, kind }; if (mixed) e.mixed = true; if (w === 4) e.n = 4; ev.push(e);
         continue;
       }
+      if (isEmpty(L[0]) && L.length > 1) { L.shift(); H.shift(); I.shift(); G.shift(); B.shift(); H[0] = false; ev.push({ t: 'shift', c }); continue; }
       break;
     }
   }
-  /** 新的消除带来的连带：相邻冰裂、礼盒拆开、锁链计数、钥匙碎玻璃；裂开 / 拆开后可能又凑成三个 → 再来一轮 */
+  /** 新的消除带来的连带：相邻礼盒倒计时 -1（到 0 拆开）、锁链计数、钥匙碎玻璃；拆开后可能又凑成三个 → 再来一轮 */
   cascade(ev: Ev[], from: number) {
     let i = from;
     for (let guard = 0; guard < 30 && i < ev.length; guard++) {
@@ -111,14 +162,11 @@ export class Board {
       if (!fresh.length) break;
       const touched = new Set<number>();
       for (const e of fresh) {
-        const near = e.c >= 0 ? [e.c, ...this.adj[e.c]] : [];
-        for (const t of near) {
+        if (e.c < 0) continue;
+        for (const t of this.adj[e.c]) {
           if (this.locked(t)) continue;
-          const cell = this.cells[t];
-          for (let s = 0; s < SLOTS; s++) {
-            if (cell.ice![0][s] > 0) { cell.ice![0][s]--; ev.push({ t: 'ice', c: t, s, left: cell.ice![0][s] }); touched.add(t); }
-            else if (cell.gift![0][s]) { cell.gift![0][s] = false; ev.push({ t: 'gift', c: t, s, kind: cell.layers[0][s] }); touched.add(t); }
-          }
+          const cell = this.cells[t], G = cell.gift![0];
+          for (let s = 0; s < G.length; s++) if (G[s] > 0) { G[s]--; ev.push({ t: 'gift', c: t, s, kind: cell.layers[0][s], left: G[s], from: e.c }); if (!G[s]) touched.add(t); }
         }
       }
       if (!this.team && this.cells.some(x => x.side !== undefined)) { for (const sd of [0, 1]) this.lockTick(ev, fresh.filter(e => this.cells[e.c].side === sd).length, sd); }   // 合作对局：每人的手机只算自己这块的消除，对方的消除由 act.clr 补上（CoopSync）
@@ -127,6 +175,41 @@ export class Board {
       for (const t of touched) this.settle(t, ev);
     }
   }
+  /** 每走一步：前排炸弹 -1（锁着的格不减）、翻面货架倒数，到 0 翻面（翻过来刚好凑齐也消） */
+  tick(ev: Ev[]) {
+    this.moves++;
+    let fire = false;
+    this.cells.forEach((x, c) => {
+      const B = x.bomb![0]; if (this.locked(c)) return;
+      for (let s = 0; s < B.length; s++) {
+        if (!B[s] || x.layers[0][s] < 0) continue;
+        const type = Math.floor(B[s] / 100); let n = B[s] % 100; if (n <= 0) continue;
+        n--; B[s] = type * 100 + n; if (n > 0) continue;
+        ev.push({ t: 'bomb', c, s, type });
+        if (type === 1) { B[s] = 0; x.lock = (x.lock || 0) + BOMB_LOCK; }
+        else if (type === 2) B[s] = 0;
+        else { this.boomed = true; fire = true; }
+      }
+    });
+    if (fire) { ev.push({ t: 'boom' }); return; }
+    const flipped: number[] = [];
+    this.cells.forEach((x, c) => {
+      if (!x.alt || !x.flipK || this.locked(c)) return;
+      x.flipAt = (x.flipAt || x.flipK) - 1;
+      if (x.flipAt <= 0) { x.flipAt = x.flipK; this.flipCell(c); ev.push({ t: 'flip', c }); flipped.push(c); }
+    });
+    if (flipped.length) { const i0 = ev.length; for (const c of flipped) this.settle(c, ev); this.cascade(ev, i0); }
+  }
+  flipCell(c: number) {
+    const x = this.cells[c]; const a = x.alt!, ab = x.altB || zs(a);
+    x.alt = x.layers; x.altB = x.bomb;
+    x.layers = a.length ? a : [[-1, -1, -1]]; x.bomb = a.length ? ab : [[0, 0, 0]];
+    x.hid = x.layers.map(() => false); x.ice = zs(x.layers); x.gift = zs(x.layers);
+  }
+  /** 订单关交完自动清场：拿走一组（不管规则） */
+  sweep(kind: number, count: number) { return this.take(kind, count); }
+  /** 爆盘失败后续命：爆了的炸弹回到 n 步，可以接着走 */
+  bombMore(n = BOMB_MORE) { this.cells.forEach(x => x.bomb!.forEach(l => l.forEach((v, s) => { if (v && v % 100 === 0) l[s] = Math.floor(v / 100) * 100 + n; }))); this.boomed = false; }
   /** 每消一组，所有锁链格计数 -n；到 0 解锁 */
   lockTick(ev: Ev[], n: number, side = -1) {
     if (!n) return;
@@ -157,7 +240,7 @@ export class Board {
       this.cells.forEach((x, ci) => { if (x.side !== side || x.temp) return; for (const q of this.slotsOf(ci)) if (ok(ci, q)) { const sc = this.front(ci).filter(k => k === kind).length * 10 - Math.abs(ci - c); if (sc > best) { best = sc; tc = ci; ts = q; } } });
     }
     if (tc < 0) {   // 全满：塞到最后一层
-      const x = this.cells[c]; x.layers.push([-1, kind, -1]); x.hid!.push(false); x.ice!.push([0, 0, 0]); x.gift!.push([false, false, false]);
+      const x = this.cells[c]; x.layers.push([-1, kind, -1]); x.hid!.push(false); x.ice!.push([0, 0, 0]); x.gift!.push([0, 0, 0]); x.bomb!.push([0, 0, 0]);
       return { ev: [], c, s: -1, back: true };
     }
     this.front(tc)[ts] = kind;
@@ -171,45 +254,46 @@ export class Board {
     this.cells.forEach((c, ci) => { if (this.locked(ci)) return; for (let i = 0; i < c.layers.length; i++) { if (frontOnly && i > 0) break; for (const k of c.layers[i]) if (k >= 0) m.set(k, (m.get(k) || 0) + 1); } });
     return m;
   }
-  /** 从没锁的格里拿走 count 个 kind（前排优先），带走它身上的冰 / 礼盒；后层拿空就去掉；返回位置 [格, 层, 位] 和事件 */
+  /** 从没锁的格里拿走 count 个 kind（前排优先），带走它身上的冰 / 礼盒 / 炸弹；后层拿空就去掉；返回位置 [格, 层, 位] 和事件 */
   private take(kind: number, count: number): { picks: [number, number, number][]; ev: Ev[] } {
     const picks: [number, number, number][] = [];
     for (let li = 0; li < 9 && picks.length < count; li++)
       for (let c = 0; c < this.cells.length && picks.length < count; c++) {
         if (this.locked(c)) continue;
         const l = this.cells[c].layers[li]; if (!l) continue;
-        for (let s = 0; s < SLOTS && picks.length < count; s++) if (l[s] === kind) picks.push([c, li, s]);
+        for (let s = 0; s < l.length && picks.length < count; s++) if (l[s] === kind) picks.push([c, li, s]);
       }
-    for (const [c, li, s] of picks) { const x = this.cells[c]; x.layers[li][s] = -1; x.ice![li][s] = 0; x.gift![li][s] = false; }
     const ev: Ev[] = [];
-    for (let k = 0; k < picks.length / 3; k++) ev.push({ t: 'clear', c: -1, kind });
+    for (const [c, li, s] of picks) { const x = this.cells[c]; x.layers[li][s] = -1; x.ice![li][s] = 0; x.gift![li][s] = 0; if (x.bomb![li][s]) { if (li === 0) ev.push({ t: 'defuse', c, s, type: Math.floor(x.bomb![li][s] / 100) }); x.bomb![li][s] = 0; } }
+    const nd = ev.length;
+    for (let k = 0; k < picks.length / this.groupOf(kind); k++) ev.push({ t: 'clear', c: -1, kind });
     const i0 = ev.length;
     for (let c = 0; c < this.cells.length; c++) {
       const x = this.cells[c], L = x.layers;
-      for (let li = L.length - 1; li >= 1; li--) if (isEmpty(L[li])) { L.splice(li, 1); x.hid!.splice(li, 1); x.ice!.splice(li, 1); x.gift!.splice(li, 1); }
+      for (let li = L.length - 1; li >= 1; li--) if (isEmpty(L[li])) { L.splice(li, 1); x.hid!.splice(li, 1); x.ice!.splice(li, 1); x.gift!.splice(li, 1); x.bomb!.splice(li, 1); }
       this.settle(c, ev);
     }
-    this.cascade(ev, 0);
-    ev.splice(0, i0);   // 道具本身那几组只用来扣锁链 / 碎玻璃，不当成格子事件
+    this.cascade(ev, nd);
+    ev.splice(nd, i0 - nd);   // 道具本身那几组只用来扣锁链 / 碎玻璃，不当成格子事件
     if (this.done()) ev.push({ t: 'win' });
     return { picks, ev };
   }
-  /** 磁铁：前排最多的一种，凑齐 3 个直接消（不够从后层拿；锁着的格不拿） */
+  /** 磁铁：前排最多的一种，凑齐一组直接消（不够从后层拿；锁着的格不拿；宽格专用的种类拿 4 个） */
   magnet(): { kind: number; picks: [number, number, number][]; ev: Ev[] } | null {
     const fc = this.counts(true), all = this.counts();
     let best = -1, bs = -1;
-    for (const [k, n] of all) { if (n < 3) continue; const s = (fc.get(k) || 0) * 100 + n; if (s > bs) { bs = s; best = k; } }
+    for (const [k, n] of all) { if (n < this.groupOf(k)) continue; const s = (fc.get(k) || 0) * 100 + n; if (s > bs) { bs = s; best = k; } }
     if (best < 0) return null;
-    const r = this.take(best, 3);
+    const r = this.take(best, this.groupOf(best));
     return { kind: best, picks: r.picks, ev: r.ev };
   }
-  /** 魔法：点中的那种商品（没锁的格里）按 3 的倍数全部清掉 */
+  /** 魔法：点中的那种商品（没锁的格里）按一组的倍数全部清掉 */
   wand(kind: number): { kind: number; picks: [number, number, number][]; ev: Ev[] } | null {
-    const n = this.counts().get(kind) || 0; if (n < 3 || kind < 0) return null;
-    const r = this.take(kind, Math.floor(n / 3) * 3);
+    const g = this.groupOf(kind); const n = this.counts().get(kind) || 0; if (n < g || kind < 0) return null;
+    const r = this.take(kind, Math.floor(n / g) * g);
     return { kind, picks: r.picks, ev: r.ev };
   }
-  /** 锤子：砸锁链 / 玻璃 / 卷帘门 / 冰 / 礼盒；砸普通商品 = 清掉这种的 3 个 */
+  /** 锤子：砸锁链 / 玻璃 / 卷帘门 / 冰 / 礼盒；砸普通商品 = 清掉这种的一组 */
   hammer(c: number, s: number): { what: string; kind: number; picks: [number, number, number][]; ev: Ev[] } | null {
     const x = this.cells[c]; const ev: Ev[] = [];
     if ((x.lock || 0) > 0) { x.lock = 0; ev.push({ t: 'unlock', c }); return { what: 'lock', kind: -1, picks: [], ev }; }
@@ -217,70 +301,92 @@ export class Board {
     if (x.shut) { x.shut = 0; this.closed[c] = false; ev.push({ t: 'unshut', c }); return { what: 'shut', kind: -1, picks: [], ev }; }
     const k = x.layers[0][s]; if (k < 0) return null;
     if (x.ice![0][s] > 0) { x.ice![0][s] = 0; ev.push({ t: 'ice', c, s, left: 0 }); this.settle(c, ev); this.cascade(ev, 1); if (this.done()) ev.push({ t: 'win' }); return { what: 'ice', kind: k, picks: [], ev }; }
-    if (x.gift![0][s]) { x.gift![0][s] = false; ev.push({ t: 'gift', c, s, kind: k }); this.settle(c, ev); this.cascade(ev, 1); if (this.done()) ev.push({ t: 'win' }); return { what: 'gift', kind: k, picks: [], ev }; }
-    if ((this.counts().get(k) || 0) < 3) return null;
-    // 点中的这个一定拿走，再按顺序补 2 个；锁链 / 玻璃按「消了一组」算
-    x.layers[0][s] = -1; x.ice![0][s] = 0; x.gift![0][s] = false;
-    const r = this.take(k, 2);
+    if (x.gift![0][s]) { x.gift![0][s] = 0; ev.push({ t: 'gift', c, s, kind: k }); this.settle(c, ev); this.cascade(ev, 1); if (this.done()) ev.push({ t: 'win' }); return { what: 'gift', kind: k, picks: [], ev }; }
+    const g = this.groupOf(k);
+    if ((this.counts().get(k) || 0) < g) return null;
+    // 点中的这个一定拿走，再按顺序补齐一组；锁链 / 玻璃按「消了一组」算
+    const pre: Ev[] = []; if (x.bomb![0][s]) { pre.push({ t: 'defuse', c, s, type: Math.floor(x.bomb![0][s] / 100) }); x.bomb![0][s] = 0; }
+    x.layers[0][s] = -1; x.ice![0][s] = 0; x.gift![0][s] = 0;
+    const r = this.take(k, g - 1);
     const picks: [number, number, number][] = [[c, 0, s], ...r.picks];
     const ev2: Ev[] = [{ t: 'clear', c: -1, kind: k }]; this.settle(c, ev2); this.cascade(ev2, 0); ev2.shift();
-    const all = [...r.ev.filter(e => e.t !== 'win'), ...ev2]; if (this.done()) all.push({ t: 'win' });
+    const all = [...pre, ...r.ev.filter(e => e.t !== 'win'), ...ev2]; if (this.done()) all.push({ t: 'win' });
     return { what: 'item', kind: k, picks, ev: all };
   }
-  /** 洗牌：没锁的格里、没冻住 / 不是礼盒的商品打乱重发，每层个数不变；不让任何一层天生三个一样 */
+  /** 洗牌：没锁的格里、没冻住 / 不是礼盒 / 不带炸弹的商品打乱重发，每层个数不变（分类格不动）；不让任何一层天生凑齐 */
   shuffle(r: () => number, side = -1) {   // side ≥ 0：合作模式只洗自己那块
     const items: number[] = [], spots: [number, number, number][] = [];
-    this.cells.forEach((c, ci) => { if (this.locked(ci) || (side >= 0 && c.side !== side)) return; c.layers.forEach((l, li) => l.forEach((k, s) => { if (k >= 0 && !this.blocked(ci, li, s)) { items.push(k); spots.push([ci, li, s]); } })); });
+    this.cells.forEach((c, ci) => { if (this.locked(ci) || c.cat || (side >= 0 && c.side !== side)) return; c.layers.forEach((l, li) => l.forEach((k, s) => { if (k >= 0 && !this.blocked(ci, li, s) && !c.bomb![li][s]) { items.push(k); spots.push([ci, li, s]); } })); });
     for (let tries = 0; tries < 50; tries++) {
       shuffle(items, r);
       spots.forEach(([c, li, s], i) => { this.cells[c].layers[li][s] = items[i]; });
-      let ok = true; this.cells.forEach(c => { if (side >= 0 && c.side !== side) return; c.layers.forEach(l => { if (isTriple(l)) ok = false; }); });   // 合作只查自己那块（对方那块可能画着我刚送过去、还没消的三个）
+      let ok = true; this.cells.forEach((c, ci) => { if (side >= 0 && c.side !== side) return; c.layers.forEach((l, li) => { if (this.layerClears(ci, l, c.gift![li])) ok = false; }); });   // 合作只查自己那块（对方那块可能画着我刚送过去、还没消的三个）
       if (ok) return;
     }
   }
-  key() { return this.cells.map((c, i) => (c.lock || 0) + (c.glass ? 'G' : '') + (this.closed[i] ? 'S' : '') + '#' + c.layers.map((l, li) => l.map((k, s) => k + (c.ice![li][s] ? 'i' + c.ice![li][s] : '') + (c.gift![li][s] ? 'g' : '')).sort().join(',')).join('|')).sort().join('/'); }
+  key() { return this.cells.map((c, i) => (c.lock || 0) + (c.glass ? 'G' : '') + (this.closed[i] ? 'S' : '') + (c.alt ? 'F' + c.flipAt + ':' + c.alt.map(l => l.join(',')).join('|') : '') + '#' + c.layers.map((l, li) => l.map((k, s) => k + (c.ice![li][s] ? 'i' : '') + (c.gift![li][s] ? 'g' + c.gift![li][s] : '') + (c.bomb![li][s] ? 'b' + c.bomb![li][s] : '')).sort().join(',')).join('|')).sort().join('/'); }
 }
 
-/** 走法打分（推演和提示共用）：凑三 > 拿空一格露出后层 > 凑对 > 放空格；调换只在能凑出三个时考虑；往别的种类里塞、拆对子扣分。冻住 / 礼盒当成「不同种类、不能动」 */
+/** 走法打分（推演和提示共用）：凑齐 > 拿空一格露出后层 > 凑对 > 放空格；调换只在能凑出三个时考虑；往别的种类里塞、拆对子扣分。
+ *  礼盒 = 不同种类、不能动；冰冻 = 本来的种类但不能动（把同款送进冰格就能消）；炸弹那组优先消；宽格只放宽格专用的种类；分类格只放本类 */
 export function scoredMoves(b: Board, noise = 0, r: () => number = Math.random) {
   const out: { s: number; fc: number; fs: number; tc: number; ts: number }[] = [];
   const n = b.cells.length;
-  const fl: number[] = [], lk: boolean[] = [], c3: boolean[] = [], deep: boolean[] = [], F: number[][] = [], bk: boolean[][] = [];
+  const fl: number[] = [], lk: boolean[] = [], cap: number[] = [], deep: boolean[] = [], F: number[][] = [], mv: boolean[][] = [], bomb: boolean[][] = [], iceK: number[] = [];
   for (let c = 0; c < n; c++) {
-    const f = b.front(c); fl.push((f[0] >= 0 ? 1 : 0) + (f[1] >= 0 ? 1 : 0) + (f[2] >= 0 ? 1 : 0)); lk.push(b.locked(c)); c3.push(b.cap(c) === 3); deep.push(b.cells[c].layers.length > 1);
-    const bb = [b.blocked(c, 0, 0), b.blocked(c, 0, 1), b.blocked(c, 0, 2)]; bk.push(bb);
-    F.push([bb[0] && f[0] >= 0 ? -9 - c * 3 : f[0], bb[1] && f[1] >= 0 ? -10 - c * 3 : f[1], bb[2] && f[2] >= 0 ? -11 - c * 3 : f[2]]);   // 冻住的当成独一无二的种类（不和谁凑对）
+    const x = b.cells[c], f = x.layers[0], G = x.gift![0], I = x.ice![0], B = x.bomb![0];
+    lk.push(b.locked(c)); cap.push(b.cap(c)); deep.push(x.layers.length > 1);
+    const Fc: number[] = [], mc: boolean[] = [], bc: boolean[] = []; let cnt = 0, ik = -1;
+    for (let s = 0; s < f.length; s++) {
+      const k = f[s]; if (k >= 0) cnt++;
+      Fc.push(k >= 0 && G[s] ? -9 - c * 4 - s : k);   // 礼盒当成独一无二的种类（不和谁凑对）
+      mc.push(k >= 0 && !G[s] && !I[s]); bc.push(k >= 0 && !!B[s]);
+      if (k >= 0 && I[s]) ik = k;
+    }
+    F.push(Fc); mv.push(mc); bomb.push(bc); fl.push(cnt); iceK.push(ik);
   }
   const has = (k: number) => k >= 0 || k <= -9;
+  const nearGift: boolean[] = b.cells.map((_, c) => b.adj[c].some(t => !lk[t] && b.cells[t].gift![0].some(v => v > 0)));   // 旁边有礼盒：在这里消能拆礼盒
   for (let tc = 0; tc < n; tc++) {
     if (lk[tc]) continue;
-    const tf = F[tc], cap1 = !c3[tc];
-    let empty = -1; if (cap1) { if (!has(tf[1])) empty = 1; } else { for (let s = 0; s < 3; s++) if (!has(tf[s])) { empty = s; break; } }
-    const hn = cap1 ? (has(tf[1]) ? 1 : 0) : fl[tc];
-    let h0 = -1, h1 = -1; if (!cap1) for (let s = 0; s < 3; s++) if (has(tf[s])) { if (h0 === -1) h0 = tf[s]; else h1 = tf[s]; }
+    const x = b.cells[tc], tf = F[tc], slots = b.slotsOf(tc), c1 = cap[tc] === 1, w4 = cap[tc] === 4, mix = !!x.mix;
+    let empty = -1; for (const s of slots) if (!has(tf[s])) { empty = s; break; }
+    const items: number[] = []; for (const s of slots) if (has(tf[s])) items.push(tf[s]);
+    const tBomb = bomb[tc].some(v => v);
     for (let fc = 0; fc < n; fc++) {
       if (fc === tc || lk[fc]) continue; const ff = F[fc];
-      for (let fs = 0; fs < 3; fs++) {
-        const kd = ff[fs]; if (kd < 0) continue;
+      for (let fs = 0; fs < ff.length; fs++) {
+        const kd = ff[fs]; if (kd < 0 || !mv[fc][fs] || !b.accepts(tc, kd)) continue;
+        const quad = b.quad.has(kd);
         if (empty >= 0) {
+          const same = items.every(k => mix ? k >= 0 && catOf(k) === x.cat : k === kd);
+          const fill = !c1 && same && items.length === slots.length - 1 && (w4 || mix || !quad);
           let s: number;
-          if (!cap1 && hn === 2 && h0 === kd && h1 === kd) s = 100;
-          else if (cap1) s = 4;
-          else if (hn === 0) s = 8;
-          else if ((h0 === -1 || h0 === kd) && (h1 === -1 || h1 === kd)) s = 45;
+          if (fill) s = 100;
+          else if (c1) s = 4;
+          else if (items.length === 0) s = w4 && !quad ? -30 : 8;
+          else if (same) s = w4 ? 50 : quad ? 20 : 45;
           else s = -25;
+          if (w4 && !quad) s -= 40;                         // 宽格塞普通种类 = 堵死
+          if (quad && !w4 && !fill) s -= 12;                 // 宽格专用的种类往宽格送
           if (fl[fc] === 1) s += deep[fc] ? 28 : 6;
-          if (s < 100 && c3[fc]) { let same = 0; for (let q = 0; q < 3; q++) if (ff[q] === kd) same++; if (same >= 2) s -= 35; }
-          if ((hn === 0 || cap1) && fl[fc] === 1 && !deep[fc]) s -= 40;   // 单个挪到空格 = 白走
+          if (iceK[fc] >= 0 && iceK[fc] !== kd) s += 30;     // 把冰格里的杂货挪走，给同款腾位
+          if (iceK[tc] >= 0 && iceK[tc] === kd) s += 70;     // 同款送进冰格（冰格里还有杂货也送：杂货另外挪走）
+          if (fill && nearGift[tc]) s += 25;
+          if (bomb[fc][fs]) s += fill ? 60 : same && items.length ? 20 : 0;
+          if (tBomb && fill) s += 60;
+          if (s < 100 && cap[fc] === 3) { let sm = 0; for (let q = 0; q < 3; q++) if (ff[q] === kd) sm++; if (sm >= 2) s -= 35; }
+          if ((items.length === 0 || c1) && fl[fc] === 1 && !deep[fc]) s -= 40;   // 单个挪到空格 = 白走
           out.push({ s: s + (noise ? r() * noise : 0), fc, fs, tc, ts: empty });
-        } else {   // 满格：调换（只在能凑出三个时考虑）
-          let ra = -2, rb = -2; if (c3[fc]) for (let q = 0; q < 3; q++) if (q !== fs) { if (ra === -2) ra = ff[q]; else rb = ff[q]; }
-          for (let ts = cap1 ? 1 : 0; ts <= (cap1 ? 1 : 2); ts++) {
-            const x = tf[ts]; if (x === kd || x <= -9) continue;
-            let triT = false; if (!cap1) { const o1 = tf[(ts + 1) % 3], o2 = tf[(ts + 2) % 3]; triT = o1 === kd && o2 === kd; }
-            const triF = c3[fc] && ra === x && rb === x && x >= 0;
+        } else if (!c1 && !w4 && cap[fc] === 3) {   // 满格：调换（只在能凑出三个时考虑）
+          let ra = -2, rb = -2; for (let q = 0; q < 3; q++) if (q !== fs) { if (ra === -2) ra = ff[q]; else rb = ff[q]; }
+          const eqT = (a: number) => mix ? a >= 0 && catOf(a) === x.cat : a === kd;
+          for (let ts = 0; ts <= 2; ts++) {
+            const o = tf[ts]; if (o === kd || o <= -9 || !mv[tc][ts] || !b.accepts(fc, o)) continue;
+            const triT = eqT(tf[(ts + 1) % 3]) && eqT(tf[(ts + 2) % 3]) && (mix || !quad);
+            const fx = b.cells[fc]; const triF = o >= 0 && (fx.mix ? [ra, rb, o].every(k => k >= 0 && catOf(k) === fx.cat) : ra === o && rb === o && !b.quad.has(o));
             if (!triT && !triF) continue;
-            out.push({ s: (triT && triF ? 140 : 95) + (noise ? r() * noise : 0), fc, fs, tc, ts });
+            out.push({ s: (triT && triF ? 140 : 95) + (bomb[fc][fs] && triT ? 60 : 0) + (noise ? r() * noise : 0), fc, fs, tc, ts });
           }
         }
       }
@@ -289,6 +395,17 @@ export function scoredMoves(b: Board, noise = 0, r: () => number = Math.random) 
   out.sort((a, b) => b.s - a.s);
   return out;
 }
+/** 按解法回放，跟踪一开始在 c 格前排 s 位的那个商品，返回它在第几步被消掉（没消掉 = 0）。炸弹按这个定步数 */
+export function clearStep(b0: Board, sol: Mv[], c: number, s: number): number {
+  const b = b0.clone(); let pc = c, ps = s, hidden = false;
+  for (let i = 0; i < sol.length; i++) {
+    const [fc, fs, tc, ts] = sol[i];
+    if (!hidden) { if (fc === pc && fs === ps) { pc = tc; ps = ts; } else if (tc === pc && ts === ps) { pc = fc; ps = fs; } }
+    const ev = b.move(fc, fs, tc, ts); if (!ev) return 0;
+    for (const e of ev) { if (e.t === 'clear' && e.c === pc && !hidden) return i + 1; if (e.t === 'flip' && e.c === pc) hidden = !hidden; }
+  }
+  return 0;
+}
 /** 贪心随机推演：成功返回走法，失败 null */
 export function rollout(b0: Board, r: () => number, noise: number): Mv[] | null {
   const b = b0.clone(); const max = b.remaining() * 3 + 10; const out: Mv[] = [];
@@ -296,14 +413,18 @@ export function rollout(b0: Board, r: () => number, noise: number): Mv[] | null 
     if (b.done()) return out;
     const ms = scoredMoves(b, noise, r); if (!ms.length) return null;
     const m = ms[0]; if (!b.move(m.fc, m.fs, m.tc, m.ts)) return null; out.push([m.fc, m.fs, m.tc, m.ts]);
+    if (b.boomed) return null;
   }
   return b.done() ? out : null;
 }
 
 // ---------------- 难度节奏（docs\设计.md「v4 方案」「难度方案 v4」） ----------------
 /** 每种新东西第一次出现的关（那关是松关 + 开场教一次） */
-export const INTRO = { lock: 3, shape: 4, column: 5, ice: 7, hourglass: 8, gift: 9, shutter: 12, temp: 14, hammer: 14, mystery: 16, slide: 18, glass: 22, steps: 24, orders: 26, wand: 28 };
-const TEACH_AT: Record<number, Teach> = { 3: 'lock', 4: 'shape', 5: 'column', 7: 'ice', 9: 'gift', 12: 'shutter', 14: 'temp', 16: 'mystery', 18: 'slide', 22: 'glass', 24: 'steps', 26: 'orders' };
+export const INTRO = { lock: 3, shape: 4, column: 5, ice: 7, hourglass: 8, gift: 9, shutter: 12, temp: 14, hammer: 14, mystery: 16, slide: 18, glass: 22, steps: 24, orders: 26, wand: 28,
+  wide: 31, bombLock: 33, catSame: 35, bombTime: 37, flip: 39, catMix: 41, bombBoom: 43 };   // v11 新机制：单数关（双数关会撞上步数 / 订单关）
+export const NEW_FEATS = ['wide', 'bombLock', 'catSame', 'bombTime', 'flip', 'catMix', 'bombBoom'] as const;
+const TEACH_AT: Record<number, Teach> = { 3: 'lock', 4: 'shape', 5: 'column', 7: 'ice', 9: 'gift', 12: 'shutter', 14: 'temp', 16: 'mystery', 18: 'slide', 22: 'glass', 24: 'steps', 26: 'orders',
+  31: 'wide', 33: 'bombLock', 35: 'catSame', 37: 'bombTime', 39: 'flip', 41: 'catMix', 43: 'bombBoom' };
 export const teachOf = (n: number): Teach => TEACH_AT[n] || '';
 export const isStepsLv = (n: number) => n >= INTRO.steps && (n - INTRO.steps) % 6 === 0;
 export const isOrdersLv = (n: number) => n >= INTRO.orders && (n - INTRO.orders) % 6 === 0;
@@ -351,6 +472,7 @@ export function params(n: number, opt: GenOpt = {}) {
   const unlock = Math.min(n < 40 ? 30 : 40, 8 + Math.floor(n * 0.8));
   // 特殊货架：教学关只出本关教的；其他关按概率挑，最多 2 种（30 关后 3 种），步数 / 订单关少一种
   const f = { lock: 0, column: 0, mystery: 0, ice: 0, gift: 0, shutter: 0, slide: 0, glass: 0 };
+  const picked: (keyof typeof f)[] = [];
   if (teach === 'lock') f.lock = 1; else if (teach === 'column') f.column = 1; else if (teach === 'mystery') f.mystery = 1;
   else if (teach === 'ice') f.ice = 1; else if (teach === 'gift') f.gift = 1; else if (teach === 'shutter') f.shutter = 1;
   else if (teach === 'slide') f.slide = 1; else if (teach === 'glass') f.glass = 1;
@@ -360,7 +482,15 @@ export function params(n: number, opt: GenOpt = {}) {
       ['shutter', INTRO.shutter, 0.35], ['mystery', INTRO.mystery, 0.35], ['slide', INTRO.slide, 0.35], ['glass', INTRO.glass, 0.3]];
     let max = n < 30 || daily ? 2 : 3; if (!daily && (isStepsLv(n) || isOrdersLv(n))) max--;
     let got = 0;
-    for (const [k, at, p] of shuffle(cand.slice(), r)) { if (got >= max) break; if (daily && at > DAILY_MAX_INTRO) continue; if (n > at && r() < p) { f[k] = 1; got++; } }
+    for (const [k, at, p] of shuffle(cand.slice(), r)) { if (got >= max) break; if (daily && at > DAILY_MAX_INTRO) continue; if (n > at && r() < p) { f[k] = 1; got++; picked.push(k); } }
+  }
+  // v11 新机制（31 关起，每种首次那关教一次）：每关最多 1 种（55%）；有新机制时旧机制少 1 种（别太乱）。用单独的随机数，不改旧机制的抽法
+  let nf: string = (NEW_FEATS as readonly string[]).indexOf(teach) >= 0 ? teach : '';
+  if (!nf && !teach && !daily && n > INTRO.wide) {
+    const r2 = rng(n * 977 + 31 + salt);
+    if (r2() < 0.55) { const ok = NEW_FEATS.filter(k => n > INTRO[k] && !(k === 'bombTime' && isStepsLv(n))); if (ok.length) nf = ok[Math.floor(r2() * ok.length)]; }
+    const max0 = (n < 30 ? 2 : 3) - (isStepsLv(n) || isOrdersLv(n) ? 1 : 0);
+    if (nf && picked.length >= max0) f[picked[picked.length - 1]] = 0;
   }
   const locks = f.lock ? (tier === 'very' && n >= 30 ? 2 : 1) : 0;
   const lockN = n === INTRO.lock ? 3 : 3 + (n % 4);
@@ -372,6 +502,10 @@ export function params(n: number, opt: GenOpt = {}) {
   const shut = f.shutter ? (n >= 40 ? 2 : 1) + (teach === 'shutter' ? 1 : 0) : 0;
   const temp = !daily && n >= INTRO.temp;
   return { cells, depth, free, unlock, hard, type, tier, teach, locks, lockN, cols, mystery, ice, iceL, gift, shut, slide: !!f.slide, glass: !!f.glass, temp,
+    nf, wide: nf === 'wide', quadN: nf === 'wide' ? (teach ? 1 : n >= 60 ? 2 + n % 2 : 2) : 0,
+    bombT: nf === 'bombLock' ? 1 : nf === 'bombTime' ? 2 : nf === 'bombBoom' ? 3 : 0, bombs: nf.startsWith('bomb') ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0,
+    cat: nf === 'catSame' ? 1 : nf === 'catMix' ? 2 : 0, flips: nf === 'flip' ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0, flipK: teach === 'flip' ? 4 : 3 + (n % 3),
+    giftN: teach === 'gift' ? 2 : n >= 40 ? 3 + (n % 2) : 2 + (n % 2),
     steps: !daily && isStepsLv(n), orders: !daily && isOrdersLv(n), shape: n >= INTRO.shape };
 }
 
@@ -451,17 +585,34 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     for (const c of glassCells) { sizes[c][0] = 3; if (sizes[c].length < 2) sizes[c].push(3); }
     const shutCells = pick(p.shut); if (!shutCells) continue;
     for (const c of shutCells) if (sizes[c][0] < 2) sizes[c][0] = 2;
+    const catCells = pick(p.cat ? 1 : 0); if (!catCells) continue;   // 分类格：最多 2 层、每层 2 个（混搭格 3 个同类一摆好就消）
+    for (const c of catCells) sizes[c] = sizes[c].length > 1 ? [2, 2] : [2];
+    const W = p.wide ? N : -1;   // 四格宽货架：单独一排放在货架最下面
+    if (p.wide) sizes.push(p.teach === 'wide' ? [2] : r() < 0.5 ? [ri(r, 2, 3), 3] : [ri(r, 2, 3)]);
     let total = sizes.reduce((s, l) => s + l.reduce((a, b) => a + b, 0), 0);
     // 凑成 3 的倍数：从普通格后层减（连锁层不动）
-    for (let c = 0; total % 3 !== 0 && c < 999; c++) { const ci = normal[c % normal.length], L = sizes[ci], li = L.length - 1; if (L.length > 1 && L[li] > 1 && !(li === 1 && chainCells.indexOf(ci) >= 0)) { L[li]--; total--; } }
-    if (total % 3 !== 0) continue;
-    const kinds = total / 3;
+    const Q = p.quadN;   // 宽格专用的种类数（每种 4 个）
+    for (let c = 0; (total - 4 * Q) % 3 !== 0 && c < 999; c++) { const ci = normal[c % normal.length], L = sizes[ci], li = L.length - 1; if (L.length > 1 && L[li] > 1 && !(li === 1 && chainCells.indexOf(ci) >= 0)) { L[li]--; total--; } }
+    if ((total - 4 * Q) % 3 !== 0) continue;
+    const kinds = (total - 4 * Q) / 3;
     if (p.locks && kinds - chainN < p.lockN * 2 + 3) continue;
     const pool = goodsPool(p.unlock, goodsN, r);
     const groups: number[] = []; for (let k = 0; k < kinds; k++) groups.push(pool[k % pool.length]);
     if (p.glass) groups[kinds - 1] = KEY;   // 最后一组换成钥匙（不会是连锁组：连锁组在最前面）
+    let catC = 0;
+    if (p.cat) {   // 分类格：保证这关有这一类的 3 种（换掉普通组，不动连锁组 / 钥匙）
+      const lim = Math.min(p.unlock, goodsN); const cands = [1, 3, 5, 4, 2].filter(cc => catKinds(cc).filter(k => k < lim).length >= 3);
+      if (!cands.length) continue;
+      catC = cands[ri(r, 0, cands.length - 1)];
+      let gi = chainN;
+      for (const k of shuffle(catKinds(catC).filter(k => k < lim), r).slice(0, 3)) { if (groups.indexOf(k) >= 0) continue; while (gi < kinds && (groups[gi] === KEY || catOf(groups[gi]) === catC)) gi++; if (gi >= kinds) break; groups[gi++] = k; }
+      if (new Set(groups.filter(k => catOf(k) === catC)).size < 3) continue;
+    }
+    const quadK: number[] = []; for (const k of pool) { if (quadK.length >= Q) break; if (groups.indexOf(k) < 0 && !catOf(k)) quadK.push(k); }   // 宽格专用：和普通组不重复、不是分类商品
+    if (quadK.length < Q) continue;
     const items: number[] = [];
     for (const g of groups.slice(chainCells.length)) items.push(g, g, g);
+    for (const k of quadK) items.push(k, k, k, k);
     shuffle(items, r);
     let ip = 0, bad = false;
     const cells: Cell[] = sizes.map((L, c) => {
@@ -469,13 +620,13 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
       const layers = L.map((cnt, li) => {
         const ch = li === 1 ? chainCells.indexOf(c) : -1;
         if (ch >= 0) { const g = groups[ch]; return [g, g, g]; }
-        const l = [-1, -1, -1]; const ps = col ? [1] : shuffle([0, 1, 2], r).slice(0, cnt);
+        const wd = c === W; const l = wd ? [-1, -1, -1, -1] : [-1, -1, -1]; const ps = col ? [1] : shuffle(wd ? [0, 1, 2, 3] : [0, 1, 2], r).slice(0, cnt);
         for (const s of ps) l[s] = items[ip++];
         return l;
       });
-      const hidOn = p.mystery > 0 && !col && L.length >= 2 && chainCells.indexOf(c) < 0 && r() < p.mystery;
-      return { layers, cap: col ? 1 : 3, lock: lockCells.indexOf(c) >= 0 ? p.lockN : 0, hid: layers.map((_, li) => hidOn && li >= 1),
-        ice: layers.map(z3), gift: layers.map(f3), glass: glassCells.indexOf(c) >= 0, shut: shutCells.indexOf(c) >= 0 ? 1 + shutCells.indexOf(c) : 0 };
+      const hidOn = p.mystery > 0 && !col && L.length >= 2 && chainCells.indexOf(c) < 0 && r() < p.mystery && c !== W && catCells.indexOf(c) < 0;
+      return { layers, cap: col ? 1 : c === W ? 4 : 3, ...(c === W ? { quad: quadK } : {}), lock: lockCells.indexOf(c) >= 0 ? p.lockN : 0, hid: layers.map((_, li) => hidOn && li >= 1),
+        ice: zs(layers), gift: zs(layers), glass: glassCells.indexOf(c) >= 0, shut: shutCells.indexOf(c) >= 0 ? 1 + shutCells.indexOf(c) : 0 };
     });
     // 钥匙不能在玻璃柜里（否则解不开）：和外面的普通商品换
     for (const gc of glassCells) cells[gc].layers.forEach((l, li) => l.forEach((k, s) => {
@@ -485,18 +636,59 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
     for (const gc of glassCells) if (cells[gc].layers.some(l => l.indexOf(KEY) >= 0)) bad = true;
     if (bad) continue;
+    for (const ci of catCells) {   // 分类格：里面的东西和别的格里的本类商品对换（个数不变）
+      const x = cells[ci]; x.cat = catC; x.mix = p.cat === 2;
+      x.layers.forEach(l => l.forEach((k, s) => {
+        if (k < 0 || catOf(k) === catC) return;
+        for (let g = 0; g < 400; g++) {
+          const oc = normal[ri(r, 0, normal.length - 1)]; if (oc === ci || chainCells.indexOf(oc) >= 0 || glassCells.indexOf(oc) >= 0) continue;
+          const ol = cells[oc].layers[ri(r, 0, cells[oc].layers.length - 1)]; const os = ri(r, 0, ol.length - 1);
+          if (ol[os] >= 0 && catOf(ol[os]) === catC) { l[s] = ol[os]; ol[os] = k; break; }
+        }
+      }));
+      if (x.layers.some(l => l.some(k => k >= 0 && catOf(k) !== catC))) bad = true;
+    }
+    if (catCells.length) cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
+    if (bad) continue;
+    if (W >= 0) cells[W].layers[0].forEach((k, s, l) => {   // 宽格前排一开始只放宽格专用的种类（别一上来就堵着）
+      if (k < 0 || quadK.indexOf(k) >= 0) return;
+      for (let g = 0; g < 400; g++) {
+        const oc = normal[ri(r, 0, normal.length - 1)]; if (chainCells.indexOf(oc) >= 0 || glassCells.indexOf(oc) >= 0 || catCells.indexOf(oc) >= 0) continue;
+        const ol = cells[oc].layers[ri(r, 0, cells[oc].layers.length - 1)]; const os = ri(r, 0, ol.length - 1);
+        if (quadK.indexOf(ol[os]) >= 0) { l[s] = ol[os]; ol[os] = k; break; }
+      }
+    });
+    if (W >= 0 && cells.some((c, ci) => c.layers.some((l, li) => isTriple(l) && ci !== W && quadK.indexOf(l[0]) < 0 && !(li === 1 && chainCells.indexOf(ci) >= 0)))) continue;
+    const flipCells: number[] = [];   // 翻面货架：后面那层变成背面
+    if (p.flips) {
+      for (const ci of shuffle(normal.filter(i => !used.has(i) && cells[i].layers.length >= 2 && !cells[i].hid!.some(h => h)), r)) {
+        if (flipCells.length >= p.flips) break;
+        const x = cells[ci]; x.alt = x.layers.slice(1); x.layers = [x.layers[0]]; x.hid = [false]; x.ice = [z3()]; x.gift = [f3()]; x.flipK = p.flipK; x.flipAt = p.flipK; flipCells.push(ci); used.add(ci);
+      }
+      if (flipCells.length < p.flips) continue;
+    }
+    const pos0 = shape.pos.map(q => q.slice()); if (W >= 0) pos0.push([0, Math.max(...pos0.map(q => q[1])) + 1]);
     // 冰冻 / 礼盒：放在普通格的前排商品上（不放连锁格、锁、玻璃、卷帘门、台座）
     const plain = normal.filter(i => !used.has(i));
     const spots: [number, number][] = []; for (const c of plain) for (let s = 0; s < 3; s++) if (cells[c].layers[0][s] >= 0 && cells[c].layers[0][s] !== KEY) spots.push([c, s]);
     shuffle(spots, r);
     const perCell = new Map<number, number>();
     let si = 0;
-    const place = (k: number, fn: (c: number, s: number) => void) => { let got = 0; for (; si < spots.length && got < k; si++) { const [c, s] = spots[si]; if ((perCell.get(c) || 0) >= 1) continue; perCell.set(c, 1); fn(c, s); got++; } return got === k; };
-    if (!place(p.ice, (c, s) => { cells[c].ice![0][s] = p.iceL === 2 && r() < 0.5 ? 2 : 1; })) continue;
-    if (!place(p.gift, (c, s) => { cells[c].gift![0][s] = true; })) continue;
+    const place = (k: number, fn: (c: number, s: number) => void) => { let got = 0; for (; si < spots.length && got < k; si++) { const [c, s] = spots[si]; if ((perCell.get(c) || 0) >= 1 || cells[c].layers[0][s] < 0) continue; perCell.set(c, 1); fn(c, s); got++; } return got === k; };
+    // v11 冰冻：同款至少还有 1 个在别的格的前排（不然推演和玩家都只能干等），冰格前排最多 2 个
+    const frontHas = (k: number, not: number) => normal.some(o => o !== not && !used.has(o) && cells[o].layers[0].indexOf(k) >= 0);
+    let icePl = 0;
+    for (let q = si; q < spots.length && icePl < p.ice; q++) { const [c, s] = spots[q]; if (perCell.has(c)) continue; const k = cells[c].layers[0][s]; if (!frontHas(k, c)) continue;
+      const L0 = cells[c].layers[0]; if (L0.filter(v => v >= 0).length > 2) { const o = [0, 1, 2].find(t => t !== s && L0[t] >= 0)!; const oc = plain.find(pc => pc !== c && !perCell.has(pc) && cells[pc].layers[0].some(v => v < 0) && cells[pc].layers[0].filter(v => v === L0[o]).length < 2); if (oc !== undefined) { const os = cells[oc].layers[0].indexOf(-1); cells[oc].layers[0][os] = L0[o]; L0[o] = -1; } }
+      if (p.iceL === 2) r(); cells[c].ice![0][s] = 1; perCell.set(c, 1); icePl++; }
+    if (icePl < p.ice) continue;
+    // v11 礼盒：倒计时不超过旁边格子能消的组数的一半（旁边没东西可消就永远拆不开）
+    const giftAt = (c: number) => { let cap = 0; for (const t of adjacency(pos0, cells.length)[c]) if (!glassCells.includes(t)) cap += cells[t].layers.reduce((a, l) => a + l.filter(v => v >= 0).length, 0); return Math.max(1, Math.min(p.giftN, Math.floor(cap / 6))); };
+    if (!place(p.gift, (c, s) => { cells[c].gift![0][s] = giftAt(c); })) continue;
     if (p.teach === 'mystery' && cells.filter(c => c.hid![1]).length < 3) continue;
     // 暂存格：底栏独立一格（不在货架形状里）
     const pos = shape.pos.map(q => q.slice());
+    if (W >= 0) pos.push([0, Math.max(...pos.map(q => q[1])) + 1]);
     let temp = -1; if (p.temp) { cells.push({ layers: [[-1, -1, -1]], cap: 3, temp: true, ice: [z3()], gift: [f3()], hid: [false] }); temp = cells.length - 1; }
     const b = new Board(cells, pos);
     let sol: Mv[] | null = null; const rr = rng(n * 31 + attempt + salt);
@@ -504,6 +696,14 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     for (let k = 0; k < 10 && !sol; k++) sol = k === 0 ? g : rollout(b, rr, 30);   // 解不出就换布局（多试推演比换布局慢）
     if (!sol) continue;
     for (let k = 0; k < 4; k++) { const s2 = rollout(b, rr, 10); if (s2 && s2.length < sol.length) sol = s2; }   // 取短的解：倒计时按它算
+    if (p.bombs) {   // 炸弹：挑标准解里第 3–16 步被消掉的前排商品（离第 8 步越近越好，每格最多 1 颗）；步数 = 那一步 + 余量（爆盘 6、其他 4、教学关再 +4）
+      const cand: [number, number, number][] = [];
+      for (const c of plain) { if (perCell.has(c)) continue; for (let s = 0; s < 3; s++) { const k = cells[c].layers[0][s]; if (k < 0 || k === KEY || cells[c].ice![0][s] || cells[c].gift![0][s]) continue; const d = clearStep(b, sol, c, s); if (d >= 3 && d <= 16) cand.push([c, s, d]); } }
+      cand.sort((a, bb) => Math.abs(a[2] - 8) - Math.abs(bb[2] - 8) || a[0] - bb[0] || a[1] - bb[1]);
+      const got = new Set<number>();
+      for (const [c, s, d] of cand) { if (got.size >= p.bombs) break; if (got.has(c)) continue; got.add(c); cells[c].bomb = zs(cells[c].layers); cells[c].bomb![0][s] = p.bombT * 100 + Math.max(p.teach ? 10 : 7, d + (p.bombT === 3 ? 6 : 4) + (p.teach ? 4 : 0)); }
+      if (got.size < p.bombs) continue;
+    }
     // 顾客订单：挑 3–4 种（优先在后层的），按解法回放算「订单全满」要几步
     let orders: number[] = [];
     let steps = Math.min(sol.length, Math.ceil(total * 0.8));   // 人看得到整面货架，步数按「推演短解」和「每个商品 0.8 步」取小
@@ -520,7 +720,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     const tier: Tier = p.steps ? 'loose' : p.tier;
     const feats: string[] = [];
     if (p.locks) feats.push('lock'); if (p.cols) feats.push('column'); if (p.mystery) feats.push('mystery'); if (p.ice) feats.push('ice'); if (p.gift) feats.push('gift');
-    if (p.shut) feats.push('shutter'); if (slide.length) feats.push('slide'); if (p.glass) feats.push('glass'); if (temp >= 0) feats.push('temp'); if (p.steps) feats.push('steps'); if (orders.length) feats.push('orders');
+    if (p.shut) feats.push('shutter'); if (slide.length) feats.push('slide'); if (p.glass) feats.push('glass'); if (temp >= 0) feats.push('temp'); if (p.steps) feats.push('steps'); if (orders.length) feats.push('orders'); if (p.nf) feats.push(p.nf);
     return { n, cells, pos, cols: 3, steps, time: timeFor(steps, tier, big ? SPT_DEFAULT.big : SPT_DEFAULT.small), hard: p.hard && !p.steps, type: p.steps ? 'easy' : p.type, tier,
       kinds: new Set(items).size, tutorial: false, sol, greedy: !!g, teach: p.teach, slide, orders, moveLimit: p.steps ? Math.ceil(steps * MOVES_K) : 0, temp, big, feats };
   }
@@ -627,7 +827,7 @@ export function makeCoop(seed: number, diff: number, goodsN: number): CoopLevel 
     for (const f of ['ice', 'gift']) if (has(f)) for (let sd = 0; sd < 2; sd++) {
       const spots: [number, number][] = []; cells.forEach((c, ci) => { if (c.side !== sd || c.lock || c.cap === 1) return; for (let s = 0; s < 3; s++) if (c.layers[0][s] >= 0 && !c.ice![0][s] && !c.gift![0][s]) spots.push([ci, s]); });
       shuffle(spots, r); const used = new Set<number>();
-      for (const [ci, s] of spots) { if (used.size >= 2) break; if (used.has(ci)) continue; used.add(ci); if (f === 'ice') cells[ci].ice![0][s] = 1; else cells[ci].gift![0][s] = true; }
+      for (const [ci, s] of spots) { if (used.size >= 2) break; if (used.has(ci)) continue; used.add(ci); if (f === 'ice') cells[ci].ice![0][s] = 1; else cells[ci].gift![0][s] = 1; }
     }
     if (sideAlone(cells, 0) || sideAlone(cells, 1)) continue;
     const b = new Board(cells, pos);
