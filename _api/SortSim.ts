@@ -118,7 +118,7 @@ export class Board {
   /** 这种商品几个一组（宽格专用的 4 个，其他 3 个） */
   groupOf(kind: number) { return this.quad.has(kind) ? 4 : 3; }
   /** 分类格只收本类 */
-  accepts(c: number, kind: number) { const x = this.cells[c]; return !x.cat || catOf(kind) === x.cat; }
+  accepts(c: number, kind: number) { const x = this.cells[c]; if (x.quad && !this.quad.has(kind)) return false; return !x.cat || catOf(kind) === x.cat; }   // v14：宽格只收橙点（宽格专用）商品
   remaining() { let n = 0; for (const c of this.cells) { for (const l of c.layers) for (const k of l) if (k >= 0) n++; if (c.alt) for (const l of c.alt) for (const k of l) if (k >= 0) n++; } return n; }
   done() { return this.remaining() === 0; }
   canPlace(c: number) { if (this.locked(c)) return false; const f = this.front(c); return this.slotsOf(c).some(s => f[s] < 0); }
@@ -525,7 +525,7 @@ export function params(n: number, opt: GenOpt = {}) {
   const shut = f.shutter ? (n >= 40 ? 2 : 1) + (teach === 'shutter' ? 1 : 0) : 0;
   const temp = !daily && n >= INTRO.temp;
   return { cells: nf === 'belt' ? Math.max(6, cells - 3) : cells, belt: nf === 'belt' ? BELT_N : 0, depth, free, unlock, hard, type, tier, teach, locks, lockN, cols, mystery, ice, iceL, gift, shut, slide: !!f.slide, glass: !!f.glass, temp,
-    nf, wide: nf === 'wide', quadN: nf === 'wide' ? (teach ? 1 : n >= 60 ? 2 + n % 2 : 2) : 0,
+    nf, wide: nf === 'wide', quadN: nf === 'wide' ? (teach ? 2 : n >= 60 ? 3 + n % 2 : 3) : 0,   // v14：多层轮换，种类变多
     bombT: nf === 'bombLock' ? 1 : nf === 'bombTime' ? 2 : nf === 'bombBoom' ? 3 : 0, bombs: nf.startsWith('bomb') ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0,
     cat: nf === 'catSame' ? 1 : nf === 'catMix' ? 2 : 0, flips: nf === 'flip' ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0, flipK: teach === 'flip' ? 4 : 3 + (n % 3),
     giftN: teach === 'gift' ? 2 : n >= 40 ? 3 + (n % 2) : 2 + (n % 2),
@@ -611,7 +611,9 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     const catCells = pick(p.cat ? 1 : 0); if (!catCells) continue;   // 分类格：最多 2 层、每层 2 个（混搭格 3 个同类一摆好就消）
     for (const c of catCells) sizes[c] = sizes[c].length > 1 ? [2, 2] : [2];
     const W = p.wide ? N : -1;   // 四格宽货架：单独一排放在货架最下面
-    if (p.wide) sizes.push(p.teach === 'wide' ? [2] : r() < 0.5 ? [ri(r, 2, 3), 3] : [ri(r, 2, 3)]);
+    // v14 宽格多层轮换（用户 2026-11-27 22:16）：每层放一种橙点商品 2–3 个，消完一种露出下一种；其余几个散到别的格
+    const wideCnt: number[] = p.wide ? Array.from({ length: p.quadN }, (_, li) => p.teach === 'wide' ? (li === 0 ? 3 : 2) : ri(r, 2, 3)) : [];
+    if (p.wide) sizes.push(wideCnt);
     const B0 = sizes.length; for (let i = 0; i < p.belt; i++) sizes.push([SLOTS]);   // v13 传送带：每盘开局都是满的 3 个
     let total = sizes.reduce((s, l) => s + l.reduce((a, b) => a + b, 0), 0);
     // 凑成 3 的倍数：从普通格后层减（连锁层不动）
@@ -636,7 +638,8 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     if (quadK.length < Q) continue;
     const items: number[] = [];
     for (const g of groups.slice(chainCells.length)) items.push(g, g, g);
-    for (const k of quadK) items.push(k, k, k, k);
+    quadK.forEach((k, li) => { for (let i = wideCnt[li]; i < 4; i++) items.push(k); });
+    const wideL: Layer[] = quadK.map((k, li) => { const l = [-1, -1, -1, -1]; for (const s of shuffle([0, 1, 2, 3], r).slice(0, wideCnt[li])) l[s] = k; return l; });
     shuffle(items, r);
     let ip = 0, bad = false;
     const cells: Cell[] = sizes.map((L, c) => {
@@ -644,7 +647,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
       const layers = L.map((cnt, li) => {
         const ch = li === 1 ? chainCells.indexOf(c) : -1;
         if (ch >= 0) { const g = groups[ch]; return [g, g, g]; }
-        const wd = c === W; const l = wd ? [-1, -1, -1, -1] : [-1, -1, -1]; const ps = col ? [1] : shuffle(wd ? [0, 1, 2, 3] : [0, 1, 2], r).slice(0, cnt);
+        const wd = c === W; if (wd) return wideL[li].slice(); const l = [-1, -1, -1]; const ps = col ? [1] : shuffle(wd ? [0, 1, 2, 3] : [0, 1, 2], r).slice(0, cnt);
         for (const s of ps) l[s] = items[ip++];
         return l;
       });
@@ -657,7 +660,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
       if (k !== KEY) return;
       for (let g = 0; g < 200; g++) { const oc = normal[ri(r, 0, normal.length - 1)]; if (glassCells.indexOf(oc) >= 0 || chainCells.indexOf(oc) >= 0) continue; const ol = cells[oc].layers[0]; const os = ri(r, 0, 2); if (ol[os] >= 0 && ol[os] !== KEY) { l[s] = ol[os]; ol[os] = KEY; break; } }
     }));
-    cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
+    cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (ci !== W && isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
     for (const gc of glassCells) if (cells[gc].layers.some(l => l.indexOf(KEY) >= 0)) bad = true;
     if (bad) continue;
     for (const ci of catCells) {   // 分类格：里面的东西和别的格里的本类商品对换（个数不变）
@@ -672,7 +675,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
       }));
       if (x.layers.some(l => l.some(k => k >= 0 && catOf(k) !== catC))) bad = true;
     }
-    if (catCells.length) cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
+    if (catCells.length) cells.forEach((c, ci) => c.layers.forEach((l, li) => { if (ci !== W && isTriple(l) && !(li === 1 && chainCells.indexOf(ci) >= 0)) bad = true; }));
     if (bad) continue;
     if (W >= 0) cells[W].layers[0].forEach((k, s, l) => {   // 宽格前排一开始只放宽格专用的种类（别一上来就堵着）
       if (k < 0 || quadK.indexOf(k) >= 0) return;
