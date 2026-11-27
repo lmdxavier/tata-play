@@ -41,7 +41,7 @@ export interface Level {
   daily?: number;   // 每日一图：UTC 天数（0 = 普通关）
 }
 /** 生成选项：salt 换一套盘面（同关号不同图）；daily = 每日一图（不教学、不限步、不订单、不暂存格，机制只用第 12 关前教过的） */
-export interface GenOpt { salt?: number; daily?: boolean }
+export interface GenOpt { salt?: number; daily?: boolean; noFit?: boolean }
 /** 每日一图只用这关之前教过的机制（锁链 / 台座 / 冰冻 / 礼盒 / 卷帘门）；每日挑战也是打过这关才开 */
 export const DAILY_MAX_INTRO = 12;
 export type Ev =
@@ -532,6 +532,47 @@ export function params(n: number, opt: GenOpt = {}) {
     steps: !daily && isStepsLv(n), orders: !daily && isOrdersLv(n), shape: n >= INTRO.shape };
 }
 
+// ---------------- v15 货架排版（HuojiaGame.layout 和关卡生成共用）----------------
+// 用户 2026-11-28 01:52（32 关截图）：货架缩到 0.58，手机上点不准 →「要有下限，不够就打回来重新设计」。
+// 规则：最小屏（设计尺寸 720×1280）上货架缩放 ≥ MIN_K；暂存格不再单独占一行：有宽货架 → 放宽货架同一排右边；
+// 否则放进最后一排的空位（那排不满、在整面货架宽度以内）；都放不下才单独一排。生成时低于 MIN_K 就换形状 / 少一格重来。
+export const MIN_K = 0.85;
+export const LAY = { baseW: 214, baseH: 128, gx: 4, gy: 4, pad: 14, sign: 72, wideW: 280 };
+/** 每格在货架上的格位（x 以「格宽 + 间距」为单位，可以是小数；y = 第几排），盘子 = null。宽货架 + 暂存格同排时两个都挪开 */
+export function layoutPos(L: { cells: Cell[]; pos: number[][]; temp: number; slide: number[] }): ([number, number] | null)[] {
+  const n = L.cells.length, out: ([number, number] | null)[] = [];
+  for (let c = 0; c < n; c++) out.push(L.cells[c].belt !== undefined || c === L.temp || !L.pos[c] ? null : [L.pos[c][0], L.pos[c][1]]);
+  const t = L.temp; if (t < 0) return out;
+  const ux = LAY.baseW + LAY.gx;
+  const W = L.cells.findIndex(x => x.cap === 4 && !!x.quad);
+  if (W >= 0 && out[W]) {   // 宽格（280）+ 暂存格（214）并排，整排居中
+    const tot = LAY.wideW + LAY.gx + LAY.baseW;
+    out[W] = [(-tot / 2 + LAY.wideW / 2) / ux, out[W]![1]]; out[t] = [(tot / 2 - LAY.baseW / 2) / ux, out[W]![1]]; return out;
+  }
+  const sh = out.filter(q => q) as [number, number][];
+  const minX = Math.min(...sh.map(q => q[0])), maxX = Math.max(...sh.map(q => q[0])), maxY = Math.max(...sh.map(q => q[1]));
+  const last = out.map((q, c) => ({ q, c })).filter(o => o.q && o.q[1] === maxY);
+  if (!last.some(o => L.slide.indexOf(o.c) >= 0)) {
+    const xs = last.map(o => o.q![0]);
+    const r = Math.max(...xs) + 1, l = Math.min(...xs) - 1;
+    if (r <= maxX + 1e-6) { out[t] = [r, maxY]; return out; }
+    if (l >= minX - 1e-6) { out[t] = [l, maxY]; return out; }
+  }
+  out[t] = [(minX + maxX) / 2, maxY + 1]; return out;
+}
+/** 货架在屏幕上的缩放（和 HuojiaGame.layout 同一套算法）。W/H = 设计尺寸下的可见区域（最小屏 720×1280） */
+export function fitK(L: { n: number; cells: Cell[]; pos: number[][]; temp: number; slide: number[]; orders: number[] }, W = 720, H = 1280, topCut = -1) {
+  const P = layoutPos(L); const sh = P.map((q, c) => ({ q, c })).filter(o => o.q) as { q: [number, number]; c: number }[];
+  const hw = (c: number) => (L.cells[c].cap === 4 && L.cells[c].quad ? LAY.wideW : L.cells[c].cap === 1 ? 128 : LAY.baseW) / 2 / (LAY.baseW + LAY.gx) + (L.slide.indexOf(c) >= 0 ? 0.5 : 0);
+  const minX = Math.min(...sh.map(o => o.q[0] - hw(o.c))), maxX = Math.max(...sh.map(o => o.q[0] + hw(o.c))), maxY = Math.max(...sh.map(o => o.q[1]));
+  const sg = L.cells.some(x => x.cap === 4 && x.quad) ? LAY.sign : 0;
+  const ux = LAY.baseW + LAY.gx, uy = LAY.baseH + LAY.gy;
+  const needW = (maxX - minX) * ux + LAY.pad * 2, needH = (maxY + 1) * uy - LAY.gy + LAY.pad * 2 + sg;
+  const belt = L.cells.some(x => x.belt !== undefined);
+  const top = H - 18, aT = top - (topCut >= 0 ? topCut : L.orders.length ? 262 : 160), aB = (L.n >= 3 ? 182 : 120) + (belt ? 180 + 30 + 12 : 0);
+  return { k: Math.min(1.5, (Math.min(W, 760) - 12) / needW, (aT - aB) / needH), needW, needH, aT, aB, minX, maxX, maxY, sg };
+}
+
 /** 货架形状：每排 1–3 格，居中或阶梯对齐。返回每格 [x, y]（x 以格宽为单位，可以是半格；y 从上往下第几排），按从上到下、从左到右排好 */
 export function makeShape(count: number, r: () => number, irregular: boolean, needTwo: boolean): { pos: number[][]; rows: number[] } {
   const build = (lens: number[], stair: boolean) => {
@@ -580,7 +621,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
   const chainN = n <= 12 ? 1 : 2;   // 每关埋「一步触发连锁」的格子：第 2 层是三个一样的，前排清空它就顶上来自动消
   for (let attempt = 0; attempt < 600; attempt++) {
     const r = rng(n * 7919 + attempt * 104729 + 17 + salt);
-    const N = p.cells;
+    const N = Math.max(6, p.cells - Math.floor(attempt / 150));   // v15：缩放过不了 MIN_K 就先换形状，150 次还不行少一格
     const shape = makeShape(N, r, p.shape, p.slide);
     const ids = shuffle(Array.from({ length: N }, (_, i) => i), r);
     const colCells = ids.slice(0, p.cols);
@@ -718,6 +759,8 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     if (W >= 0) pos.push([0, Math.max(...pos.map(q => q[1])) + 1]);
     for (let i = 0; i < p.belt; i++) pos.push([100 + i * 2, 100]);   // 盘子不在货架形状里（离得远 = 不和谁相邻）
     let temp = -1; if (p.temp) { cells.push({ layers: [[-1, -1, -1]], cap: 3, temp: true, ice: [z3()], gift: [f3()], hid: [false] }); temp = cells.length - 1; }
+    const slide = p.slide ? (() => { const y = shape.rows.findIndex((L, i) => L === 2 && i > 0) >= 0 ? shape.rows.findIndex((L, i) => L === 2 && i > 0) : shape.rows.indexOf(2); return pos.map((q, i) => q[1] === y ? i : -1).filter(i => i >= 0); })() : [];
+    if (!opt.noFit && fitK({ n, cells, pos, temp, slide, orders: p.orders ? [0] : [] }).k < MIN_K - 1e-9) continue;   // v15 缩放下限
     const b = new Board(cells, pos); b.beltSim = p.belt > 0;
     let sol: Mv[] | null = null; const rr = rng(n * 31 + attempt + salt);
     const g = rollout(b, rr, 0);
@@ -743,7 +786,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
       for (let i = 0; i < sol.length && need.length; i++) { const ev = rb.move(...sol[i])!; for (const e of ev) if (e.t === 'clear') { const j = need.indexOf(e.kind); if (j >= 0) need.splice(j, 1); } if (!need.length) at = i + 1; }
       steps = Math.max(8, Math.min(at, Math.ceil(total * 0.8)));
     }
-    const slide = p.slide ? (() => { const y = shape.rows.findIndex((L, i) => L === 2 && i > 0) >= 0 ? shape.rows.findIndex((L, i) => L === 2 && i > 0) : shape.rows.indexOf(2); return pos.map((q, i) => q[1] === y ? i : -1).filter(i => i >= 0); })() : [];
+    // slide 在前面算好了（v15 缩放检查要用）
     const big = N >= 15 || p.depth >= 3;
     const tier: Tier = p.steps ? 'loose' : p.tier;
     const feats: string[] = [];
