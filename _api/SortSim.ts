@@ -11,21 +11,30 @@
 //     炸弹跟着商品走；含炸弹的一组消掉 = 拆除。每走一步（成功放下 / 调换）前排的炸弹 -1，锁着的格不减。
 //   cat 分类格：只收这一类商品；mix = 混搭（同类不同款 3 个也消），否则同款（3 个一模一样才消）。
 //   alt 翻面货架的另一面（flipK 步翻一次，flipAt = 还剩几步翻）；altB = 另一面的炸弹。
+// v13 传送带（docs\设计.md「传送带」）：belt = 盘子在带子上的序号（0..BELT_N-1），每盘一层 3 个位，和普通格一样拿 / 放 / 调换 / 凑 3 个消；
+//   转出屏幕的盘子 closed（拿不到也放不上，游戏按时间设，推演按「每步 BELT_SPM 秒」设）；盘子拿空 / 消空 = gone（从带子上掉下去，不再能放）。
 export const SLOTS = 3;
 export const KEY = 100;          // 钥匙商品的种类号（画成钥匙）
 export const BOMB_LOCK = 3;      // 锁格炸弹爆了：所在格上锁链，再消 3 组解开
 export const BOMB_SEC = 15;      // 扣时炸弹爆了：扣 15 秒
 export const BOMB_MORE = 5;      // 爆盘炸弹失败后续命：炸弹回到 5 步
+export const BELT_N = 8;         // v13 传送带：一圈 8 个盘子
+export const BELT_T = 12;        // 转一圈 12 秒
+export const BELT_VIS = 0.5;     // 同时露在屏幕上的是半圈
+export const BELT_SPM = 1.5;     // 推演：每走一步按 1.5 秒算带子转了多少
+/** 盘子 i 在 t 秒时的相位（0 = 刚从屏幕一边进来，BELT_VIS = 从另一边出去，1 = 转回来） */
+export const beltPhase = (i: number, t: number) => ((i / BELT_N + t / BELT_T) % 1 + 1) % 1;
 export type Layer = number[];
 export interface Cell {
   layers: Layer[]; cap?: number; lock?: number; hid?: boolean[]; ice?: number[][]; gift?: number[][]; glass?: boolean; shut?: number; temp?: boolean; side?: number;   // side：合作模式这格属于谁（0 房主 / 1 好友）
   bomb?: number[][]; cat?: number; mix?: boolean; alt?: Layer[]; altB?: number[][]; flipK?: number; flipAt?: number; quad?: number[];
+  belt?: number; gone?: boolean;   // v13 传送带盘子
 }
 export type Mv = [number, number, number, number];   // [从格, 从位, 到格, 到位]
 export type LvKind = 'easy' | 'normal' | 'hard';
 export type Tier = 'loose' | 'some' | 'tight' | 'very';
 export type Teach = '' | 'lock' | 'shape' | 'column' | 'ice' | 'gift' | 'shutter' | 'temp' | 'mystery' | 'slide' | 'glass' | 'steps' | 'orders'
-  | 'wide' | 'bombLock' | 'catSame' | 'bombTime' | 'flip' | 'catMix' | 'bombBoom';
+  | 'wide' | 'bombLock' | 'catSame' | 'bombTime' | 'flip' | 'catMix' | 'bombBoom' | 'belt';
 export interface Level {
   n: number; cells: Cell[]; pos: number[][]; cols: number; time: number; hard: boolean; type: LvKind; tier: Tier; kinds: number; tutorial: boolean;
   sol: Mv[]; steps: number; greedy: boolean; teach: Teach; slide: number[]; orders: number[]; moveLimit: number; temp: number; big: boolean; feats: string[];
@@ -48,6 +57,7 @@ export type Ev =
   | { t: 'bomb'; c: number; s: number; type: number }                         // 炸弹爆了
   | { t: 'boom' }                                                              // 爆盘：这关失败
   | { t: 'flip'; c: number }
+  | { t: 'gone'; c: number }                                                  // 传送带盘子空了，掉下去
   | { t: 'win' };
 
 export function rng(seed: number) {
@@ -71,6 +81,7 @@ export const copyCell = (c: Cell): Cell => ({
   ice: c.ice ? c.ice.map(l => l.slice()) : zs(c.layers), gift: c.gift ? c.gift.map(l => l.map(v => +v)) : zs(c.layers), bomb: c.bomb ? c.bomb.map(l => l.slice()) : zs(c.layers),
   glass: !!c.glass, shut: c.shut || 0, temp: !!c.temp, ...(c.side !== undefined ? { side: c.side } : {}),
   ...(c.cat ? { cat: c.cat, mix: !!c.mix } : {}), ...(c.quad ? { quad: c.quad.slice() } : {}),
+  ...(c.belt !== undefined ? { belt: c.belt, gone: !!c.gone } : {}),
   ...(c.alt ? { alt: c.alt.map(l => l.slice()), altB: c.altB ? c.altB.map(l => l.slice()) : zs(c.alt), flipK: c.flipK || 4, flipAt: c.flipAt || c.flipK || 4 } : {}),
 });
 /** 相邻：同一排左右相邻，或上下两排水平距离 < 1（异形货架错半格也算） */
@@ -87,16 +98,20 @@ export function adjacency(pos: number[][] | undefined, n: number): number[][] {
 
 export class Board {
   cells: Cell[]; pos?: number[][]; adj: number[][]; closed: boolean[]; team = false;   // team：合作推演用（锁链按两人一共消的组数算）
-  quad = new Set<number>(); moves = 0; boomed = false;
+  quad = new Set<number>(); moves = 0; boomed = false; beltSim = false;   // beltSim：推演用，带子按步数转
   constructor(cells: Cell[], pos?: number[][]) {
     this.cells = cells.map(copyCell); this.pos = pos; this.adj = adjacency(pos, cells.length); this.closed = cells.map(() => false);
     for (const c of this.cells) if (c.quad) for (const k of c.quad) this.quad.add(k);
   }
-  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); b.team = this.team; b.moves = this.moves; b.boomed = this.boomed; return b; }
+  clone() { const b = new Board(this.cells, this.pos); b.closed = this.closed.slice(); b.team = this.team; b.moves = this.moves; b.boomed = this.boomed; b.beltSim = this.beltSim; return b; }
   front(c: number) { return this.cells[c].layers[0]; }
   cap(c: number) { return this.cells[c].cap || 3; }
   /** 不能拿也不能放：锁链没解 / 玻璃没碎 / 卷帘门关着 */
-  locked(c: number) { const x = this.cells[c]; return (x.lock || 0) > 0 || !!x.glass || this.closed[c]; }
+  locked(c: number) { const x = this.cells[c]; return (x.lock || 0) > 0 || !!x.glass || this.closed[c] || !!x.gone; }
+  /** 传送带：按 t 秒设哪些盘子转出了屏幕（拿不到） */
+  beltAt(t: number) { this.cells.forEach((x, c) => { if (x.belt !== undefined && !x.gone) this.closed[c] = beltPhase(x.belt, t) >= BELT_VIS; }); }
+  syncBelt() { if (this.beltSim) this.beltAt(this.moves * BELT_SPM); }
+  hasBelt() { return this.cells.some(x => x.belt !== undefined); }
   /** 冰冻或礼盒：这个商品不能拿、不能被调换（冰冻的照样算进本格的三个） */
   blocked(c: number, li: number, s: number) { const x = this.cells[c]; return !!((x.ice && x.ice[li] && x.ice[li][s] > 0) || (x.gift && x.gift[li] && x.gift[li][s])); }
   slotsOf(c: number) { const k = this.cap(c); return k === 1 ? [1] : k === 4 ? [0, 1, 2, 3] : [0, 1, 2]; }
@@ -119,6 +134,7 @@ export class Board {
   tripleAt(c: number) { const x = this.cells[c]; return this.layerClears(c, x.layers[0], x.gift![0]); }
   /** 把 (fc,fs) 的商品放到 tc 格的 ts 位（-1 = 第一个空位）；ts 上有东西 = 调换。返回事件；不能放返回 null */
   move(fc: number, fs: number, tc: number, ts = -1): Ev[] | null {
+    this.syncBelt();
     if (fc === tc || this.boomed || this.locked(fc) || this.locked(tc)) return null;
     const kind = this.front(fc)[fs]; if (kind < 0 || this.blocked(fc, 0, fs) || !this.accepts(tc, kind)) return null;
     const tf = this.front(tc); const ok = this.slotsOf(tc);
@@ -153,6 +169,7 @@ export class Board {
       if (isEmpty(L[0]) && L.length > 1) { L.shift(); H.shift(); I.shift(); G.shift(); B.shift(); H[0] = false; ev.push({ t: 'shift', c }); continue; }
       break;
     }
+    if (cell.belt !== undefined && !cell.gone && L.length === 1 && isEmpty(L[0])) { cell.gone = true; this.closed[c] = false; ev.push({ t: 'gone', c }); }   // 空盘不留：掉下去
   }
   /** 新的消除带来的连带：相邻礼盒倒计时 -1（到 0 拆开）、锁链计数、钥匙碎玻璃；拆开后可能又凑成三个 → 再来一轮 */
   cascade(ev: Ev[], from: number) {
@@ -324,7 +341,7 @@ export class Board {
       if (ok) return;
     }
   }
-  key() { return this.cells.map((c, i) => (c.lock || 0) + (c.glass ? 'G' : '') + (this.closed[i] ? 'S' : '') + (c.alt ? 'F' + c.flipAt + ':' + c.alt.map(l => l.join(',')).join('|') : '') + '#' + c.layers.map((l, li) => l.map((k, s) => k + (c.ice![li][s] ? 'i' : '') + (c.gift![li][s] ? 'g' + c.gift![li][s] : '') + (c.bomb![li][s] ? 'b' + c.bomb![li][s] : '')).sort().join(',')).join('|')).sort().join('/'); }
+  key() { return this.cells.map((c, i) => (c.lock || 0) + (c.glass ? 'G' : '') + (this.closed[i] ? 'S' : '') + (c.gone ? 'X' : '') + (c.alt ? 'F' + c.flipAt + ':' + c.alt.map(l => l.join(',')).join('|') : '') + '#' + c.layers.map((l, li) => l.map((k, s) => k + (c.ice![li][s] ? 'i' : '') + (c.gift![li][s] ? 'g' + c.gift![li][s] : '') + (c.bomb![li][s] ? 'b' + c.bomb![li][s] : '')).sort().join(',')).join('|')).sort().join('/'); }
 }
 
 /** 走法打分（推演和提示共用）：凑齐 > 拿空一格露出后层 > 凑对 > 放空格；调换只在能凑出三个时考虑；往别的种类里塞、拆对子扣分。
@@ -411,6 +428,7 @@ export function rollout(b0: Board, r: () => number, noise: number): Mv[] | null 
   const b = b0.clone(); const max = b.remaining() * 3 + 10; const out: Mv[] = [];
   for (let step = 0; step < max; step++) {
     if (b.done()) return out;
+    b.syncBelt();
     const ms = scoredMoves(b, noise, r); if (!ms.length) return null;
     const m = ms[0]; if (!b.move(m.fc, m.fs, m.tc, m.ts)) return null; out.push([m.fc, m.fs, m.tc, m.ts]);
     if (b.boomed) return null;
@@ -421,10 +439,10 @@ export function rollout(b0: Board, r: () => number, noise: number): Mv[] | null 
 // ---------------- 难度节奏（docs\设计.md「v4 方案」「难度方案 v4」） ----------------
 /** 每种新东西第一次出现的关（那关是松关 + 开场教一次） */
 export const INTRO = { lock: 3, shape: 4, column: 5, ice: 7, hourglass: 8, gift: 9, shutter: 12, temp: 14, hammer: 14, mystery: 16, slide: 18, glass: 22, steps: 24, orders: 26, wand: 28,
-  wide: 31, bombLock: 33, catSame: 35, bombTime: 37, flip: 39, catMix: 41, bombBoom: 43 };   // v11 新机制：单数关（双数关会撞上步数 / 订单关）
+  wide: 31, bombLock: 33, catSame: 35, bombTime: 37, flip: 39, catMix: 41, bombBoom: 43, belt: 45 };   // v13 传送带：45 关教   // v11 新机制：单数关（双数关会撞上步数 / 订单关）
 export const NEW_FEATS = ['wide', 'bombLock', 'catSame', 'bombTime', 'flip', 'catMix', 'bombBoom'] as const;
 const TEACH_AT: Record<number, Teach> = { 3: 'lock', 4: 'shape', 5: 'column', 7: 'ice', 9: 'gift', 12: 'shutter', 14: 'temp', 16: 'mystery', 18: 'slide', 22: 'glass', 24: 'steps', 26: 'orders',
-  31: 'wide', 33: 'bombLock', 35: 'catSame', 37: 'bombTime', 39: 'flip', 41: 'catMix', 43: 'bombBoom' };
+  31: 'wide', 33: 'bombLock', 35: 'catSame', 37: 'bombTime', 39: 'flip', 41: 'catMix', 43: 'bombBoom', 45: 'belt' };
 export const teachOf = (n: number): Teach => TEACH_AT[n] || '';
 export const isStepsLv = (n: number) => n >= INTRO.steps && (n - INTRO.steps) % 6 === 0;
 export const isOrdersLv = (n: number) => n >= INTRO.orders && (n - INTRO.orders) % 6 === 0;
@@ -492,6 +510,11 @@ export function params(n: number, opt: GenOpt = {}) {
     const max0 = (n < 30 ? 2 : 3) - (isStepsLv(n) || isOrdersLv(n) ? 1 : 0);
     if (nf && picked.length >= max0) f[picked[picked.length - 1]] = 0;
   }
+  // v13 传送带：45 关教；之后没抽到别的新机制的关里 30% 出（单独的随机数，不改别的关）；步数关不出（它靠时间）
+  if (teach === 'belt') nf = 'belt';
+  else if (!nf && !teach && !daily && n > INTRO.belt && !isStepsLv(n) && rng(n * 613 + 97 + salt)() < 0.3) {
+    nf = 'belt'; const max0 = 3 - (isOrdersLv(n) ? 1 : 0); if (picked.length >= max0) f[picked[picked.length - 1]] = 0;
+  }
   const locks = f.lock ? (tier === 'very' && n >= 30 ? 2 : 1) : 0;
   const lockN = n === INTRO.lock ? 3 : 3 + (n % 4);
   const cols = f.column ? (tier === 'very' && n >= 40 ? 2 : 1) : 0;
@@ -501,7 +524,7 @@ export function params(n: number, opt: GenOpt = {}) {
   const gift = f.gift ? (teach === 'gift' ? 3 : 2 + (n % 2)) : 0;
   const shut = f.shutter ? (n >= 40 ? 2 : 1) + (teach === 'shutter' ? 1 : 0) : 0;
   const temp = !daily && n >= INTRO.temp;
-  return { cells, depth, free, unlock, hard, type, tier, teach, locks, lockN, cols, mystery, ice, iceL, gift, shut, slide: !!f.slide, glass: !!f.glass, temp,
+  return { cells: nf === 'belt' ? Math.max(6, cells - 3) : cells, belt: nf === 'belt' ? BELT_N : 0, depth, free, unlock, hard, type, tier, teach, locks, lockN, cols, mystery, ice, iceL, gift, shut, slide: !!f.slide, glass: !!f.glass, temp,
     nf, wide: nf === 'wide', quadN: nf === 'wide' ? (teach ? 1 : n >= 60 ? 2 + n % 2 : 2) : 0,
     bombT: nf === 'bombLock' ? 1 : nf === 'bombTime' ? 2 : nf === 'bombBoom' ? 3 : 0, bombs: nf.startsWith('bomb') ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0,
     cat: nf === 'catSame' ? 1 : nf === 'catMix' ? 2 : 0, flips: nf === 'flip' ? (teach ? 1 : 1 + (n >= 60 ? n % 2 : 0)) : 0, flipK: teach === 'flip' ? 4 : 3 + (n % 3),
@@ -589,6 +612,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     for (const c of catCells) sizes[c] = sizes[c].length > 1 ? [2, 2] : [2];
     const W = p.wide ? N : -1;   // 四格宽货架：单独一排放在货架最下面
     if (p.wide) sizes.push(p.teach === 'wide' ? [2] : r() < 0.5 ? [ri(r, 2, 3), 3] : [ri(r, 2, 3)]);
+    const B0 = sizes.length; for (let i = 0; i < p.belt; i++) sizes.push([SLOTS]);   // v13 传送带：每盘开局都是满的 3 个
     let total = sizes.reduce((s, l) => s + l.reduce((a, b) => a + b, 0), 0);
     // 凑成 3 的倍数：从普通格后层减（连锁层不动）
     const Q = p.quadN;   // 宽格专用的种类数（每种 4 个）
@@ -625,7 +649,7 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
         return l;
       });
       const hidOn = p.mystery > 0 && !col && L.length >= 2 && chainCells.indexOf(c) < 0 && r() < p.mystery && c !== W && catCells.indexOf(c) < 0;
-      return { layers, cap: col ? 1 : c === W ? 4 : 3, ...(c === W ? { quad: quadK } : {}), lock: lockCells.indexOf(c) >= 0 ? p.lockN : 0, hid: layers.map((_, li) => hidOn && li >= 1),
+      return { layers, cap: col ? 1 : c === W ? 4 : 3, ...(c === W ? { quad: quadK } : {}), ...(p.belt && c >= B0 ? { belt: c - B0 } : {}), lock: lockCells.indexOf(c) >= 0 ? p.lockN : 0, hid: layers.map((_, li) => hidOn && li >= 1),
         ice: zs(layers), gift: zs(layers), glass: glassCells.indexOf(c) >= 0, shut: shutCells.indexOf(c) >= 0 ? 1 + shutCells.indexOf(c) : 0 };
     });
     // 钥匙不能在玻璃柜里（否则解不开）：和外面的普通商品换
@@ -689,8 +713,9 @@ export function makeLevel(n: number, goodsN: number, opt: GenOpt = {}): Level {
     // 暂存格：底栏独立一格（不在货架形状里）
     const pos = shape.pos.map(q => q.slice());
     if (W >= 0) pos.push([0, Math.max(...pos.map(q => q[1])) + 1]);
+    for (let i = 0; i < p.belt; i++) pos.push([100 + i * 2, 100]);   // 盘子不在货架形状里（离得远 = 不和谁相邻）
     let temp = -1; if (p.temp) { cells.push({ layers: [[-1, -1, -1]], cap: 3, temp: true, ice: [z3()], gift: [f3()], hid: [false] }); temp = cells.length - 1; }
-    const b = new Board(cells, pos);
+    const b = new Board(cells, pos); b.beltSim = p.belt > 0;
     let sol: Mv[] | null = null; const rr = rng(n * 31 + attempt + salt);
     const g = rollout(b, rr, 0);
     for (let k = 0; k < 10 && !sol; k++) sol = k === 0 ? g : rollout(b, rr, 30);   // 解不出就换布局（多试推演比换布局慢）
