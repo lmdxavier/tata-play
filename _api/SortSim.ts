@@ -1,4 +1,7 @@
 // 货架整理：纯逻辑（格子、层、移动 / 调换、消除、道具、各种特殊货架、关卡生成 + 推演验证）。不依赖 cc，Node 可跑（tools/test_sim.mjs）。
+// <TL_INTRO> 自动生成（python3 tools/content_timeline.py --inject vN），不要手改
+const TL_INTRO = {lock: 3, shape: 5, column: 7, ice: 9, hourglass: 10, gift: 13, shutter: 16, temp: 18, mystery: 24, slide: 26, glass: 30, steps: 34, orders: 38, wand: 42, wide: 64, bombLock: 101, catSame: 131, catMix: 144, bombTime: 161, bombBoom: 174, flip: 191, belt: 197, hammer: 18};
+// </TL_INTRO>
 // 格子 = layers[0] 是前排（3 个位，-1 = 空），layers[1..] 是后层；前排都空了，下一层整排顶上来。
 // v3：满格 = 调换；cap=1 单个台座（只用中间位）；lock=N 锁链格（再消 N 组解锁）；hid[li] 问号层（顶到前排才显示）。
 // v4：glass 玻璃柜（钥匙那组消掉才碎，碎之前当锁着）；shut 卷帘门（游戏按时间设 closed[c]，关着当锁着）；temp 暂存格（底栏独立一格）；
@@ -14,6 +17,7 @@
 // v13 传送带（docs\设计.md「传送带」）：belt = 盘子在带子上的序号（0..BELT_N-1），每盘一层 3 个位，和普通格一样拿 / 放 / 调换 / 凑 3 个消；
 //   转出屏幕的盘子 closed（拿不到也放不上，游戏按时间设，推演按「每步 BELT_SPM 秒」设）；盘子拿空 / 消空 = gone（从带子上掉下去，不再能放）。
 export const SLOTS = 3;
+export const ING = 200;          // v16：食材种类号起点（Shop.ING_BASE），≥ 这个数的 3 个一样也不消
 export const KEY = 100;          // 钥匙商品的种类号（画成钥匙）
 export const BOMB_LOCK = 3;      // 锁格炸弹爆了：所在格上锁链，再消 3 组解开
 export const BOMB_SEC = 15;      // 扣时炸弹爆了：扣 15 秒
@@ -42,8 +46,10 @@ export interface Level {
 }
 /** 生成选项：salt 换一套盘面（同关号不同图）；daily = 每日一图（不教学、不限步、不订单、不暂存格，机制只用第 12 关前教过的） */
 export interface GenOpt { salt?: number; daily?: boolean; noFit?: boolean }
-/** 每日一图只用这关之前教过的机制（锁链 / 台座 / 冰冻 / 礼盒 / 卷帘门）；每日挑战也是打过这关才开 */
-export const DAILY_MAX_INTRO = 12;
+/** 每日一图只用这 5 种机制（v20 起按名字定，不按关号：总线改关号不能改每日盘面，服务器 daily_table 不用重生成） */
+export const DAILY_FEATS = ['lock', 'column', 'ice', 'gift', 'shutter'];
+/** 每日挑战打过这关才开（= 每日用到的机制都教过了） */
+export let DAILY_MAX_INTRO = 12;
 export type Ev =
   | { t: 'move'; fc: number; fs: number; tc: number; ts: number; kind: number; swap: number }
   | { t: 'clear'; c: number; kind: number; mixed?: boolean; n?: number }   // mixed：混搭分类格消的不同款；n = 4：宽格
@@ -129,7 +135,13 @@ export class Board {
     for (let s = 0; s < l.length; s++) if (l[s] < 0 || (g && g[s])) return false;
     if (cap === 4) { for (let s = 1; s < l.length; s++) if (l[s] !== l[0]) return false; return true; }
     if (x.mix) return l.every(k => catOf(k) === x.cat);
-    return l[0] === l[1] && l[1] === l[2] && !this.quad.has(l[0]);
+    return l[0] === l[1] && l[1] === l[2] && !this.quad.has(l[0]) && l[0] < ING;   // v16：食材凑 3 个也不消（只能拖进灶台）
+  }
+  /** v16 营业关：把 (c,s) 的食材拿去灶台（拿走后顶上来照算）；不算一步（不走炸弹 / 翻面） */
+  takeOut(c: number, s: number): Ev[] | null {
+    if (this.locked(c)) return null; const k = this.front(c)[s]; if (k < 0 || this.blocked(c, 0, s)) return null;
+    this.front(c)[s] = -1; const ev: Ev[] = []; this.settle(c, ev); this.cascade(ev, 0);
+    return ev;
   }
   tripleAt(c: number) { const x = this.cells[c]; return this.layerClears(c, x.layers[0], x.gift![0]); }
   /** 把 (fc,fs) 的商品放到 tc 格的 ts 位（-1 = 第一个空位）；ts 上有东西 = 调换。返回事件；不能放返回 null */
@@ -374,9 +386,9 @@ export function scoredMoves(b: Board, noise = 0, r: () => number = Math.random) 
       if (fc === tc || lk[fc]) continue; const ff = F[fc];
       for (let fs = 0; fs < ff.length; fs++) {
         const kd = ff[fs]; if (kd < 0 || !mv[fc][fs] || !b.accepts(tc, kd)) continue;
-        const quad = b.quad.has(kd);
+        const quad = b.quad.has(kd), ingK = kd >= ING;   // v16 食材：不凑三（只能进灶台），只在挖后层时挪
         if (empty >= 0) {
-          const same = items.every(k => mix ? k >= 0 && catOf(k) === x.cat : k === kd);
+          const same = !ingK && items.every(k => mix ? k >= 0 && catOf(k) === x.cat : k === kd);
           const fill = !c1 && same && items.length === slots.length - 1 && (w4 || mix || !quad);
           let s: number;
           if (fill) s = 100;
@@ -395,11 +407,11 @@ export function scoredMoves(b: Board, noise = 0, r: () => number = Math.random) 
           if (s < 100 && cap[fc] === 3) { let sm = 0; for (let q = 0; q < 3; q++) if (ff[q] === kd) sm++; if (sm >= 2) s -= 35; }
           if ((items.length === 0 || c1) && fl[fc] === 1 && !deep[fc]) s -= 40;   // 单个挪到空格 = 白走
           out.push({ s: s + (noise ? r() * noise : 0), fc, fs, tc, ts: empty });
-        } else if (!c1 && !w4 && cap[fc] === 3) {   // 满格：调换（只在能凑出三个时考虑）
+        } else if (!c1 && !w4 && cap[fc] === 3 && !ingK) {   // 满格：调换（只在能凑出三个时考虑）
           let ra = -2, rb = -2; for (let q = 0; q < 3; q++) if (q !== fs) { if (ra === -2) ra = ff[q]; else rb = ff[q]; }
           const eqT = (a: number) => mix ? a >= 0 && catOf(a) === x.cat : a === kd;
           for (let ts = 0; ts <= 2; ts++) {
-            const o = tf[ts]; if (o === kd || o <= -9 || !mv[tc][ts] || !b.accepts(fc, o)) continue;
+            const o = tf[ts]; if (o === kd || o <= -9 || o >= ING || !mv[tc][ts] || !b.accepts(fc, o)) continue;
             const triT = eqT(tf[(ts + 1) % 3]) && eqT(tf[(ts + 2) % 3]) && (mix || !quad);
             const fx = b.cells[fc]; const triF = o >= 0 && (fx.mix ? [ra, rb, o].every(k => k >= 0 && catOf(k) === fx.cat) : ra === o && rb === o && !b.quad.has(o));
             if (!triT && !triF) continue;
@@ -438,14 +450,17 @@ export function rollout(b0: Board, r: () => number, noise: number): Mv[] | null 
 
 // ---------------- 难度节奏（docs\设计.md「v4 方案」「难度方案 v4」） ----------------
 /** 每种新东西第一次出现的关（那关是松关 + 开场教一次） */
-export const INTRO = { lock: 3, shape: 4, column: 5, ice: 7, hourglass: 8, gift: 9, shutter: 12, temp: 14, hammer: 14, mystery: 16, slide: 18, glass: 22, steps: 24, orders: 26, wand: 28,
-  wide: 31, bombLock: 33, catSame: 35, bombTime: 37, flip: 39, catMix: 41, bombBoom: 43, belt: 45 };   // v13 传送带：45 关教   // v11 新机制：单数关（双数关会撞上步数 / 订单关）
+/** v20：首次出现关从内容总时间线读（tools/content_timeline.py → Timeline.ts，经营循环设计稿 §15），这里不再手写关号 */
+export const INTRO = TL_INTRO;
+DAILY_MAX_INTRO = INTRO.shutter;
 export const NEW_FEATS = ['wide', 'bombLock', 'catSame', 'bombTime', 'flip', 'catMix', 'bombBoom'] as const;
-const TEACH_AT: Record<number, Teach> = { 3: 'lock', 4: 'shape', 5: 'column', 7: 'ice', 9: 'gift', 12: 'shutter', 14: 'temp', 16: 'mystery', 18: 'slide', 22: 'glass', 24: 'steps', 26: 'orders',
-  31: 'wide', 33: 'bombLock', 35: 'catSame', 37: 'bombTime', 39: 'flip', 41: 'catMix', 43: 'bombBoom', 45: 'belt' };
+const TEACH_AT: Record<number, Teach> = {};
+for (const k of ['lock', 'shape', 'column', 'ice', 'gift', 'shutter', 'temp', 'mystery', 'slide', 'glass', 'steps', 'orders', ...NEW_FEATS, 'belt'] as Teach[]) TEACH_AT[(INTRO as any)[k]] = k;
 export const teachOf = (n: number): Teach => TEACH_AT[n] || '';
-export const isStepsLv = (n: number) => n >= INTRO.steps && (n - INTRO.steps) % 6 === 0;
-export const isOrdersLv = (n: number) => n >= INTRO.orders && (n - INTRO.orders) % 6 === 0;
+/** v20：别的机制的教学关不当步数 / 订单关（总线排关号时不看内部步数关节奏） */
+const teachOther = (n: number, k: Teach) => !!TEACH_AT[n] && TEACH_AT[n] !== k;
+export const isStepsLv = (n: number) => n >= INTRO.steps && (n - INTRO.steps) % 6 === 0 && !teachOther(n, 'steps');
+export const isOrdersLv = (n: number) => n >= INTRO.orders && (n - INTRO.orders) % 6 === 0 && !teachOther(n, 'orders');
 /** 时间系数：关卡时间 = 玩家每参考步秒数 × 参考步数 × 系数 */
 export const TIER_K: Record<Tier, number> = { loose: 1.3, some: 1.0, tight: 0.9, very: 0.8 };
 /** 步数限制关：给的步数 = 参考步数 × 系数（实测玩家实际步数约是参考步数的 1.4 倍） */
@@ -500,7 +515,7 @@ export function params(n: number, opt: GenOpt = {}) {
       ['shutter', INTRO.shutter, 0.35], ['mystery', INTRO.mystery, 0.35], ['slide', INTRO.slide, 0.35], ['glass', INTRO.glass, 0.3]];
     let max = n < 30 || daily ? 2 : 3; if (!daily && (isStepsLv(n) || isOrdersLv(n))) max--;
     let got = 0;
-    for (const [k, at, p] of shuffle(cand.slice(), r)) { if (got >= max) break; if (daily && at > DAILY_MAX_INTRO) continue; if (n > at && r() < p) { f[k] = 1; got++; picked.push(k); } }
+    for (const [k, at, p] of shuffle(cand.slice(), r)) { if (got >= max) break; if (daily && DAILY_FEATS.indexOf(k) < 0) continue; if (n > at && r() < p) { f[k] = 1; got++; picked.push(k); } }
   }
   // v11 新机制（31 关起，每种首次那关教一次）：每关最多 1 种（55%）；有新机制时旧机制少 1 种（别太乱）。用单独的随机数，不改旧机制的抽法
   let nf: string = (NEW_FEATS as readonly string[]).indexOf(teach) >= 0 ? teach : '';
@@ -915,4 +930,70 @@ export function makeCoop(seed: number, diff: number, goodsN: number): CoopLevel 
       sol, steps, greedy: true, teach: '', slide: [], orders: [], moveLimit: 0, temp: -1, big: true, feats, nA, diff, seed, split };
   }
   throw new Error('coop gen failed ' + seed + '/' + diff);
+}
+
+// ---------------- v16 营业关（docs\经营循环设计稿.md §12.3）----------------
+// plan = 这一关要卖的菜，每道 = 3 个食材种类号（≥ ING）。货架 = 这些食材 + 约 K/2 组普通商品（非食物），每格 2 层。
+// 顾客点菜规则（游戏和机器人共用）：从还没卖的菜里挑「前排凑得最齐」的那道（同分取先的）。机器人能全部卖完才要这张盘面。
+export const COOK_TOP = 410;   // 营业关货架上面留给顾客 + 灶台的高度（stage 坐标，从顶边算）
+export interface CookLevel extends Level { plan: number[][]; cookSteps: number }
+export function cookPick(b: Board, left: number[][]): number {
+  const fc = b.counts(true); let best = -1, bs = -1;
+  left.forEach((need, i) => { const m = new Map(fc); let sc = 0; for (const k of need) { const n = m.get(k) || 0; if (n > 0) { sc++; m.set(k, n - 1); } } if (sc > bs) { bs = sc; best = i; } });
+  return best;
+}
+/** 机器人营业（v18：一块 3 格案板）：2 位顾客；案板只放当前目标那道菜的原料，放齐 = 做好 + 拖给顾客（算 1 步）；
+ *  前排没有目标要的就换另一位（案板空的时候），都没有就按 scoredMoves 走一步。返回步数，卖不完 null */
+export function cookRun(b0: Board, plan: number[][], r: () => number, noise: number): number | null {
+  const b = b0.clone(); const left = plan.map(p => p.slice()); const st: number[][] = [];
+  const refill = () => { while (st.length < 2 && left.length) { const i = cookPick(b, left); st.push(left[i].slice()); left.splice(i, 1); } };
+  const rest = (need: number[], bench: number[]) => { const m = need.slice(); for (const k of bench) { const j = m.indexOf(k); if (j >= 0) m.splice(j, 1); } return m; };
+  const frontHas = (need: number[]): [number, number] | null => { for (let c = 0; c < b.cells.length; c++) { if (b.locked(c)) continue; const f = b.front(c); for (let s = 0; s < f.length; s++) if (f[s] >= ING && need.indexOf(f[s]) >= 0 && !b.blocked(c, 0, s)) return [c, s]; } return null; };
+  refill(); let steps = 0, tgt = -1; let bench: number[] = []; const cap = b.remaining() * 5 + 40;
+  for (let g = 0; g < cap; g++) {
+    if (!st.length && !left.length) return steps;
+    if (tgt < 0 || tgt >= st.length) tgt = Math.max(0, cookPick(b, st));
+    const need = rest(st[tgt], bench);
+    if (!need.length) { steps++; bench = []; st.splice(tgt, 1); tgt = -1; refill(); continue; }
+    let at = frontHas(need);
+    if (!at && !bench.length) { for (let o = 0; o < st.length && !at; o++) if (o !== tgt) { const a2 = frontHas(st[o]); if (a2) { tgt = o; at = a2; } } }
+    if (at) { const k = b.front(at[0])[at[1]]; if (!b.takeOut(at[0], at[1])) return null; bench.push(k); steps++; continue; }
+    const ms = scoredMoves(b, noise, r); if (!ms.length) return null;
+    const m = ms[0]; if (!b.move(m.fc, m.fs, m.tc, m.ts)) return null; steps++;
+  }
+  return null;
+}
+export function makeCook(seed: number, plan: number[][], goods: number[]): CookLevel {
+  const K = plan.length, G = Math.max(2, K);   // 普通商品组数 = 菜数（要挖、要腾地方，货架也更满）
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const r = rng(seed * 7919 + attempt * 104729 + 3);
+    const gk = shuffle(goods.slice(), r).slice(0, G); while (gk.length < G) gk.push(goods[gk.length % goods.length]);
+    const items: number[] = []; for (const p of plan) items.push(...p); for (const k of gk) items.push(k, k, k);
+    const T = items.length; let N = Math.max(4, Math.min(18, Math.ceil(T / 4.4) + (attempt >= 200 ? 1 : 0)));
+    const frontN = Math.min(3 * N - 3, Math.ceil(T * 0.52)), backN = T - frontN; if (backN > 3 * N || backN < 0) continue;
+    const fC = Array(N).fill(0), bC = Array(N).fill(0);
+    for (let k = 0, g = 0; k < frontN && g < 9999; g++) { const c = ri(r, 0, N - 1); if (fC[c] < 3) { fC[c]++; k++; } }
+    for (let k = 0, g = 0; k < backN && g < 9999; g++) { const c = ri(r, 0, N - 1); if (bC[c] < 3 && fC[c] > 0) { bC[c]++; k++; } }
+    if (fC.reduce((a, b) => a + b, 0) + bC.reduce((a, b) => a + b, 0) !== T) continue;
+    shuffle(items, r); let ip = 0;
+    const cells: Cell[] = [];
+    for (let c = 0; c < N; c++) {
+      const L: Layer[] = [];
+      for (const cnt of [fC[c], bC[c]]) { if (!cnt && L.length) break; const l = [-1, -1, -1]; for (const s of shuffle([0, 1, 2], r).slice(0, cnt)) l[s] = items[ip++]; L.push(l); }
+      cells.push(copyCell({ layers: L }));
+    }
+    if (cells.some(x => x.layers.some(l => isTriple(l)))) continue;
+    const cols = N <= 4 ? 2 : 3; const pos: number[][] = []; const rowsN = Math.ceil(N / cols);
+    for (let y = 0; y < rowsN; y++) { const L = Math.min(cols, N - y * cols); for (let j = 0; j < L; j++) pos.push([-(L - 1) / 2 + j, y]); }
+    const lv: CookLevel = { n: 1, cells, pos, cols: 3, time: 0, hard: false, type: 'easy', tier: 'loose', kinds: new Set(items).size, tutorial: false, sol: [], steps: 0, greedy: true, teach: '',
+      slide: [], orders: [], moveLimit: 0, temp: -1, big: N >= 12, feats: ['cook'], plan: plan.map(p => p.slice()), cookSteps: 0 };
+    if (fitK(lv, 720, 1280, COOK_TOP).k < MIN_K - 1e-9) continue;
+    const b = new Board(cells, pos); const rr = rng(seed * 31 + attempt);
+    let best: number | null = cookRun(b, plan, rr, 0);
+    for (let k = 0; k < 6; k++) { const s2 = cookRun(b, plan, rr, 12); if (s2 !== null && (best === null || s2 < best)) best = s2; }
+    if (best === null) continue;
+    lv.cookSteps = best; lv.steps = best;
+    return lv;
+  }
+  throw new Error('cook gen failed ' + seed);
 }
